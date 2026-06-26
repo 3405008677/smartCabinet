@@ -22,6 +22,10 @@ void main() {
     expect(state.authToken, '');
     expect(state.languageCode, 'zh-CN');
     expect(state.info, <String, Object?>{});
+    expect(state.logging, <String, Object?>{
+      'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
+      'uploadEnabled': true,
+    });
     expect(state.video, <String, Object?>{
       'streamUrl': '',
       'streamingEnabled': false,
@@ -32,6 +36,10 @@ void main() {
       'info': <String, Object?>{},
       'level': <String, Object?>{},
       'deviceInfo': <String, Object?>{},
+      'logging': <String, Object?>{
+        'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
+        'uploadEnabled': true,
+      },
       'video': <String, Object?>{'streamUrl': '', 'streamingEnabled': false},
     });
   });
@@ -46,6 +54,10 @@ void main() {
         authToken: 'token-001',
         info: <String, Object?>{'viso': 'v2.4.1', 'title': '管管智能柜'},
         level: <String, Object?>{'code': 'admin', 'priority': 10},
+        logging: <String, Object?>{
+          'errorReportUrl': 'http://127.0.0.1:3000/api/logs/error',
+          'uploadEnabled': false,
+        },
         video: <String, Object?>{
           'streamUrl': 'rtmp://192.168.2.167/app/a1b2c3d4e5f67890',
           'streamingEnabled': true,
@@ -59,6 +71,10 @@ void main() {
       'info': <String, Object?>{'viso': 'v2.4.1', 'title': '管管智能柜'},
       'level': <String, Object?>{'code': 'admin', 'priority': 10},
       'deviceInfo': <String, Object?>{},
+      'logging': <String, Object?>{
+        'errorReportUrl': 'http://127.0.0.1:3000/api/logs/error',
+        'uploadEnabled': false,
+      },
       'video': <String, Object?>{
         'streamUrl': 'rtmp://192.168.2.167/app/a1b2c3d4e5f67890',
         'streamingEnabled': true,

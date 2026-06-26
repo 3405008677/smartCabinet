@@ -60,6 +60,40 @@ class GStreamerBridge {
             .onFailure { error -> Log.e(TAG, "GStreamer H265 RTSP stop failed", error) }
     }
 
+    fun rkMppStatus(): String {
+        if (!isSmartCabinetLibraryLoaded) {
+            return loadError?.message ?: "smartcabinet_gstreamer unavailable"
+        }
+        return runCatching { nativeRkMppStatus() }
+            .getOrDefault("RKMPP 状态未知")
+    }
+
+    fun startRkMppH265(width: Int, height: Int, fps: Int, bitrate: Int, gop: Int): Boolean {
+        if (!isSmartCabinetLibraryLoaded) {
+            return false
+        }
+        return runCatching { nativeStartRkMppH265(width, height, fps, bitrate, gop) }
+            .onFailure { error -> Log.e(TAG, "RKMPP H265 start failed", error) }
+            .getOrDefault(false)
+    }
+
+    fun encodeRkMppH265Frame(nv12: ByteArray, presentationTimeUs: Long): ByteArray? {
+        if (!isSmartCabinetLibraryLoaded) {
+            return null
+        }
+        return runCatching { nativeEncodeRkMppH265Frame(nv12, presentationTimeUs) }
+            .onFailure { error -> Log.e(TAG, "RKMPP H265 encode failed", error) }
+            .getOrNull()
+    }
+
+    fun stopRkMppH265() {
+        if (!isSmartCabinetLibraryLoaded) {
+            return
+        }
+        runCatching { nativeStopRkMppH265() }
+            .onFailure { error -> Log.e(TAG, "RKMPP H265 stop failed", error) }
+    }
+
     private external fun nativeInitialize(): Boolean
 
     private external fun nativeVersion(): String
@@ -71,6 +105,14 @@ class GStreamerBridge {
     private external fun nativePushH265Frame(data: ByteArray, presentationTimeUs: Long, keyFrame: Boolean): Boolean
 
     private external fun nativeStopH265Rtsp()
+
+    private external fun nativeRkMppStatus(): String
+
+    private external fun nativeStartRkMppH265(width: Int, height: Int, fps: Int, bitrate: Int, gop: Int): Boolean
+
+    private external fun nativeEncodeRkMppH265Frame(nv12: ByteArray, presentationTimeUs: Long): ByteArray?
+
+    private external fun nativeStopRkMppH265()
 
     companion object {
         private const val TAG = "SmartCabinetGst"

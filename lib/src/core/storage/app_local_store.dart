@@ -13,6 +13,10 @@ final class AppLocalState {
     this.info = const <String, Object?>{},
     this.level = const <String, Object?>{},
     this.deviceInfo = const <String, Object?>{},
+    this.logging = const <String, Object?>{
+      'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
+      'uploadEnabled': true,
+    },
     this.video = const <String, Object?>{
       'streamUrl': '',
       'streamingEnabled': false,
@@ -34,6 +38,9 @@ final class AppLocalState {
   /// 启动阶段缓存的设备信息对象。
   final Map<String, Object?> deviceInfo;
 
+  /// 日志配置对象。
+  final Map<String, Object?> logging;
+
   /// 视频推流配置对象。
   final Map<String, Object?> video;
 
@@ -44,6 +51,7 @@ final class AppLocalState {
     Map<String, Object?>? info,
     Map<String, Object?>? level,
     Map<String, Object?>? deviceInfo,
+    Map<String, Object?>? logging,
     Map<String, Object?>? video,
   }) {
     return AppLocalState(
@@ -52,6 +60,7 @@ final class AppLocalState {
       info: info ?? this.info,
       level: level ?? this.level,
       deviceInfo: deviceInfo ?? this.deviceInfo,
+      logging: logging ?? this.logging,
       video: video ?? this.video,
     );
   }
@@ -64,6 +73,7 @@ final class AppLocalState {
       'info': info,
       'level': level,
       'deviceInfo': deviceInfo,
+      'logging': logging,
       'video': video,
     };
   }
@@ -76,6 +86,10 @@ final class AppLocalState {
       info: _asStringObjectMap(json['info']),
       level: _asStringObjectMap(json['level']),
       deviceInfo: _asStringObjectMap(json['deviceInfo']),
+      logging: _mergeObjectMap(const <String, Object?>{
+        'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
+        'uploadEnabled': true,
+      }, json['logging']),
       video: _mergeObjectMap(const <String, Object?>{
         'streamUrl': '',
         'streamingEnabled': false,

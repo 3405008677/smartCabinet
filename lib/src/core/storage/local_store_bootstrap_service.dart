@@ -38,6 +38,11 @@ class LocalStoreBootstrapService {
     await _store.update(
       (state) => state.copyWith(
         deviceInfo: deviceInfo,
+        logging: <String, Object?>{
+          'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
+          'uploadEnabled': true,
+          ...state.logging,
+        },
         video: <String, Object?>{
           ...state.video,
           'streamUrl': buildStreamUrl(deviceInfo['唯一设备ID']?.toString()),

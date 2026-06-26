@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'crash_log_store.dart';
 
@@ -8,6 +11,8 @@ import 'crash_log_store.dart';
 /// 只需要改这里，不必到处修改业务代码。
 class AppLogger {
   const AppLogger._();
+
+  static const MethodChannel _channel = MethodChannel('smart_cabinet/kiosk');
 
   /// 输出调试日志。
   ///
@@ -35,9 +40,33 @@ class AppLogger {
       error: error,
       stackTrace: stackTrace,
     );
+    _recordNativeErrorLog(message, error, stackTrace);
     debugPrint('[ERROR] $message: $error');
     if (stackTrace != null && kDebugMode) {
       debugPrint(stackTrace.toString());
     }
+  }
+
+  static void _recordNativeErrorLog(
+    String message,
+    Object error,
+    StackTrace? stackTrace,
+  ) {
+    Future<void>(() async {
+      try {
+        await _channel.invokeMethod<void>('recordErrorLog', {
+          'source': 'flutter',
+          'message': message,
+          'error': error.toString(),
+          'stackTrace': stackTrace?.toString() ?? '',
+        });
+      } catch (recordError) {
+        if (recordError is FlutterError &&
+            recordError.message.contains('Binding has not yet been initialized')) {
+          return;
+        }
+        debugPrint('[ERROR] Failed to persist error log: $recordError');
+      }
+    });
   }
 }

@@ -45,6 +45,15 @@ class MainActivity : FlutterActivity() {
                     kioskManager.readOperationAreaStreamStatus(),
                 )
                 "readGStreamerStatus" -> result.success(kioskManager.readGStreamerStatus())
+                "recordErrorLog" -> {
+                    kioskManager.recordErrorLog(
+                        source = call.argument<String>("source") ?: "flutter",
+                        message = call.argument<String>("message") ?: "",
+                        error = call.argument<String>("error") ?: "",
+                        stackTrace = call.argument<String>("stackTrace") ?: "",
+                    )
+                    result.success(null)
+                }
                 "writeCameraBinding" -> {
                     val role = call.argument<String>("role")
                     val cameraId = call.argument<String>("cameraId")

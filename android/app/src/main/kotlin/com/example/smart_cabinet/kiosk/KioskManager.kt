@@ -22,7 +22,10 @@ import android.view.WindowManager
 import com.pedro.common.ConnectChecker
 import com.pedro.common.VideoCodec
 import com.pedro.library.rtmp.RtmpCamera2
+import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -31,7 +34,7 @@ class KioskManager(private val activity: Activity) {
     private val cameraBindingPreferences =
         activity.getSharedPreferences("camera_bindings", Context.MODE_PRIVATE)
 
-    private var outsideEnvironmentStream: GStreamerH265Stream? = null
+    private var outsideEnvironmentStream: RkMppH265Stream? = null
 
     private var operationAreaStream: RtmpCamera2? = null
 
@@ -271,6 +274,15 @@ class KioskManager(private val activity: Activity) {
         }
     }
 
+    fun recordErrorLog(source: String, message: String, error: String, stackTrace: String) {
+        appendUnifiedErrorLog(
+            source = source,
+            message = message,
+            error = error,
+            stackTrace = stackTrace,
+        )
+    }
+
     private fun startOutsideEnvironmentStream(
         cameraId: String,
         resetReconnect: Boolean = false,
@@ -295,7 +307,7 @@ class KioskManager(private val activity: Activity) {
             val url = buildOutsideEnvironmentRtspUrl()
             Log.i(TAG, "starting outside environment GStreamer RTSP H265 stream, cameraId=$cameraId, url=$url")
             appendOutsideEnvironmentLog("starting H265 RTSP stream, cameraId=$cameraId, url=$url")
-            val stream = GStreamerH265Stream(activity.applicationContext, gStreamerBridge) { status ->
+            val stream = RkMppH265Stream(activity.applicationContext, gStreamerBridge) { status ->
                 outsideEnvironmentStreamStatus = status
                 appendOutsideEnvironmentLog("status=$status")
             }
@@ -365,23 +377,68 @@ class KioskManager(private val activity: Activity) {
             }
             append('\n')
         }
-        runCatching {
-            outsideEnvironmentLogFile().appendText(details)
-        }.onFailure { fileError ->
-            Log.e(TAG, "write outside environment stream log failed", fileError)
+        appendLogFile(OUTSIDE_ENVIRONMENT_LOG_FILE_NAME, details)
+        writeDownloadsLog(OUTSIDE_ENVIRONMENT_LOG_FILE_NAME, details)
+        if (error != null || message.isErrorLikeLog()) {
+            appendUnifiedErrorLog(
+                source = "android-h265",
+                message = message,
+                error = error?.message ?: "",
+                stackTrace = error?.let(Log::getStackTraceString) ?: "",
+                timestamp = timestamp,
+            )
         }
-        writeDownloadsLog(details)
     }
 
     private fun outsideEnvironmentLogFile(): File {
+        return logFile(OUTSIDE_ENVIRONMENT_LOG_FILE_NAME)
+    }
+
+    private fun appendUnifiedErrorLog(
+        source: String,
+        message: String,
+        error: String,
+        stackTrace: String,
+        timestamp: String = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date()),
+    ) {
+        val details = buildString {
+            append(timestamp)
+            append(" | source=")
+            append(source)
+            append(" | message=")
+            append(message)
+            if (error.isNotBlank()) {
+                append(" | error=")
+                append(error)
+            }
+            if (stackTrace.isNotBlank()) {
+                append('\n')
+                append(stackTrace)
+            }
+            append('\n')
+        }
+        appendLogFile(UNIFIED_ERROR_LOG_FILE_NAME, details)
+        writeDownloadsLog(UNIFIED_ERROR_LOG_FILE_NAME, details)
+        uploadErrorLog(source, message, error, stackTrace, timestamp)
+    }
+
+    private fun appendLogFile(fileName: String, details: String) {
+        runCatching {
+            logFile(fileName).appendText(details)
+        }.onFailure { fileError ->
+            Log.e(TAG, "write log file failed: $fileName", fileError)
+        }
+    }
+
+    private fun logFile(fileName: String): File {
         val logDir = File(activity.getExternalFilesDir(null) ?: activity.filesDir, "logs")
         if (!logDir.exists()) {
             logDir.mkdirs()
         }
-        return File(logDir, OUTSIDE_ENVIRONMENT_LOG_FILE_NAME)
+        return File(logDir, fileName)
     }
 
-    private fun writeDownloadsLog(details: String) {
+    private fun writeDownloadsLog(fileName: String, details: String) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return
         }
@@ -391,7 +448,7 @@ class KioskManager(private val activity: Activity) {
             val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/SmartCabinetLogs"
             val projection = arrayOf(android.provider.MediaStore.Downloads._ID)
             val selection = "${android.provider.MediaStore.Downloads.DISPLAY_NAME}=? AND ${android.provider.MediaStore.Downloads.RELATIVE_PATH}=?"
-            val selectionArgs = arrayOf(OUTSIDE_ENVIRONMENT_LOG_FILE_NAME, "$relativePath/")
+            val selectionArgs = arrayOf(fileName, "$relativePath/")
             val existingUri = resolver.query(collection, projection, selection, selectionArgs, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.Downloads._ID))
@@ -403,7 +460,7 @@ class KioskManager(private val activity: Activity) {
             val uri = existingUri ?: resolver.insert(
                 collection,
                 ContentValues().apply {
-                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, OUTSIDE_ENVIRONMENT_LOG_FILE_NAME)
+                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, fileName)
                     put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
                     put(android.provider.MediaStore.Downloads.RELATIVE_PATH, relativePath)
                 },
@@ -414,6 +471,75 @@ class KioskManager(private val activity: Activity) {
         }.onFailure { error ->
             Log.e(TAG, "write outside environment downloads log failed", error)
         }
+    }
+
+    private fun uploadErrorLog(source: String, message: String, error: String, stackTrace: String, timestamp: String) {
+        val reportUrl = readErrorReportUrl()
+        if (reportUrl.isBlank() || !readErrorUploadEnabled()) {
+            return
+        }
+        Thread {
+            runCatching {
+                val androidId = Settings.Secure.getString(activity.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
+                val payload = JSONObject().apply {
+                    put("time", timestamp)
+                    put("source", source)
+                    put("message", message)
+                    put("error", error)
+                    put("stackTrace", stackTrace)
+                    put("deviceId", androidId)
+                    put("packageName", activity.packageName)
+                }.toString()
+                val connection = (URL(reportUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                }
+                connection.outputStream.use { output ->
+                    output.write(payload.toByteArray(Charsets.UTF_8))
+                }
+                val code = connection.responseCode
+                if (code !in 200..299) {
+                    Log.e(TAG, "error log upload failed, code=$code, url=$reportUrl")
+                }
+                connection.disconnect()
+            }.onFailure { uploadError ->
+                Log.e(TAG, "error log upload failed", uploadError)
+            }
+        }.apply { name = "SmartCabinetErrorLogUpload" }.start()
+    }
+
+    private fun readErrorReportUrl(): String {
+        return readLoggingConfig().optString("errorReportUrl", DEFAULT_ERROR_REPORT_URL)
+            .ifBlank { DEFAULT_ERROR_REPORT_URL }
+    }
+
+    private fun readErrorUploadEnabled(): Boolean {
+        return readLoggingConfig().optBoolean("uploadEnabled", true)
+    }
+
+    private fun readLoggingConfig(): JSONObject {
+        return runCatching {
+            val preferences = activity.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val rawState = preferences.getString("flutter.$APP_LOCAL_STATE_KEY", null)
+            if (rawState.isNullOrBlank()) {
+                JSONObject()
+            } else {
+                JSONObject(rawState).optJSONObject("logging") ?: JSONObject()
+            }
+        }.getOrDefault(JSONObject())
+    }
+
+    private fun String.isErrorLikeLog(): Boolean {
+        return contains("失败") ||
+            contains("错误") ||
+            contains("断开") ||
+            contains("不支持") ||
+            contains("failed", ignoreCase = true) ||
+            contains("error", ignoreCase = true) ||
+            contains("reconnect", ignoreCase = true)
     }
 
     private fun startOperationAreaStream(
@@ -575,7 +701,10 @@ class KioskManager(private val activity: Activity) {
         private const val RECONNECT_DELAY_MS = 3000L
         private const val MAX_RECONNECT_ATTEMPTS = 100
         private const val TAG = "SmartCabinetStream"
+        private const val APP_LOCAL_STATE_KEY = "app.localState"
         private const val OUTSIDE_ENVIRONMENT_LOG_FILE_NAME = "smart_cabinet_rtsp_h265.log"
+        private const val UNIFIED_ERROR_LOG_FILE_NAME = "smart_cabinet_error.log"
+        private const val DEFAULT_ERROR_REPORT_URL = "http://192.168.1.100:3000/api/logs/error"
         private const val DOWNLOADS_LOG_PATH = "Download/SmartCabinetLogs/smart_cabinet_rtsp_h265.log"
 
         private val CAMERA_ROLES = listOf(
