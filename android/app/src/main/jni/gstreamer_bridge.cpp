@@ -41,7 +41,8 @@ using MppEncCfg = void *;
 
 constexpr MPP_RET MPP_OK = 0;
 constexpr RK_S32 MPP_CTX_ENC = 1;
-constexpr RK_S32 MPP_VIDEO_CodingHEVC = 11;
+constexpr RK_S32 MPP_VIDEO_CodingHEVC = 0x01000004;
+constexpr RK_S32 MPP_BUFFER_INTERNAL = 0;
 constexpr RK_S32 MPP_BUFFER_TYPE_DRM = 3;
 constexpr RK_S32 MPP_BUFFER_FLAGS_CACHABLE = 0x00020000;
 constexpr RK_S32 MPP_FMT_YUV420SP = 0;
@@ -81,11 +82,11 @@ struct RkMppApi {
   MPP_RET (*mpp_enc_cfg_deinit)(MppEncCfg) = nullptr;
   MPP_RET (*mpp_enc_cfg_set_s32)(MppEncCfg, const char *, RK_S32) = nullptr;
   MPP_RET (*mpp_enc_cfg_set_u32)(MppEncCfg, const char *, RK_U32) = nullptr;
-  MPP_RET (*mpp_buffer_group_get_internal)(MppBufferGroup *, RK_S32) = nullptr;
+  MPP_RET (*mpp_buffer_group_get)(MppBufferGroup *, RK_S32, RK_S32, const char *, const char *) = nullptr;
   MPP_RET (*mpp_buffer_group_put)(MppBufferGroup) = nullptr;
-  MPP_RET (*mpp_buffer_get)(MppBufferGroup, MppBuffer *, size_t) = nullptr;
-  MPP_RET (*mpp_buffer_put)(MppBuffer) = nullptr;
-  void *(*mpp_buffer_get_ptr)(MppBuffer) = nullptr;
+  MPP_RET (*mpp_buffer_get_with_tag)(MppBufferGroup, MppBuffer *, size_t, const char *, const char *) = nullptr;
+  MPP_RET (*mpp_buffer_put_with_caller)(MppBuffer, const char *) = nullptr;
+  void *(*mpp_buffer_get_ptr_with_caller)(MppBuffer, const char *) = nullptr;
   MPP_RET (*mpp_buffer_sync_begin_f)(MppBuffer, RK_S32, const char *) = nullptr;
   MPP_RET (*mpp_buffer_sync_end_f)(MppBuffer, RK_S32, const char *) = nullptr;
   MPP_RET (*mpp_frame_init)(MppFrame *) = nullptr;
@@ -188,8 +189,7 @@ bool load_rkmpp_locked() {
 
   LOGI("RKMPP library loaded from %s", loaded_path);
 
-  rkmpp_api.handle = handle;
-  return load_symbol(handle, "mpp_check_support_format", &rkmpp_api.mpp_check_support_format) &&
+  bool loaded = load_symbol(handle, "mpp_check_support_format", &rkmpp_api.mpp_check_support_format) &&
       load_symbol(handle, "mpp_create", &rkmpp_api.mpp_create) &&
       load_symbol(handle, "mpp_init", &rkmpp_api.mpp_init) &&
       load_symbol(handle, "mpp_destroy", &rkmpp_api.mpp_destroy) &&
@@ -197,11 +197,11 @@ bool load_rkmpp_locked() {
       load_symbol(handle, "mpp_enc_cfg_deinit", &rkmpp_api.mpp_enc_cfg_deinit) &&
       load_symbol(handle, "mpp_enc_cfg_set_s32", &rkmpp_api.mpp_enc_cfg_set_s32) &&
       load_symbol(handle, "mpp_enc_cfg_set_u32", &rkmpp_api.mpp_enc_cfg_set_u32) &&
-      load_symbol(handle, "mpp_buffer_group_get_internal", &rkmpp_api.mpp_buffer_group_get_internal) &&
+      load_symbol(handle, "mpp_buffer_group_get", &rkmpp_api.mpp_buffer_group_get) &&
       load_symbol(handle, "mpp_buffer_group_put", &rkmpp_api.mpp_buffer_group_put) &&
-      load_symbol(handle, "mpp_buffer_get", &rkmpp_api.mpp_buffer_get) &&
-      load_symbol(handle, "mpp_buffer_put", &rkmpp_api.mpp_buffer_put) &&
-      load_symbol(handle, "mpp_buffer_get_ptr", &rkmpp_api.mpp_buffer_get_ptr) &&
+      load_symbol(handle, "mpp_buffer_get_with_tag", &rkmpp_api.mpp_buffer_get_with_tag) &&
+      load_symbol(handle, "mpp_buffer_put_with_caller", &rkmpp_api.mpp_buffer_put_with_caller) &&
+      load_symbol(handle, "mpp_buffer_get_ptr_with_caller", &rkmpp_api.mpp_buffer_get_ptr_with_caller) &&
       load_symbol(handle, "mpp_buffer_sync_begin_f", &rkmpp_api.mpp_buffer_sync_begin_f) &&
       load_symbol(handle, "mpp_buffer_sync_end_f", &rkmpp_api.mpp_buffer_sync_end_f) &&
       load_symbol(handle, "mpp_frame_init", &rkmpp_api.mpp_frame_init) &&
@@ -218,11 +218,18 @@ bool load_rkmpp_locked() {
       load_symbol(handle, "mpp_packet_set_length", &rkmpp_api.mpp_packet_set_length) &&
       load_symbol(handle, "mpp_packet_get_pos", &rkmpp_api.mpp_packet_get_pos) &&
       load_symbol(handle, "mpp_packet_get_length", &rkmpp_api.mpp_packet_get_length);
+  if (!loaded) {
+    rkmpp_api = RkMppApi();
+    return false;
+  }
+
+  rkmpp_api.handle = handle;
+  return true;
 }
 
 void stop_rkmpp_locked() {
   if (rkmpp_encoder.frame_buffer != nullptr) {
-    rkmpp_api.mpp_buffer_put(rkmpp_encoder.frame_buffer);
+    rkmpp_api.mpp_buffer_put_with_caller(rkmpp_encoder.frame_buffer, "stopRkMppH265");
   }
   if (rkmpp_encoder.group != nullptr) {
     rkmpp_api.mpp_buffer_group_put(rkmpp_encoder.group);
@@ -444,12 +451,22 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartRkMppH265(
   enc.stride = static_cast<RK_U32>((width + 7) & ~7);
   enc.frame_size = static_cast<size_t>(enc.stride) * static_cast<size_t>(height) * 3 / 2;
 
-  MPP_RET ret = rkmpp_api.mpp_buffer_group_get_internal(&enc.group, MPP_BUFFER_TYPE_DRM | MPP_BUFFER_FLAGS_CACHABLE);
+  MPP_RET ret = rkmpp_api.mpp_buffer_group_get(
+      &enc.group,
+      MPP_BUFFER_TYPE_DRM | MPP_BUFFER_FLAGS_CACHABLE,
+      MPP_BUFFER_INTERNAL,
+      "SmartCabinet",
+      "nativeStartRkMppH265");
   if (ret != MPP_OK) {
     set_last_error("RKMPP buffer group init failed ret=" + std::to_string(ret));
     return JNI_FALSE;
   }
-  ret = rkmpp_api.mpp_buffer_get(enc.group, &enc.frame_buffer, enc.frame_size);
+  ret = rkmpp_api.mpp_buffer_get_with_tag(
+      enc.group,
+      &enc.frame_buffer,
+      enc.frame_size,
+      "SmartCabinet",
+      "nativeStartRkMppH265");
   if (ret != MPP_OK) {
     set_last_error("RKMPP frame buffer alloc failed ret=" + std::to_string(ret));
     rkmpp_api.mpp_buffer_group_put(enc.group);
@@ -458,7 +475,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartRkMppH265(
   ret = rkmpp_api.mpp_create(&enc.ctx, &enc.mpi);
   if (ret != MPP_OK || enc.ctx == nullptr || enc.mpi == nullptr) {
     set_last_error("RKMPP mpp_create failed ret=" + std::to_string(ret));
-    rkmpp_api.mpp_buffer_put(enc.frame_buffer);
+    rkmpp_api.mpp_buffer_put_with_caller(enc.frame_buffer, "nativeStartRkMppH265");
     rkmpp_api.mpp_buffer_group_put(enc.group);
     return JNI_FALSE;
   }
@@ -468,7 +485,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartRkMppH265(
   if (ret != MPP_OK) {
     set_last_error("RKMPP mpp_init HEVC failed ret=" + std::to_string(ret));
     rkmpp_api.mpp_destroy(enc.ctx);
-    rkmpp_api.mpp_buffer_put(enc.frame_buffer);
+    rkmpp_api.mpp_buffer_put_with_caller(enc.frame_buffer, "nativeStartRkMppH265");
     rkmpp_api.mpp_buffer_group_put(enc.group);
     return JNI_FALSE;
   }
@@ -476,7 +493,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartRkMppH265(
   if (ret != MPP_OK) {
     set_last_error("RKMPP mpp_enc_cfg_init failed ret=" + std::to_string(ret));
     rkmpp_api.mpp_destroy(enc.ctx);
-    rkmpp_api.mpp_buffer_put(enc.frame_buffer);
+    rkmpp_api.mpp_buffer_put_with_caller(enc.frame_buffer, "nativeStartRkMppH265");
     rkmpp_api.mpp_buffer_group_put(enc.group);
     return JNI_FALSE;
   }
@@ -503,7 +520,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartRkMppH265(
     set_last_error("RKMPP MPP_ENC_SET_CFG failed ret=" + std::to_string(ret));
     if (enc.cfg) rkmpp_api.mpp_enc_cfg_deinit(enc.cfg);
     if (enc.ctx) rkmpp_api.mpp_destroy(enc.ctx);
-    if (enc.frame_buffer) rkmpp_api.mpp_buffer_put(enc.frame_buffer);
+    if (enc.frame_buffer) rkmpp_api.mpp_buffer_put_with_caller(enc.frame_buffer, "nativeStartRkMppH265");
     if (enc.group) rkmpp_api.mpp_buffer_group_put(enc.group);
     return JNI_FALSE;
   }
@@ -530,7 +547,9 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265Frame
     set_last_error("RKMPP invalid input frame size=" + std::to_string(input_size));
     return nullptr;
   }
-  void *frame_ptr = rkmpp_api.mpp_buffer_get_ptr(rkmpp_encoder.frame_buffer);
+  void *frame_ptr = rkmpp_api.mpp_buffer_get_ptr_with_caller(
+      rkmpp_encoder.frame_buffer,
+      "nativeEncodeRkMppH265Frame");
   if (frame_ptr == nullptr) {
     set_last_error("RKMPP frame buffer pointer is null");
     return nullptr;
