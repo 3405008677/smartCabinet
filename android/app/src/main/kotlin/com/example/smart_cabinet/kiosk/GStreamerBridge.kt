@@ -1,20 +1,25 @@
 package com.example.smart_cabinet.kiosk
 
+import android.content.Context
 import android.util.Log
+import org.freedesktop.gstreamer.GStreamer
 
 class GStreamerBridge {
-    fun initialize(): Boolean {
-        if (!isNativeLibraryLoaded) {
+    fun initialize(context: Context): Boolean {
+        if (!isSmartCabinetLibraryLoaded) {
             Log.e(TAG, "GStreamer native libraries unavailable", loadError)
             return false
         }
-        return runCatching { nativeInitialize() }
+        return runCatching {
+            GStreamer.init(context.applicationContext)
+            nativeInitialize()
+        }
             .onFailure { error -> Log.e(TAG, "GStreamer native initialize failed", error) }
             .getOrDefault(false)
     }
 
     fun version(): String {
-        if (!isNativeLibraryLoaded) {
+        if (!isSmartCabinetLibraryLoaded) {
             return "不可用"
         }
         return runCatching { nativeVersion() }
@@ -22,7 +27,7 @@ class GStreamerBridge {
     }
 
     fun startH265Rtsp(url: String, width: Int, height: Int, fps: Int): Boolean {
-        if (!isNativeLibraryLoaded) {
+        if (!isSmartCabinetLibraryLoaded) {
             Log.e(TAG, "GStreamer native libraries unavailable", loadError)
             return false
         }
@@ -32,14 +37,14 @@ class GStreamerBridge {
     }
 
     fun lastError(): String {
-        if (!isNativeLibraryLoaded) {
+        if (!isSmartCabinetLibraryLoaded) {
             return loadError?.message ?: "GStreamer native libraries unavailable"
         }
         return runCatching { nativeLastError() }.getOrDefault("")
     }
 
     fun pushH265Frame(data: ByteArray, presentationTimeUs: Long, keyFrame: Boolean): Boolean {
-        if (!isNativeLibraryLoaded) {
+        if (!isSmartCabinetLibraryLoaded) {
             return false
         }
         return runCatching { nativePushH265Frame(data, presentationTimeUs, keyFrame) }
@@ -48,7 +53,7 @@ class GStreamerBridge {
     }
 
     fun stopH265Rtsp() {
-        if (!isNativeLibraryLoaded) {
+        if (!isSmartCabinetLibraryLoaded) {
             return
         }
         runCatching { nativeStopH265Rtsp() }
@@ -70,7 +75,7 @@ class GStreamerBridge {
     companion object {
         private const val TAG = "SmartCabinetGst"
         private val loadError: Throwable?
-        private val isNativeLibraryLoaded: Boolean
+        private val isSmartCabinetLibraryLoaded: Boolean
 
         init {
             val result = runCatching {
@@ -78,7 +83,7 @@ class GStreamerBridge {
                 System.loadLibrary("smartcabinet_gstreamer")
             }
             loadError = result.exceptionOrNull()
-            isNativeLibraryLoaded = result.isSuccess
+            isSmartCabinetLibraryLoaded = result.isSuccess
             loadError?.let { error ->
                 Log.e(TAG, "GStreamer native library load failed", error)
             }

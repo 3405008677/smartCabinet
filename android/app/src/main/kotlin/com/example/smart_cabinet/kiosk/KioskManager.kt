@@ -256,7 +256,7 @@ class KioskManager(private val activity: Activity) {
 
     fun readGStreamerStatus(): Map<String, String> {
         return runCatching {
-            val initialized = gStreamerBridge.initialize()
+            val initialized = gStreamerBridge.initialize(activity.applicationContext)
             linkedMapOf(
                 "available" to initialized.toString(),
                 "version" to gStreamerBridge.version(),

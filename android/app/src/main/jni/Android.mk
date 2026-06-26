@@ -18,6 +18,7 @@ endif
 
 GSTREAMER_PLUGINS := coreelements app videoparsersbad rtp rtsp udp tcp isomp4
 GSTREAMER_EXTRA_DEPS := gstreamer-app-1.0 gstreamer-rtsp-1.0
+GSTREAMER_JAVA_SRC_DIR := $(LOCAL_PATH)/src
 
 include $(GSTREAMER_ROOT)/share/gst-android/ndk-build/gstreamer-1.0.mk
 

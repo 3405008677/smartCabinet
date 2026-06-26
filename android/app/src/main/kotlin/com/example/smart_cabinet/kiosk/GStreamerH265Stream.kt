@@ -9,6 +9,7 @@ import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
 import android.os.Handler
@@ -52,7 +53,7 @@ class GStreamerH265Stream(
 
         return runCatching {
             statusListener("正在初始化 GStreamer")
-            if (!bridge.initialize()) {
+            if (!bridge.initialize(context)) {
                 statusListener("GStreamer 初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
                 return false
             }
@@ -111,6 +112,8 @@ class GStreamerH265Stream(
     }
 
     private fun prepareEncoder(width: Int, height: Int, fps: Int, bitrate: Int, iframeInterval: Int) {
+        val encoderName = findHevcEncoderName()
+            ?: error("设备不支持 H265/HEVC 硬编码器，可用视频编码器：${listVideoEncoders()}")
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_HEVC, width, height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
@@ -120,11 +123,44 @@ class GStreamerH265Stream(
                 setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.HEVCProfileMain)
             }
         }
-        encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_HEVC).also { codec ->
-            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        encoder = MediaCodec.createByCodecName(encoderName).also { codec ->
+            runCatching {
+                codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            }.onFailure { error ->
+                codec.release()
+                throw IllegalStateException(
+                    "H265 编码器初始化失败，encoder=$encoderName, " +
+                        "size=${width}x$height, fps=$fps, bitrate=$bitrate, " +
+                        "available=${listVideoEncoders()}",
+                    error,
+                )
+            }
             encoderSurface = codec.createInputSurface()
             codec.start()
         }
+    }
+
+    private fun findHevcEncoderName(): String? {
+        return MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+            .firstOrNull { codecInfo ->
+                codecInfo.isEncoder && codecInfo.supportedTypes.any { type ->
+                    type.equals(MediaFormat.MIMETYPE_VIDEO_HEVC, ignoreCase = true)
+                }
+            }
+            ?.name
+    }
+
+    private fun listVideoEncoders(): String {
+        return MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+            .filter { codecInfo ->
+                codecInfo.isEncoder && codecInfo.supportedTypes.any { type ->
+                    type.startsWith("video/", ignoreCase = true)
+                }
+            }
+            .joinToString(separator = "; ") { codecInfo ->
+                "${codecInfo.name}(${codecInfo.supportedTypes.joinToString()})"
+            }
+            .ifBlank { "无" }
     }
 
     private fun openCamera(cameraId: String) {
