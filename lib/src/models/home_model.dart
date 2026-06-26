@@ -1,0 +1,152 @@
+/// 首页统计数据模型。
+class HomeStatsModel {
+  /// 创建首页统计数据模型。
+  const HomeStatsModel({
+    required this.documentCount,
+    required this.occupiedSlots,
+    required this.pendingPickup,
+    required this.todayStored,
+    required this.todayPickedUp,
+    required this.occupancyRateText,
+    required this.occupancyRateValue,
+  });
+
+  /// 柜内文件数量。
+  final String documentCount;
+
+  /// 已用格位数量。
+  final String occupiedSlots;
+
+  /// 待取件数量。
+  final String pendingPickup;
+
+  /// 今日存入数量。
+  final String todayStored;
+
+  /// 今日取出数量。
+  final String todayPickedUp;
+
+  /// 占用率文本。
+  final String occupancyRateText;
+
+  /// 占用率数值。
+  final double occupancyRateValue;
+
+  /// 从接口数据创建模型。
+  factory HomeStatsModel.fromMap(Map<String, Object> map) {
+    return HomeStatsModel(
+      documentCount: map['documentCount'] as String,
+      occupiedSlots: map['occupiedSlots'] as String,
+      pendingPickup: map['pendingPickup'] as String,
+      todayStored: map['todayStored'] as String,
+      todayPickedUp: map['todayPickedUp'] as String,
+      occupancyRateText: map['occupancyRateText'] as String,
+      occupancyRateValue: (map['occupancyRateValue'] as num).toDouble(),
+    );
+  }
+
+  /// 转为 JSON 结构。
+  Map<String, Object> toJson() {
+    return {
+      'documentCount': documentCount,
+      'occupiedSlots': occupiedSlots,
+      'pendingPickup': pendingPickup,
+      'todayStored': todayStored,
+      'todayPickedUp': todayPickedUp,
+      'occupancyRateText': occupancyRateText,
+      'occupancyRateValue': occupancyRateValue,
+    };
+  }
+}
+
+/// 首页底部状态摘要模型。
+class HomeFooterModel {
+  /// 创建首页底部状态摘要模型。
+  const HomeFooterModel({
+    required this.statusSummary,
+    required this.doorStatus,
+    required this.slotSummary,
+  });
+
+  /// 柜体在线摘要。
+  final String statusSummary;
+
+  /// 柜门状态摘要。
+  final String doorStatus;
+
+  /// 格位摘要。
+  final String slotSummary;
+
+  /// 从接口数据创建模型。
+  factory HomeFooterModel.fromMap(Map<String, Object> map) {
+    return HomeFooterModel(
+      statusSummary: map['statusSummary'] as String,
+      doorStatus: map['doorStatus'] as String,
+      slotSummary: map['slotSummary'] as String,
+    );
+  }
+
+  /// 转为 JSON 结构。
+  Map<String, Object> toJson() {
+    return {
+      'statusSummary': statusSummary,
+      'doorStatus': doorStatus,
+      'slotSummary': slotSummary,
+    };
+  }
+}
+
+/// 首页展示模型。
+class HomeModel {
+  /// 创建首页展示模型。
+  const HomeModel({
+    required this.cabinetCode,
+    required this.region,
+    required this.status,
+    required this.headline,
+    required this.stats,
+    required this.footer,
+  });
+
+  /// 柜体编号。
+  final String cabinetCode;
+
+  /// 柜体区域。
+  final String region;
+
+  /// 柜体状态。
+  final String status;
+
+  /// banner 标题。
+  final String headline;
+
+  /// 首页统计数据。
+  final HomeStatsModel stats;
+
+  /// 首页底部摘要。
+  final HomeFooterModel footer;
+
+  /// 从接口数据创建模型。
+  factory HomeModel.fromMap(Map<String, Object> map) {
+    return HomeModel(
+      cabinetCode: map['cabinetCode'] as String,
+      region: map['region'] as String,
+      status: map['status'] as String,
+      headline: map['headline'] as String,
+      stats: HomeStatsModel.fromMap(map['stats'] as Map<String, Object>),
+      footer: HomeFooterModel.fromMap(map['footer'] as Map<String, Object>),
+    );
+  }
+
+  /// 转为 JSON 结构。
+  Map<String, Object> toJson() {
+    return {
+      'cabinetCode': cabinetCode,
+      'region': region,
+      'status': status,
+      'headline': headline,
+      'stats': stats.toJson(),
+      'footer': footer.toJson(),
+    };
+  }
+}
