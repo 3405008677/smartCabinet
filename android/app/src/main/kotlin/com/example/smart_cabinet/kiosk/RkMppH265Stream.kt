@@ -27,6 +27,7 @@ class RkMppH265Stream(
     private var imageReader: ImageReader? = null
     private var workerThread: HandlerThread? = null
     private var workerHandler: Handler? = null
+    private var diagnosticsRunnable: Runnable? = null
     private val streaming = AtomicBoolean(false)
     private var encodedFrameCount = 0
     private var pushedFrameCount = 0
@@ -70,6 +71,7 @@ class RkMppH265Stream(
             pushedFrameCount = 0
             pushedByteCount = 0L
             streaming.set(true)
+            startDiagnosticsPolling()
             true
         }.getOrElse { error ->
             Log.e(TAG, "RKMPP H265 stream start failed", error)
@@ -81,6 +83,8 @@ class RkMppH265Stream(
 
     fun stop() {
         streaming.set(false)
+        diagnosticsRunnable?.let { runnable -> workerHandler?.removeCallbacks(runnable) }
+        diagnosticsRunnable = null
         currentCameraId = null
         runCatching { captureSession?.close() }
         captureSession = null
@@ -108,6 +112,24 @@ class RkMppH265Stream(
         workerThread?.join(1000)
         workerThread = null
         workerHandler = null
+    }
+
+    private fun startDiagnosticsPolling() {
+        val handler = workerHandler ?: return
+        diagnosticsRunnable = object : Runnable {
+            override fun run() {
+                if (!streaming.get()) {
+                    return
+                }
+                val diagnostics = bridge.pollH265RtspDiagnostics()
+                if (diagnostics.isNotBlank()) {
+                    diagnostics.lineSequence()
+                        .filter { it.isNotBlank() }
+                        .forEach { line -> statusListener("RTSP诊断：$line") }
+                }
+                handler.postDelayed(this, DIAGNOSTICS_INTERVAL_MS)
+            }
+        }.also { runnable -> handler.postDelayed(runnable, DIAGNOSTICS_INTERVAL_MS) }
     }
 
     private fun prepareImageReader(width: Int, height: Int) {
@@ -237,5 +259,6 @@ class RkMppH265Stream(
 
     companion object {
         private const val TAG = "SmartCabinetRkMpp"
+        private const val DIAGNOSTICS_INTERVAL_MS = 1000L
     }
 }

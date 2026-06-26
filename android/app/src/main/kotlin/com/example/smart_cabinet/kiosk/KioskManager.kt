@@ -589,8 +589,11 @@ class KioskManager(private val activity: Activity) {
         try {
             val url = buildOperationAreaRtspUrl()
             Log.i(TAG, "starting operation area RKMPP RTSP H265 stream, cameraId=$cameraId, url=$url")
+            appendOutsideEnvironmentLog("role=operationArea build=$H265_BUILD_MARK protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=$url")
+            appendOutsideEnvironmentLog("role=operationArea starting H265 RTSP stream, cameraId=$cameraId, url=$url")
             val stream = RkMppH265Stream(activity.applicationContext, GStreamerBridge()) { status ->
                 operationAreaStreamStatus = status
+                appendOutsideEnvironmentLog("role=operationArea status=$status")
             }
             val started = stream.start(
                 cameraId = cameraId,
@@ -604,15 +607,18 @@ class KioskManager(private val activity: Activity) {
             if (!started) {
                 operationAreaStreamStatus = "RKMPP RTSP H265 推流启动失败：$operationAreaStreamStatus"
                 Log.e(TAG, "operation area RKMPP RTSP H265 stream start returned false: $operationAreaStreamStatus")
+                appendOutsideEnvironmentLog("role=operationArea start returned false: $operationAreaStreamStatus")
                 scheduleOperationAreaReconnect(cameraId)
                 return
             }
 
             operationAreaStream = stream
             operationAreaStreamStatus = "推流启动中"
+            appendOutsideEnvironmentLog("role=operationArea stream object started")
         } catch (error: Throwable) {
             operationAreaStreamStatus = "推流启动失败：${error.message ?: error::class.java.simpleName}"
             Log.e(TAG, "operation area RKMPP RTSP H265 stream start failed", error)
+            appendOutsideEnvironmentLog("role=operationArea start failed", error)
             stopOperationAreaStream()
             scheduleOperationAreaReconnect(cameraId)
         }
@@ -621,13 +627,16 @@ class KioskManager(private val activity: Activity) {
     private fun stopOperationAreaStream() {
         val stream = operationAreaStream ?: return
         runCatching { stream.stop() }
+            .onFailure { error -> appendOutsideEnvironmentLog("role=operationArea stop failed", error) }
         operationAreaStream = null
+        appendOutsideEnvironmentLog("role=operationArea stream stopped")
     }
 
     private fun scheduleOperationAreaReconnect(cameraId: String) {
         if (operationReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
             operationAreaStreamStatus = "推流重连失败，已达到最大次数"
             Log.e(TAG, "operation area RKMPP RTSP H265 stream reconnect failed, max attempts reached")
+            appendOutsideEnvironmentLog("role=operationArea reconnect failed, max attempts reached")
             return
         }
         operationReconnectAttempts += 1
@@ -636,6 +645,7 @@ class KioskManager(private val activity: Activity) {
         streamHandler.postDelayed(operationReconnectRunnable, RECONNECT_DELAY_MS)
         operationAreaStreamStatus = "推流断开，${RECONNECT_DELAY_MS / 1000} 秒后重连第 $operationReconnectAttempts 次"
         Log.w(TAG, "operation area RKMPP RTSP H265 stream reconnect scheduled, cameraId=$cameraId, attempt=$operationReconnectAttempts")
+        appendOutsideEnvironmentLog("role=operationArea reconnect scheduled, cameraId=$cameraId, attempt=$operationReconnectAttempts")
     }
 
     private fun buildOutsideEnvironmentRtspUrl(): String {

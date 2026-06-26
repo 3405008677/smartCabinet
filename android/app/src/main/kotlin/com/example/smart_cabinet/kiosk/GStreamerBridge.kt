@@ -60,6 +60,15 @@ class GStreamerBridge {
             .onFailure { error -> Log.e(TAG, "GStreamer H265 RTSP stop failed", error) }
     }
 
+    fun pollH265RtspDiagnostics(): String {
+        if (!isSmartCabinetLibraryLoaded) {
+            return loadError?.message ?: "GStreamer native libraries unavailable"
+        }
+        return runCatching { nativePollH265RtspDiagnostics() }
+            .onFailure { error -> Log.e(TAG, "GStreamer H265 RTSP diagnostics poll failed", error) }
+            .getOrDefault("")
+    }
+
     fun rkMppStatus(): String {
         if (!isSmartCabinetLibraryLoaded) {
             return loadError?.message ?: "smartcabinet_gstreamer unavailable"
@@ -103,6 +112,8 @@ class GStreamerBridge {
     private external fun nativeStartH265Rtsp(url: String, width: Int, height: Int, fps: Int): Boolean
 
     private external fun nativePushH265Frame(data: ByteArray, presentationTimeUs: Long, keyFrame: Boolean): Boolean
+
+    private external fun nativePollH265RtspDiagnostics(): String
 
     private external fun nativeStopH265Rtsp()
 

@@ -318,6 +318,80 @@ bool check_pipeline_bus_locked() {
   return ok;
 }
 
+std::string pop_pipeline_diagnostics_locked() {
+  if (pipeline_bus == nullptr) {
+    return "";
+  }
+  std::string diagnostics;
+  while (true) {
+    GstMessage *message = gst_bus_pop(pipeline_bus);
+    if (message == nullptr) {
+      break;
+    }
+    if (!diagnostics.empty()) {
+      diagnostics += "\n";
+    }
+    const char *source = GST_OBJECT_NAME(message->src);
+    if (source == nullptr) {
+      source = "unknown";
+    }
+    diagnostics += "GStreamer bus ";
+    diagnostics += GST_MESSAGE_TYPE_NAME(message);
+    diagnostics += " from ";
+    diagnostics += source;
+    if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ERROR) {
+      GError *error = nullptr;
+      gchar *debug = nullptr;
+      gst_message_parse_error(message, &error, &debug);
+      diagnostics += ": ";
+      diagnostics += error != nullptr ? error->message : "unknown error";
+      if (debug != nullptr) {
+        diagnostics += ", debug=";
+        diagnostics += debug;
+      }
+      if (error != nullptr) g_error_free(error);
+      if (debug != nullptr) g_free(debug);
+    } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_WARNING) {
+      GError *error = nullptr;
+      gchar *debug = nullptr;
+      gst_message_parse_warning(message, &error, &debug);
+      diagnostics += ": ";
+      diagnostics += error != nullptr ? error->message : "unknown warning";
+      if (debug != nullptr) {
+        diagnostics += ", debug=";
+        diagnostics += debug;
+      }
+      if (error != nullptr) g_error_free(error);
+      if (debug != nullptr) g_free(debug);
+    } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_STATE_CHANGED) {
+      GstState old_state;
+      GstState new_state;
+      GstState pending_state;
+      gst_message_parse_state_changed(message, &old_state, &new_state, &pending_state);
+      diagnostics += ": ";
+      diagnostics += gst_element_state_get_name(old_state);
+      diagnostics += " -> ";
+      diagnostics += gst_element_state_get_name(new_state);
+      diagnostics += " pending=";
+      diagnostics += gst_element_state_get_name(pending_state);
+    } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_STREAM_STATUS) {
+      GstStreamStatusType type;
+      GstElement *owner = nullptr;
+      gst_message_parse_stream_status(message, &type, &owner);
+      diagnostics += ": type=";
+      diagnostics += std::to_string(static_cast<int>(type));
+      if (owner != nullptr) {
+        diagnostics += " owner=";
+        diagnostics += GST_OBJECT_NAME(owner);
+      }
+    } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS) {
+      diagnostics += ": eos";
+    }
+    gst_message_unref(message);
+  }
+  return diagnostics;
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -458,6 +532,15 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativePushH265Frame(
     return JNI_FALSE;
   }
   return check_pipeline_bus_locked() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativePollH265RtspDiagnostics(
+    JNIEnv *env,
+    jobject /* thiz */) {
+  std::lock_guard<std::mutex> lock(stream_mutex);
+  const std::string diagnostics = pop_pipeline_diagnostics_locked();
+  return env->NewStringUTF(diagnostics.c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL
