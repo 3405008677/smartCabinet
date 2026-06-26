@@ -53,11 +53,11 @@ class GStreamerH265Stream(
         return runCatching {
             statusListener("正在初始化 GStreamer")
             if (!bridge.initialize()) {
-                statusListener("GStreamer 初始化失败")
+                statusListener("GStreamer 初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
                 return false
             }
             if (!bridge.startH265Rtsp(url, width, height, fps)) {
-                statusListener("GStreamer RTSP pipeline 启动失败")
+                statusListener("GStreamer RTSP pipeline 启动失败：${bridge.lastError().ifBlank { "未知错误" }}")
                 return false
             }
 

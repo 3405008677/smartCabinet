@@ -31,6 +31,13 @@ class GStreamerBridge {
             .getOrDefault(false)
     }
 
+    fun lastError(): String {
+        if (!isNativeLibraryLoaded) {
+            return loadError?.message ?: "GStreamer native libraries unavailable"
+        }
+        return runCatching { nativeLastError() }.getOrDefault("")
+    }
+
     fun pushH265Frame(data: ByteArray, presentationTimeUs: Long, keyFrame: Boolean): Boolean {
         if (!isNativeLibraryLoaded) {
             return false
@@ -51,6 +58,8 @@ class GStreamerBridge {
     private external fun nativeInitialize(): Boolean
 
     private external fun nativeVersion(): String
+
+    private external fun nativeLastError(): String
 
     private external fun nativeStartH265Rtsp(url: String, width: Int, height: Int, fps: Int): Boolean
 

@@ -23,6 +23,14 @@ GstElement *video_source = nullptr;
 // Tracks whether gst_init_check has completed successfully.
 bool gstreamer_initialized = false;
 
+// Stores the last native GStreamer failure so Kotlin can surface actionable UI status.
+std::string last_error;
+
+void set_last_error(const std::string &message) {
+  last_error = message;
+  LOGE("%s", message.c_str());
+}
+
 // Converts a Java string into a UTF-8 std::string.
 std::string to_string(JNIEnv *env, jstring value) {
   if (value == nullptr) {
@@ -56,7 +64,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeInitialize(
   GError *error = nullptr;
   if (!gst_init_check(nullptr, nullptr, &error)) {
     const char *message = error != nullptr ? error->message : "unknown error";
-    LOGE("GStreamer init failed: %s", message);
+    set_last_error(std::string("GStreamer init failed: ") + message);
     if (error != nullptr) {
       g_error_free(error);
     }
@@ -64,6 +72,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeInitialize(
   }
 
   gstreamer_initialized = true;
+  last_error.clear();
   LOGI("GStreamer initialized, version=%s", gst_version_string());
   return JNI_TRUE;
 }
@@ -73,6 +82,14 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeVersion(
     JNIEnv *env,
     jobject /* thiz */) {
   return env->NewStringUTF(gst_version_string());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeLastError(
+    JNIEnv *env,
+    jobject /* thiz */) {
+  std::lock_guard<std::mutex> lock(stream_mutex);
+  return env->NewStringUTF(last_error.c_str());
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -107,7 +124,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartH265Rtsp(
   pipeline = gst_parse_launch(description.c_str(), &error);
   if (pipeline == nullptr) {
     const char *message = error != nullptr ? error->message : "unknown error";
-    LOGE("GStreamer pipeline create failed: %s", message);
+    set_last_error(std::string("GStreamer pipeline create failed: ") + message);
     if (error != nullptr) {
       g_error_free(error);
     }
@@ -116,18 +133,19 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartH265Rtsp(
 
   video_source = gst_bin_get_by_name(GST_BIN(pipeline), "video_source");
   if (video_source == nullptr) {
-    LOGE("GStreamer appsrc element not found");
+    set_last_error("GStreamer appsrc element not found");
     stop_pipeline_locked();
     return JNI_FALSE;
   }
 
   GstStateChangeReturn result = gst_element_set_state(pipeline, GST_STATE_PLAYING);
   if (result == GST_STATE_CHANGE_FAILURE) {
-    LOGE("GStreamer pipeline failed to enter PLAYING state");
+    set_last_error("GStreamer pipeline failed to enter PLAYING state");
     stop_pipeline_locked();
     return JNI_FALSE;
   }
 
+  last_error.clear();
   LOGI("GStreamer H265 RTSP pipeline started, url=%s", target_url.c_str());
   return JNI_TRUE;
 }

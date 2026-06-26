@@ -3,6 +3,7 @@ package com.example.smart_cabinet.kiosk
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
+import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.content.ComponentName
 import android.content.Context
@@ -11,6 +12,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.UserManager
@@ -20,6 +22,10 @@ import android.view.WindowManager
 import com.pedro.common.ConnectChecker
 import com.pedro.common.VideoCodec
 import com.pedro.library.rtmp.RtmpCamera2
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class KioskManager(private val activity: Activity) {
     private val cameraBindingPreferences =
@@ -235,6 +241,8 @@ class KioskManager(private val activity: Activity) {
             "status" to outsideEnvironmentStreamStatus,
             "url" to buildOutsideEnvironmentRtspUrl(),
             "cameraId" to (cameraBindingPreferences.getString(OUTSIDE_ENVIRONMENT_CAMERA_ROLE, null) ?: ""),
+            "logFile" to outsideEnvironmentLogFile().absolutePath,
+            "downloadsLogFile" to DOWNLOADS_LOG_PATH,
         )
     }
 
@@ -286,8 +294,10 @@ class KioskManager(private val activity: Activity) {
         try {
             val url = buildOutsideEnvironmentRtspUrl()
             Log.i(TAG, "starting outside environment GStreamer RTSP H265 stream, cameraId=$cameraId, url=$url")
+            appendOutsideEnvironmentLog("starting H265 RTSP stream, cameraId=$cameraId, url=$url")
             val stream = GStreamerH265Stream(activity.applicationContext, gStreamerBridge) { status ->
                 outsideEnvironmentStreamStatus = status
+                appendOutsideEnvironmentLog("status=$status")
             }
             val started = stream.start(
                 cameraId = cameraId,
@@ -299,40 +309,111 @@ class KioskManager(private val activity: Activity) {
                 iframeInterval = STREAM_IFRAME_INTERVAL,
             )
             if (!started) {
-                outsideEnvironmentStreamStatus = "GStreamer H265 推流启动失败"
-                Log.e(TAG, "outside environment GStreamer RTSP H265 stream start returned false")
-                scheduleOutsideEnvironmentReconnect(cameraId)
+                val reason = outsideEnvironmentStreamStatus
+                outsideEnvironmentStreamStatus = "GStreamer H265 推流启动失败：$reason"
+                Log.e(TAG, "outside environment GStreamer RTSP H265 stream start returned false: $reason")
+                appendOutsideEnvironmentLog("start returned false: $reason")
+                scheduleOutsideEnvironmentReconnect(cameraId, reason)
                 return
             }
 
             outsideEnvironmentStream = stream
             outsideEnvironmentStreamStatus = "推流启动中"
+            appendOutsideEnvironmentLog("stream object started")
         } catch (error: Throwable) {
             outsideEnvironmentStreamStatus = "推流启动失败：${error.message ?: error::class.java.simpleName}"
             Log.e(TAG, "outside environment GStreamer RTSP H265 stream start failed", error)
+            appendOutsideEnvironmentLog("start failed", error)
             stopOutsideEnvironmentStream()
-            scheduleOutsideEnvironmentReconnect(cameraId)
+            scheduleOutsideEnvironmentReconnect(cameraId, outsideEnvironmentStreamStatus)
         }
     }
 
     private fun stopOutsideEnvironmentStream() {
         val stream = outsideEnvironmentStream ?: return
         runCatching { stream.stop() }
+            .onFailure { error -> appendOutsideEnvironmentLog("stop failed", error) }
         outsideEnvironmentStream = null
+        appendOutsideEnvironmentLog("stream stopped")
     }
 
-    private fun scheduleOutsideEnvironmentReconnect(cameraId: String) {
+    private fun scheduleOutsideEnvironmentReconnect(cameraId: String, reason: String) {
         if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            outsideEnvironmentStreamStatus = "推流重连失败，已达到最大次数"
+            outsideEnvironmentStreamStatus = "推流重连失败，已达到最大次数：$reason"
             Log.e(TAG, "outside environment GStreamer RTSP H265 stream reconnect failed, max attempts reached")
+            appendOutsideEnvironmentLog("reconnect failed, max attempts reached, reason=$reason")
             return
         }
         reconnectAttempts += 1
         reconnectingCameraId = cameraId
         streamHandler.removeCallbacks(reconnectRunnable)
         streamHandler.postDelayed(reconnectRunnable, RECONNECT_DELAY_MS)
-        outsideEnvironmentStreamStatus = "推流断开，${RECONNECT_DELAY_MS / 1000} 秒后重连第 $reconnectAttempts 次"
-        Log.w(TAG, "outside environment GStreamer RTSP H265 stream reconnect scheduled, cameraId=$cameraId, attempt=$reconnectAttempts")
+        outsideEnvironmentStreamStatus = "推流断开：$reason，${RECONNECT_DELAY_MS / 1000} 秒后重连第 $reconnectAttempts 次"
+        Log.w(TAG, "outside environment GStreamer RTSP H265 stream reconnect scheduled, cameraId=$cameraId, attempt=$reconnectAttempts, reason=$reason")
+        appendOutsideEnvironmentLog("reconnect scheduled, cameraId=$cameraId, attempt=$reconnectAttempts, reason=$reason")
+    }
+
+    private fun appendOutsideEnvironmentLog(message: String, error: Throwable? = null) {
+        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+        val details = buildString {
+            append(timestamp)
+            append(" | ")
+            append(message)
+            if (error != null) {
+                append('\n')
+                append(Log.getStackTraceString(error))
+            }
+            append('\n')
+        }
+        runCatching {
+            outsideEnvironmentLogFile().appendText(details)
+        }.onFailure { fileError ->
+            Log.e(TAG, "write outside environment stream log failed", fileError)
+        }
+        writeDownloadsLog(details)
+    }
+
+    private fun outsideEnvironmentLogFile(): File {
+        val logDir = File(activity.getExternalFilesDir(null) ?: activity.filesDir, "logs")
+        if (!logDir.exists()) {
+            logDir.mkdirs()
+        }
+        return File(logDir, OUTSIDE_ENVIRONMENT_LOG_FILE_NAME)
+    }
+
+    private fun writeDownloadsLog(details: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return
+        }
+        runCatching {
+            val resolver = activity.contentResolver
+            val collection = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/SmartCabinetLogs"
+            val projection = arrayOf(android.provider.MediaStore.Downloads._ID)
+            val selection = "${android.provider.MediaStore.Downloads.DISPLAY_NAME}=? AND ${android.provider.MediaStore.Downloads.RELATIVE_PATH}=?"
+            val selectionArgs = arrayOf(OUTSIDE_ENVIRONMENT_LOG_FILE_NAME, "$relativePath/")
+            val existingUri = resolver.query(collection, projection, selection, selectionArgs, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.Downloads._ID))
+                    android.content.ContentUris.withAppendedId(collection, id)
+                } else {
+                    null
+                }
+            }
+            val uri = existingUri ?: resolver.insert(
+                collection,
+                ContentValues().apply {
+                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, OUTSIDE_ENVIRONMENT_LOG_FILE_NAME)
+                    put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
+                    put(android.provider.MediaStore.Downloads.RELATIVE_PATH, relativePath)
+                },
+            ) ?: return
+            resolver.openOutputStream(uri, "wa")?.use { output ->
+                output.write(details.toByteArray(Charsets.UTF_8))
+            }
+        }.onFailure { error ->
+            Log.e(TAG, "write outside environment downloads log failed", error)
+        }
     }
 
     private fun startOperationAreaStream(
@@ -494,6 +575,8 @@ class KioskManager(private val activity: Activity) {
         private const val RECONNECT_DELAY_MS = 3000L
         private const val MAX_RECONNECT_ATTEMPTS = 100
         private const val TAG = "SmartCabinetStream"
+        private const val OUTSIDE_ENVIRONMENT_LOG_FILE_NAME = "smart_cabinet_rtsp_h265.log"
+        private const val DOWNLOADS_LOG_PATH = "Download/SmartCabinetLogs/smart_cabinet_rtsp_h265.log"
 
         private val CAMERA_ROLES = listOf(
             "faceRecognition",
