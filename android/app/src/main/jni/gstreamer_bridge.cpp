@@ -142,17 +142,51 @@ bool load_rkmpp_locked() {
   if (rkmpp_api.handle != nullptr) {
     return true;
   }
-  void *handle = dlopen("libmpp.so", RTLD_NOW);
-  if (handle == nullptr) {
-    handle = dlopen("/vendor/lib64/libmpp.so", RTLD_NOW);
+  const char *candidates[] = {
+      "libmpp.so",
+      "librockchip_mpp.so",
+      "librkmpp.so",
+      "/vendor/lib64/libmpp.so",
+      "/vendor/lib64/librockchip_mpp.so",
+      "/vendor/lib64/librkmpp.so",
+      "/odm/lib64/libmpp.so",
+      "/odm/lib64/librockchip_mpp.so",
+      "/odm/lib64/librkmpp.so",
+      "/product/lib64/libmpp.so",
+      "/product/lib64/librockchip_mpp.so",
+      "/product/lib64/librkmpp.so",
+      "/system_ext/lib64/libmpp.so",
+      "/system_ext/lib64/librockchip_mpp.so",
+      "/system_ext/lib64/librkmpp.so",
+      "/system/lib64/libmpp.so",
+      "/system/lib64/librockchip_mpp.so",
+      "/system/lib64/librkmpp.so",
+  };
+
+  std::string failures;
+  void *handle = nullptr;
+  const char *loaded_path = nullptr;
+  for (const char *candidate : candidates) {
+    dlerror();
+    handle = dlopen(candidate, RTLD_NOW);
+    if (handle != nullptr) {
+      loaded_path = candidate;
+      break;
+    }
+    const char *error = dlerror();
+    if (!failures.empty()) {
+      failures += "; ";
+    }
+    failures += candidate;
+    failures += " => ";
+    failures += error != nullptr ? error : "unknown dlopen error";
   }
   if (handle == nullptr) {
-    handle = dlopen("/system/lib64/libmpp.so", RTLD_NOW);
-  }
-  if (handle == nullptr) {
-    set_last_error(std::string("RKMPP libmpp.so load failed: ") + dlerror());
+    set_last_error(std::string("RKMPP library load failed: ") + failures);
     return false;
   }
+
+  LOGI("RKMPP library loaded from %s", loaded_path);
 
   rkmpp_api.handle = handle;
   return load_symbol(handle, "mpp_check_support_format", &rkmpp_api.mpp_check_support_format) &&
