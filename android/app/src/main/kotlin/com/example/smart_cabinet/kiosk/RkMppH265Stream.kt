@@ -28,6 +28,9 @@ class RkMppH265Stream(
     private var workerThread: HandlerThread? = null
     private var workerHandler: Handler? = null
     private val streaming = AtomicBoolean(false)
+    private var encodedFrameCount = 0
+    private var pushedFrameCount = 0
+    private var pushedByteCount = 0L
 
     fun start(cameraId: String, url: String, width: Int, height: Int, fps: Int, bitrate: Int, iframeInterval: Int): Boolean {
         if (streaming.get()) {
@@ -60,6 +63,9 @@ class RkMppH265Stream(
             startWorkerThread()
             prepareImageReader(width, height)
             openCamera(cameraId)
+            encodedFrameCount = 0
+            pushedFrameCount = 0
+            pushedByteCount = 0L
             streaming.set(true)
             true
         }.getOrElse { error ->
@@ -114,10 +120,17 @@ class RkMppH265Stream(
                         statusListener("RKMPP H265 编码失败：${bridge.lastError().ifBlank { "无输出帧" }}")
                         return@use
                     }
+                    encodedFrameCount += 1
                     if (!bridge.pushH265Frame(encoded, currentImage.timestamp / 1000, false)) {
-                        statusListener("RKMPP H265 帧推送失败")
+                        statusListener("RKMPP H265 帧推送失败：${bridge.lastError().ifBlank { "GStreamer 未返回具体错误" }}")
                     } else {
-                        statusListener("RKMPP H265 推流中")
+                        pushedFrameCount += 1
+                        pushedByteCount += encoded.size.toLong()
+                        if (pushedFrameCount <= 3 || pushedFrameCount % 30 == 0) {
+                            statusListener(
+                                "RKMPP H265 推流中：encoded=$encodedFrameCount pushed=$pushedFrameCount bytes=$pushedByteCount last=${encoded.size}",
+                            )
+                        }
                     }
                 }
             }, workerHandler)

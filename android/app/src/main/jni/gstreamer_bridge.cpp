@@ -23,6 +23,9 @@ GstElement *pipeline = nullptr;
 // Holds the appsrc element that receives encoded H265 frames from Kotlin.
 GstElement *video_source = nullptr;
 
+// Holds the pipeline bus so appsrc pushes can surface async RTSP connection errors.
+GstBus *pipeline_bus = nullptr;
+
 // Tracks whether gst_init_check has completed successfully.
 bool gstreamer_initialized = false;
 
@@ -111,10 +114,13 @@ struct RkMppEncoder {
   MppEncCfg cfg = nullptr;
   MppBufferGroup group = nullptr;
   MppBuffer frame_buffer = nullptr;
+  MppBuffer header_buffer = nullptr;
   RK_U32 width = 0;
   RK_U32 height = 0;
   RK_U32 stride = 0;
   size_t frame_size = 0;
+  std::vector<unsigned char> header;
+  bool header_sent = false;
 };
 
 std::mutex rkmpp_mutex;
@@ -231,6 +237,9 @@ void stop_rkmpp_locked() {
   if (rkmpp_encoder.frame_buffer != nullptr) {
     rkmpp_api.mpp_buffer_put_with_caller(rkmpp_encoder.frame_buffer, "stopRkMppH265");
   }
+  if (rkmpp_encoder.header_buffer != nullptr) {
+    rkmpp_api.mpp_buffer_put_with_caller(rkmpp_encoder.header_buffer, "stopRkMppH265");
+  }
   if (rkmpp_encoder.group != nullptr) {
     rkmpp_api.mpp_buffer_group_put(rkmpp_encoder.group);
   }
@@ -260,11 +269,53 @@ std::string to_string(JNIEnv *env, jstring value) {
 void stop_pipeline_locked() {
   if (pipeline != nullptr) {
     gst_element_set_state(pipeline, GST_STATE_NULL);
+    if (pipeline_bus != nullptr) {
+      gst_object_unref(pipeline_bus);
+      pipeline_bus = nullptr;
+    }
     gst_object_unref(pipeline);
     pipeline = nullptr;
     video_source = nullptr;
     LOGI("GStreamer H265 pipeline stopped");
   }
+}
+
+bool check_pipeline_bus_locked() {
+  if (pipeline_bus == nullptr) {
+    return true;
+  }
+  GstMessage *message = gst_bus_pop_filtered(
+      pipeline_bus,
+      static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_WARNING | GST_MESSAGE_EOS));
+  if (message == nullptr) {
+    return true;
+  }
+  bool ok = true;
+  if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ERROR) {
+    GError *error = nullptr;
+    gchar *debug = nullptr;
+    gst_message_parse_error(message, &error, &debug);
+    const char *text = error != nullptr ? error->message : "unknown GStreamer error";
+    set_last_error(std::string("GStreamer pipeline error: ") + text +
+        (debug != nullptr ? std::string(", debug=") + debug : ""));
+    if (error != nullptr) g_error_free(error);
+    if (debug != nullptr) g_free(debug);
+    ok = false;
+  } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_WARNING) {
+    GError *error = nullptr;
+    gchar *debug = nullptr;
+    gst_message_parse_warning(message, &error, &debug);
+    const char *text = error != nullptr ? error->message : "unknown GStreamer warning";
+    set_last_error(std::string("GStreamer pipeline warning: ") + text +
+        (debug != nullptr ? std::string(", debug=") + debug : ""));
+    if (error != nullptr) g_error_free(error);
+    if (debug != nullptr) g_free(debug);
+  } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS) {
+    set_last_error("GStreamer pipeline reached EOS");
+    ok = false;
+  }
+  gst_message_unref(message);
+  return ok;
 }
 
 }  // namespace
@@ -349,6 +400,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartH265Rtsp(
     stop_pipeline_locked();
     return JNI_FALSE;
   }
+  pipeline_bus = gst_element_get_bus(pipeline);
 
   GstStateChangeReturn result = gst_element_set_state(pipeline, GST_STATE_PLAYING);
   if (result == GST_STATE_CHANGE_FAILURE) {
@@ -396,8 +448,16 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativePushH265Frame(
   GST_BUFFER_DTS(buffer) = GST_BUFFER_PTS(buffer);
   GST_BUFFER_DURATION(buffer) = GST_CLOCK_TIME_NONE;
 
+  if (!check_pipeline_bus_locked()) {
+    gst_buffer_unref(buffer);
+    return JNI_FALSE;
+  }
   GstFlowReturn flow = gst_app_src_push_buffer(GST_APP_SRC(video_source), buffer);
-  return flow == GST_FLOW_OK ? JNI_TRUE : JNI_FALSE;
+  if (flow != GST_FLOW_OK) {
+    set_last_error("GStreamer appsrc push failed flow=" + std::to_string(static_cast<int>(flow)));
+    return JNI_FALSE;
+  }
+  return check_pipeline_bus_locked() ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -525,6 +585,37 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartRkMppH265(
     return JNI_FALSE;
   }
 
+  ret = rkmpp_api.mpp_buffer_get_with_tag(
+      enc.group,
+      &enc.header_buffer,
+      4096,
+      "SmartCabinet",
+      "nativeStartRkMppH265Header");
+  if (ret == MPP_OK && enc.header_buffer != nullptr) {
+    MppPacket header_packet = nullptr;
+    ret = rkmpp_api.mpp_packet_init_with_buffer(&header_packet, enc.header_buffer);
+    if (ret == MPP_OK && header_packet != nullptr) {
+      rkmpp_api.mpp_packet_set_length(header_packet, 0);
+      ret = enc.mpi->control(enc.ctx, MPP_ENC_GET_HDR_SYNC, header_packet);
+      if (ret == MPP_OK) {
+        void *header_pos = rkmpp_api.mpp_packet_get_pos(header_packet);
+        const size_t header_length = rkmpp_api.mpp_packet_get_length(header_packet);
+        if (header_pos != nullptr && header_length > 0) {
+          auto *bytes = reinterpret_cast<unsigned char *>(header_pos);
+          enc.header.assign(bytes, bytes + header_length);
+          LOGI("RKMPP H265 header generated, bytes=%zu", header_length);
+        } else {
+          LOGI("RKMPP H265 header packet is empty");
+        }
+      } else {
+        LOGE("RKMPP MPP_ENC_GET_HDR_SYNC failed ret=%d", ret);
+      }
+      rkmpp_api.mpp_packet_deinit(&header_packet);
+    }
+  } else {
+    LOGE("RKMPP header buffer alloc failed ret=%d", ret);
+  }
+
   rkmpp_encoder = enc;
   last_error.clear();
   LOGI("RKMPP H265 encoder started, size=%dx%d fps=%d bitrate=%d", width, height, fps, bitrate);
@@ -591,9 +682,21 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265Frame
     set_last_error("RKMPP output packet is empty");
     return nullptr;
   }
-  jbyteArray result = env->NewByteArray(static_cast<jsize>(length));
+  const bool prepend_header = !rkmpp_encoder.header_sent && !rkmpp_encoder.header.empty();
+  const size_t output_length = length + (prepend_header ? rkmpp_encoder.header.size() : 0);
+  jbyteArray result = env->NewByteArray(static_cast<jsize>(output_length));
   if (result != nullptr) {
-    env->SetByteArrayRegion(result, 0, static_cast<jsize>(length), reinterpret_cast<jbyte *>(pos));
+    jsize offset = 0;
+    if (prepend_header) {
+      env->SetByteArrayRegion(
+          result,
+          0,
+          static_cast<jsize>(rkmpp_encoder.header.size()),
+          reinterpret_cast<jbyte *>(rkmpp_encoder.header.data()));
+      offset = static_cast<jsize>(rkmpp_encoder.header.size());
+      rkmpp_encoder.header_sent = true;
+    }
+    env->SetByteArrayRegion(result, offset, static_cast<jsize>(length), reinterpret_cast<jbyte *>(pos));
   }
   rkmpp_api.mpp_packet_deinit(&packet);
   last_error.clear();
