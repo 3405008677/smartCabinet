@@ -47,7 +47,7 @@ class CameraStreamStatus {
   /// 当前推流状态文案。
   final String status;
 
-  /// 当前原生层使用的 RTMP 推流地址。
+  /// 当前原生层使用的 RTSP 推流地址。
   final String url;
 
   /// 当前绑定的摄像头 ID。
@@ -174,7 +174,7 @@ class CameraBindingService {
     );
   }
 
-  /// 读取操作区摄像头原生 H264 推流状态。
+  /// 读取操作区摄像头原生 RTSP-H265 推流状态。
   Future<CameraStreamStatus> readOperationAreaStreamStatus() async {
     final debugStatus = _debugOperationAreaStreamStatus;
     if (debugStatus != null) {

@@ -68,12 +68,12 @@ void main() {
     expect(status.cameraId, 'cameraId_1');
   });
 
-  test('reads operation area H264 stream status from debug data', () async {
+  test('reads operation area RTSP H265 stream status from debug data', () async {
     CameraBindingService.debugUseCameraData(
       cameras: const [],
       operationAreaStreamStatus: const CameraStreamStatus(
         status: '推流中',
-        url: 'rtmp://192.168.2.167/app/device-001-operation-h264',
+        url: 'rtsp://192.168.2.167/app/device-001-operation',
         cameraId: 'cameraId_2',
       ),
     );
@@ -81,7 +81,7 @@ void main() {
     final status = await CameraBindingService().readOperationAreaStreamStatus();
 
     expect(status.status, '推流中');
-    expect(status.url, 'rtmp://192.168.2.167/app/device-001-operation-h264');
+    expect(status.url, 'rtsp://192.168.2.167/app/device-001-operation');
     expect(status.cameraId, 'cameraId_2');
   });
 }

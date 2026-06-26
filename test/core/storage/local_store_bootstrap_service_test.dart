@@ -40,7 +40,7 @@ void main() {
       '型号': 'SC-Board-A1',
     });
     expect(state.video, <String, Object?>{
-      'streamUrl': 'rtmp://192.168.2.167:554/app/a1b2c3d4e5f67890',
+      'streamUrl': 'rtsp://192.168.2.167/app/a1b2c3d4e5f67890',
       'streamingEnabled': false,
     });
     expect(state.logging, <String, Object?>{

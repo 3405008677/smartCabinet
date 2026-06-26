@@ -17,8 +17,8 @@ class LocalStoreBootstrapService {
   /// 创建本地 Store 启动缓存服务内部构造器。
   const LocalStoreBootstrapService._(this._store, this._fetchDeviceInfo);
 
-  /// 默认 RTMP 服务地址前缀。
-  static const String streamBaseUrl = 'rtmp://192.168.2.167:554/app';
+  /// 默认 RTSP 服务地址前缀。
+  static const String streamBaseUrl = 'rtsp://192.168.2.167/app';
 
   /// 本地 Store。
   final AppLocalStore _store;

@@ -50,7 +50,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
   /// 柜外环境摄像头原生推流状态。
   CameraStreamStatus? _outsideEnvironmentStreamStatus;
 
-  /// 操作区摄像头原生 H264 推流状态。
+  /// 操作区摄像头原生 RTSP-H265 推流状态。
   CameraStreamStatus? _operationAreaStreamStatus;
 
   /// 摄像头绑定服务。
@@ -256,7 +256,7 @@ class _DeviceInfoPanel extends StatelessWidget {
   /// 柜外环境摄像头原生推流状态。
   final CameraStreamStatus? outsideEnvironmentStreamStatus;
 
-  /// 操作区摄像头原生 H264 推流状态。
+  /// 操作区摄像头原生 RTSP-H265 推流状态。
   final CameraStreamStatus? operationAreaStreamStatus;
 
   /// 配置摄像头角色时执行的动作。
@@ -373,7 +373,7 @@ class _DeviceInfoPanel extends StatelessWidget {
         }
         if (role == CabinetCameraRole.operationArea) {
           final streamStatus = operationAreaStreamStatus?.status ?? '未启动';
-          return '${camera.displayName}\nH264推流：$streamStatus';
+          return '${camera.displayName}\nRTSP-H265：$streamStatus';
         }
         return camera.displayName;
       }

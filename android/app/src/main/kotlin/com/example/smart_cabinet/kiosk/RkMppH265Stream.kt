@@ -31,6 +31,8 @@ class RkMppH265Stream(
     private var encodedFrameCount = 0
     private var pushedFrameCount = 0
     private var pushedByteCount = 0L
+    var currentCameraId: String? = null
+        private set
 
     fun start(cameraId: String, url: String, width: Int, height: Int, fps: Int, bitrate: Int, iframeInterval: Int): Boolean {
         if (streaming.get()) {
@@ -43,6 +45,7 @@ class RkMppH265Stream(
         }
 
         return runCatching {
+            currentCameraId = cameraId
             statusListener("正在初始化 GStreamer")
             if (!bridge.initialize(context)) {
                 statusListener("GStreamer 初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
@@ -78,6 +81,7 @@ class RkMppH265Stream(
 
     fun stop() {
         streaming.set(false)
+        currentCameraId = null
         runCatching { captureSession?.close() }
         captureSession = null
         runCatching { cameraDevice?.close() }

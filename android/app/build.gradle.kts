@@ -96,6 +96,4 @@ flutter {
     source = "../.."
 }
 
-dependencies {
-    implementation("com.github.pedroSG94.RootEncoder:library:2.7.5")
-}
+dependencies {}
