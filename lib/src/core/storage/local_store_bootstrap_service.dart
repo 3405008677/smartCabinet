@@ -18,7 +18,8 @@ class LocalStoreBootstrapService {
   const LocalStoreBootstrapService._(this._store, this._fetchDeviceInfo);
 
   /// 默认 RTSP 服务地址前缀。
-  static const String streamBaseUrl = 'rtsp://192.168.2.167/app';
+  // static const String streamBaseUrl = 'rtsp://192.168.2.167/app';
+  static const String streamBaseUrl = 'rtsp://127.0.0.1:8554/app';
 
   /// 本地 Store。
   final AppLocalStore _store;

@@ -95,7 +95,10 @@ class _SmartCabinetHomePageState extends State<SmartCabinetHomePage> {
               colors: [Color(0xFFEAF2FF), Color(0xFFF7FAFF)],
             ),
           ),
-          child: _DashboardBody(homeData: _homeData),
+          child: _DashboardBody(
+            homeData: _homeData,
+            onCabinetModelTap: _handleVersionTap,
+          ),
         ),
       ),
     );
@@ -106,10 +109,16 @@ class _SmartCabinetHomePageState extends State<SmartCabinetHomePage> {
 ///
 /// 负责组织顶部柜体信息与 banner、主体功能卡片以及底部状态栏。
 class _DashboardBody extends StatelessWidget {
-  const _DashboardBody({required this.homeData});
+  const _DashboardBody({
+    required this.homeData,
+    required this.onCabinetModelTap,
+  });
 
   /// 首页展示数据。
   final HomeModel homeData;
+
+  /// 点击左上角柜体模型时执行的隐藏入口动作。
+  final VoidCallback onCabinetModelTap;
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +134,10 @@ class _DashboardBody extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _CabinetOverviewCard(homeData: homeData),
+                _CabinetOverviewCard(
+                  homeData: homeData,
+                  onCabinetModelTap: onCabinetModelTap,
+                ),
                 const SizedBox(width: 16),
                 Expanded(child: _FinishedBannerCard(homeData: homeData)),
               ],
@@ -158,10 +170,16 @@ class _DashboardBody extends StatelessWidget {
 
 /// 当前柜体展示卡片。
 class _CabinetOverviewCard extends StatelessWidget {
-  const _CabinetOverviewCard({required this.homeData});
+  const _CabinetOverviewCard({
+    required this.homeData,
+    required this.onCabinetModelTap,
+  });
 
   /// 首页展示数据。
   final HomeModel homeData;
+
+  /// 点击柜体模型时执行的隐藏入口动作。
+  final VoidCallback onCabinetModelTap;
 
   @override
   Widget build(BuildContext context) {
@@ -173,10 +191,15 @@ class _CabinetOverviewCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
       child: Row(
         children: [
-          const SizedBox(
+          SizedBox(
             width: 94,
             height: double.infinity,
-            child: _CabinetModelViewer(),
+            child: GestureDetector(
+              key: const ValueKey('cabinet_model_tap_target'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onCabinetModelTap,
+              child: const _CabinetModelViewer(),
+            ),
           ),
           const SizedBox(width: 18),
           Expanded(

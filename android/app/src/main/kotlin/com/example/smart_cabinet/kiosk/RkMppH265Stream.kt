@@ -21,21 +21,22 @@ class RkMppH265Stream(
     private val context: Context,
     private val bridge: GStreamerBridge,
     private val statusListener: (String) -> Unit,
-) {
+) : H265RtspStream {
     private var cameraDevice: CameraDevice? = null
     private var captureSession: CameraCaptureSession? = null
     private var imageReader: ImageReader? = null
     private var workerThread: HandlerThread? = null
     private var workerHandler: Handler? = null
-    private var diagnosticsRunnable: Runnable? = null
+    private var rtspPublisher: RtspTcpH265Publisher? = null
+    private var rtspUrl = ""
     private val streaming = AtomicBoolean(false)
     private var encodedFrameCount = 0
     private var pushedFrameCount = 0
     private var pushedByteCount = 0L
-    var currentCameraId: String? = null
+    override var currentCameraId: String? = null
         private set
 
-    fun start(cameraId: String, url: String, width: Int, height: Int, fps: Int, bitrate: Int, iframeInterval: Int): Boolean {
+    override fun start(cameraId: String, url: String, width: Int, height: Int, fps: Int, bitrate: Int, iframeInterval: Int): Boolean {
         if (streaming.get()) {
             statusListener("RKMPP H265 推流中")
             return true
@@ -47,13 +48,10 @@ class RkMppH265Stream(
 
         return runCatching {
             currentCameraId = cameraId
-            statusListener("正在初始化 GStreamer")
+            rtspUrl = url
+            statusListener("正在初始化 RKMPP 依赖库")
             if (!bridge.initialize(context)) {
-                statusListener("GStreamer 初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
-                return false
-            }
-            if (!bridge.startH265Rtsp(url, width, height, fps)) {
-                statusListener("GStreamer RTSP pipeline 启动失败：${bridge.lastError().ifBlank { "未知错误" }}")
+                statusListener("RKMPP 依赖库初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
                 return false
             }
 
@@ -71,7 +69,6 @@ class RkMppH265Stream(
             pushedFrameCount = 0
             pushedByteCount = 0L
             streaming.set(true)
-            startDiagnosticsPolling()
             true
         }.getOrElse { error ->
             Log.e(TAG, "RKMPP H265 stream start failed", error)
@@ -81,10 +78,8 @@ class RkMppH265Stream(
         }
     }
 
-    fun stop() {
+    override fun stop() {
         streaming.set(false)
-        diagnosticsRunnable?.let { runnable -> workerHandler?.removeCallbacks(runnable) }
-        diagnosticsRunnable = null
         currentCameraId = null
         runCatching { captureSession?.close() }
         captureSession = null
@@ -93,12 +88,13 @@ class RkMppH265Stream(
         runCatching { imageReader?.close() }
         imageReader = null
         bridge.stopRkMppH265()
-        bridge.stopH265Rtsp()
+        runCatching { rtspPublisher?.stop() }
+        rtspPublisher = null
         stopWorkerThread()
         statusListener("RKMPP H265 已停止")
     }
 
-    fun isStreaming(): Boolean = streaming.get()
+    override fun isStreaming(): Boolean = streaming.get()
 
     private fun startWorkerThread() {
         workerThread = HandlerThread("SmartCabinetRkMppCamera").also { thread ->
@@ -112,24 +108,6 @@ class RkMppH265Stream(
         workerThread?.join(1000)
         workerThread = null
         workerHandler = null
-    }
-
-    private fun startDiagnosticsPolling() {
-        val handler = workerHandler ?: return
-        diagnosticsRunnable = object : Runnable {
-            override fun run() {
-                if (!streaming.get()) {
-                    return
-                }
-                val diagnostics = bridge.pollH265RtspDiagnostics()
-                if (diagnostics.isNotBlank()) {
-                    diagnostics.lineSequence()
-                        .filter { it.isNotBlank() }
-                        .forEach { line -> statusListener("RTSP诊断：$line") }
-                }
-                handler.postDelayed(this, DIAGNOSTICS_INTERVAL_MS)
-            }
-        }.also { runnable -> handler.postDelayed(runnable, DIAGNOSTICS_INTERVAL_MS) }
     }
 
     private fun prepareImageReader(width: Int, height: Int) {
@@ -147,19 +125,26 @@ class RkMppH265Stream(
                         return@use
                     }
                     encodedFrameCount += 1
-                    if (!bridge.pushH265Frame(encoded, currentImage.timestamp / 1000, false)) {
-                        statusListener("RKMPP H265 帧推送失败：${bridge.lastError().ifBlank { "GStreamer 未返回具体错误" }}")
-                    } else {
-                        pushedFrameCount += 1
-                        pushedByteCount += encoded.size.toLong()
-                        if (pushedFrameCount <= 3 || pushedFrameCount % 30 == 0) {
-                            statusListener(
-                                "RKMPP H265 推流中：encoded=$encodedFrameCount pushed=$pushedFrameCount bytes=$pushedByteCount last=${encoded.size}",
-                            )
-                        }
+                    ensureRtspPublisherStarted(encoded)
+                    rtspPublisher?.sendFrame(encoded, currentImage.timestamp / 1000, encodedFrameCount == 1)
+                    pushedFrameCount += 1
+                    pushedByteCount += encoded.size.toLong()
+                    if (pushedFrameCount <= 3 || pushedFrameCount % 30 == 0) {
+                        statusListener(
+                            "RKMPP H265 推流中：encoded=$encodedFrameCount pushed=$pushedFrameCount bytes=$pushedByteCount last=${encoded.size}",
+                        )
                     }
                 }
             }, workerHandler)
+        }
+    }
+
+    private fun ensureRtspPublisherStarted(codecConfig: ByteArray) {
+        if (rtspPublisher != null || rtspUrl.isBlank()) {
+            return
+        }
+        rtspPublisher = RtspTcpH265Publisher(statusListener).also { publisher ->
+            publisher.start(rtspUrl, codecConfig)
         }
     }
 
@@ -259,6 +244,5 @@ class RkMppH265Stream(
 
     companion object {
         private const val TAG = "SmartCabinetRkMpp"
-        private const val DIAGNOSTICS_INTERVAL_MS = 1000L
     }
 }

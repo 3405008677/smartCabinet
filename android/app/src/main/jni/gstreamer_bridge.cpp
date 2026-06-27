@@ -318,6 +318,16 @@ bool check_pipeline_bus_locked() {
   return ok;
 }
 
+bool has_gstreamer_element_factory(const char *name) {
+  GstElementFactory *factory = gst_element_factory_find(name);
+  if (factory == nullptr) {
+    set_last_error(std::string("GStreamer element missing: ") + name);
+    return false;
+  }
+  gst_object_unref(factory);
+  return true;
+}
+
 std::string pop_pipeline_diagnostics_locked() {
   if (pipeline_bus == nullptr) {
     return "";
@@ -446,6 +456,13 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartH265Rtsp(
 
   stop_pipeline_locked();
 
+  const char *required_factories[] = {"appsrc", "h265parse", "rtph265pay", "rtspclientsink"};
+  for (const char *factory : required_factories) {
+    if (!has_gstreamer_element_factory(factory)) {
+      return JNI_FALSE;
+    }
+  }
+
   const std::string target_url = to_string(env, url);
   const std::string caps = "video/x-h265,stream-format=byte-stream,alignment=au,width=" +
       std::to_string(width) + ",height=" + std::to_string(height) + ",framerate=" +
@@ -459,12 +476,17 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartH265Rtsp(
 
   GError *error = nullptr;
   pipeline = gst_parse_launch(description.c_str(), &error);
-  if (pipeline == nullptr) {
+  if (error != nullptr) {
     const char *message = error != nullptr ? error->message : "unknown error";
     set_last_error(std::string("GStreamer pipeline create failed: ") + message);
     if (error != nullptr) {
       g_error_free(error);
     }
+    stop_pipeline_locked();
+    return JNI_FALSE;
+  }
+  if (pipeline == nullptr) {
+    set_last_error("GStreamer pipeline create failed: unknown error");
     return JNI_FALSE;
   }
 

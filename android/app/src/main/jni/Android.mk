@@ -16,7 +16,7 @@ else
 $(error Unsupported ABI $(TARGET_ARCH_ABI))
 endif
 
-GSTREAMER_PLUGINS := coreelements app videoparsersbad rtp rtsp udp tcp isomp4
+GSTREAMER_PLUGINS := coreelements app videoparsersbad rtp rtsp rtspclientsink udp tcp isomp4
 GSTREAMER_EXTRA_DEPS := gstreamer-app-1.0 gstreamer-rtsp-1.0
 GSTREAMER_JAVA_SRC_DIR := $(LOCAL_PATH)/src
 

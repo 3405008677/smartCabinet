@@ -31,9 +31,9 @@ class KioskManager(private val activity: Activity) {
     private val cameraBindingPreferences =
         activity.getSharedPreferences("camera_bindings", Context.MODE_PRIVATE)
 
-    private var outsideEnvironmentStream: RkMppH265Stream? = null
+    private var outsideEnvironmentStream: H265RtspStream? = null
 
-    private var operationAreaStream: RkMppH265Stream? = null
+    private var operationAreaStream: H265RtspStream? = null
 
     private val gStreamerBridge by lazy { GStreamerBridge() }
 
@@ -51,12 +51,15 @@ class KioskManager(private val activity: Activity) {
 
     private var operationReconnectingCameraId: String? = null
 
+    private val failedDownloadsLogNames = mutableSetOf<String>()
+
+    @Volatile
+    private var errorUploadMutedUntilMs = 0L
+
     private val reconnectRunnable = Runnable {
         val cameraId = reconnectingCameraId
-            ?: cameraBindingPreferences.getString(OUTSIDE_ENVIRONMENT_CAMERA_ROLE, null)
-        if (!cameraId.isNullOrBlank()) {
-            startOutsideEnvironmentStream(cameraId, triggeredByReconnect = true)
-        }
+            ?: readOutsideEnvironmentCameraId()
+        startOutsideEnvironmentStream(cameraId, triggeredByReconnect = true)
     }
 
     private val operationReconnectRunnable = Runnable {
@@ -224,11 +227,9 @@ class KioskManager(private val activity: Activity) {
     }
 
     fun startOutsideEnvironmentStreamIfConfigured() {
-        val cameraId = cameraBindingPreferences.getString(OUTSIDE_ENVIRONMENT_CAMERA_ROLE, null)
-        if (!cameraId.isNullOrBlank()) {
-            Log.i(TAG, "start outside environment GStreamer RTSP H265 stream from saved binding, cameraId=$cameraId")
-            startOutsideEnvironmentStream(cameraId)
-        }
+        val cameraId = readOutsideEnvironmentCameraId()
+        Log.i(TAG, "start outside environment RTSP H265 stream on app resume, cameraId=$cameraId")
+        startOutsideEnvironmentStream(cameraId)
         val operationCameraId = cameraBindingPreferences.getString(OPERATION_AREA_CAMERA_ROLE, null)
         if (!operationCameraId.isNullOrBlank()) {
             Log.i(TAG, "start operation area RKMPP RTSP H265 stream from saved binding, cameraId=$operationCameraId")
@@ -240,7 +241,7 @@ class KioskManager(private val activity: Activity) {
         return linkedMapOf(
             "status" to outsideEnvironmentStreamStatus,
             "url" to buildOutsideEnvironmentRtspUrl(),
-            "cameraId" to (cameraBindingPreferences.getString(OUTSIDE_ENVIRONMENT_CAMERA_ROLE, null) ?: ""),
+            "cameraId" to readOutsideEnvironmentCameraId(),
             "logFile" to outsideEnvironmentLogFile().absolutePath,
             "downloadsLogFile" to DOWNLOADS_LOG_PATH,
         )
@@ -304,9 +305,9 @@ class KioskManager(private val activity: Activity) {
             val url = buildOutsideEnvironmentRtspUrl()
             Log.i(TAG, "starting outside environment GStreamer RTSP H265 stream, cameraId=$cameraId, url=$url")
             resetOutsideEnvironmentLog()
-            appendOutsideEnvironmentLog("build=$H265_BUILD_MARK protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=$url")
+            appendOutsideEnvironmentLog("build=$H265_BUILD_MARK encoder=${selectH265EncoderName()} protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=$url")
             appendOutsideEnvironmentLog("starting H265 RTSP stream, cameraId=$cameraId, url=$url")
-            val stream = RkMppH265Stream(activity.applicationContext, gStreamerBridge) { status ->
+            val stream = createH265Stream(gStreamerBridge) { status ->
                 outsideEnvironmentStreamStatus = status
                 appendOutsideEnvironmentLog("status=$status")
             }
@@ -321,7 +322,7 @@ class KioskManager(private val activity: Activity) {
             )
             if (!started) {
                 val reason = outsideEnvironmentStreamStatus
-                outsideEnvironmentStreamStatus = "GStreamer H265 推流启动失败：$reason"
+                outsideEnvironmentStreamStatus = "H265 推流启动失败：$reason"
                 Log.e(TAG, "outside environment GStreamer RTSP H265 stream start returned false: $reason")
                 appendOutsideEnvironmentLog("start returned false: $reason")
                 scheduleOutsideEnvironmentReconnect(cameraId, reason)
@@ -338,6 +339,12 @@ class KioskManager(private val activity: Activity) {
             stopOutsideEnvironmentStream()
             scheduleOutsideEnvironmentReconnect(cameraId, outsideEnvironmentStreamStatus)
         }
+    }
+
+    private fun readOutsideEnvironmentCameraId(): String {
+        return cameraBindingPreferences.getString(OUTSIDE_ENVIRONMENT_CAMERA_ROLE, null)
+            ?.takeIf { it.isNotBlank() }
+            ?: DEFAULT_OUTSIDE_ENVIRONMENT_CAMERA_ID
     }
 
     private fun stopOutsideEnvironmentStream() {
@@ -491,13 +498,19 @@ class KioskManager(private val activity: Activity) {
                 output.write(details.toByteArray(Charsets.UTF_8))
             }
         }.onFailure { error ->
-            Log.e(TAG, "write outside environment downloads log failed", error)
+            if (failedDownloadsLogNames.add(fileName)) {
+                Log.w(TAG, "write downloads log disabled for $fileName: ${error.message ?: error::class.java.simpleName}")
+            }
         }
     }
 
     private fun uploadErrorLog(source: String, message: String, error: String, stackTrace: String, timestamp: String) {
         val reportUrl = readErrorReportUrl()
         if (reportUrl.isBlank() || !readErrorUploadEnabled()) {
+            return
+        }
+        val now = System.currentTimeMillis()
+        if (now < errorUploadMutedUntilMs) {
             return
         }
         Thread {
@@ -528,7 +541,8 @@ class KioskManager(private val activity: Activity) {
                 }
                 connection.disconnect()
             }.onFailure { uploadError ->
-                Log.e(TAG, "error log upload failed", uploadError)
+                errorUploadMutedUntilMs = System.currentTimeMillis() + ERROR_UPLOAD_FAILURE_COOLDOWN_MS
+                Log.w(TAG, "error log upload muted for ${ERROR_UPLOAD_FAILURE_COOLDOWN_MS / 1000}s: ${uploadError.message ?: uploadError::class.java.simpleName}")
             }
         }.apply { name = "SmartCabinetErrorLogUpload" }.start()
     }
@@ -588,10 +602,10 @@ class KioskManager(private val activity: Activity) {
 
         try {
             val url = buildOperationAreaRtspUrl()
-            Log.i(TAG, "starting operation area RKMPP RTSP H265 stream, cameraId=$cameraId, url=$url")
-            appendOutsideEnvironmentLog("role=operationArea build=$H265_BUILD_MARK protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=$url")
+            Log.i(TAG, "starting operation area RTSP H265 stream, cameraId=$cameraId, url=$url")
+            appendOutsideEnvironmentLog("role=operationArea build=$H265_BUILD_MARK encoder=${selectH265EncoderName()} protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=$url")
             appendOutsideEnvironmentLog("role=operationArea starting H265 RTSP stream, cameraId=$cameraId, url=$url")
-            val stream = RkMppH265Stream(activity.applicationContext, GStreamerBridge()) { status ->
+            val stream = createH265Stream(GStreamerBridge()) { status ->
                 operationAreaStreamStatus = status
                 appendOutsideEnvironmentLog("role=operationArea status=$status")
             }
@@ -605,8 +619,8 @@ class KioskManager(private val activity: Activity) {
                 iframeInterval = STREAM_IFRAME_INTERVAL,
             )
             if (!started) {
-                operationAreaStreamStatus = "RKMPP RTSP H265 推流启动失败：$operationAreaStreamStatus"
-                Log.e(TAG, "operation area RKMPP RTSP H265 stream start returned false: $operationAreaStreamStatus")
+                operationAreaStreamStatus = "RTSP H265 推流启动失败：$operationAreaStreamStatus"
+                Log.e(TAG, "operation area RTSP H265 stream start returned false: $operationAreaStreamStatus")
                 appendOutsideEnvironmentLog("role=operationArea start returned false: $operationAreaStreamStatus")
                 scheduleOperationAreaReconnect(cameraId)
                 return
@@ -617,7 +631,7 @@ class KioskManager(private val activity: Activity) {
             appendOutsideEnvironmentLog("role=operationArea stream object started")
         } catch (error: Throwable) {
             operationAreaStreamStatus = "推流启动失败：${error.message ?: error::class.java.simpleName}"
-            Log.e(TAG, "operation area RKMPP RTSP H265 stream start failed", error)
+            Log.e(TAG, "operation area RTSP H265 stream start failed", error)
             appendOutsideEnvironmentLog("role=operationArea start failed", error)
             stopOperationAreaStream()
             scheduleOperationAreaReconnect(cameraId)
@@ -635,7 +649,7 @@ class KioskManager(private val activity: Activity) {
     private fun scheduleOperationAreaReconnect(cameraId: String) {
         if (operationReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
             operationAreaStreamStatus = "推流重连失败，已达到最大次数"
-            Log.e(TAG, "operation area RKMPP RTSP H265 stream reconnect failed, max attempts reached")
+            Log.e(TAG, "operation area RTSP H265 stream reconnect failed, max attempts reached")
             appendOutsideEnvironmentLog("role=operationArea reconnect failed, max attempts reached")
             return
         }
@@ -644,8 +658,28 @@ class KioskManager(private val activity: Activity) {
         streamHandler.removeCallbacks(operationReconnectRunnable)
         streamHandler.postDelayed(operationReconnectRunnable, RECONNECT_DELAY_MS)
         operationAreaStreamStatus = "推流断开，${RECONNECT_DELAY_MS / 1000} 秒后重连第 $operationReconnectAttempts 次"
-        Log.w(TAG, "operation area RKMPP RTSP H265 stream reconnect scheduled, cameraId=$cameraId, attempt=$operationReconnectAttempts")
+        Log.w(TAG, "operation area RTSP H265 stream reconnect scheduled, cameraId=$cameraId, attempt=$operationReconnectAttempts")
         appendOutsideEnvironmentLog("role=operationArea reconnect scheduled, cameraId=$cameraId, attempt=$operationReconnectAttempts")
+    }
+
+    private fun createH265Stream(bridge: GStreamerBridge, statusListener: (String) -> Unit): H265RtspStream {
+        return if (shouldUseRkMppH265()) {
+            RkMppH265Stream(activity.applicationContext, bridge, statusListener)
+        } else {
+            MediaCodecH265Stream(activity.applicationContext, bridge, statusListener)
+        }
+    }
+
+    private fun selectH265EncoderName(): String {
+        return if (shouldUseRkMppH265()) "rkmpp" else "mediacodec"
+    }
+
+    private fun shouldUseRkMppH265(): Boolean {
+        val hardware = Build.HARDWARE.orEmpty().lowercase(Locale.US)
+        val board = Build.BOARD.orEmpty().lowercase(Locale.US)
+        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase(Locale.US)
+        return hardware.contains("rk") || hardware.contains("rockchip") ||
+            board.contains("rk") || board.contains("rockchip") || manufacturer.contains("rockchip")
     }
 
     private fun buildOutsideEnvironmentRtspUrl(): String {
@@ -653,7 +687,7 @@ class KioskManager(private val activity: Activity) {
             activity.contentResolver,
             Settings.Secure.ANDROID_ID,
         ) ?: "unknown"
-        return "rtsp://192.168.2.167/app/$androidId"
+        return normalizeRtspStreamUrl(readVideoStreamUrl(), androidId)
     }
 
     private fun buildOperationAreaRtspUrl(): String {
@@ -661,7 +695,49 @@ class KioskManager(private val activity: Activity) {
             activity.contentResolver,
             Settings.Secure.ANDROID_ID,
         ) ?: "unknown"
-        return "rtsp://192.168.2.167/app/$androidId-operation"
+        return "${normalizeRtspStreamUrl(readVideoStreamUrl(), androidId).trimEnd('/')}-operation"
+    }
+
+    private fun readVideoStreamUrl(): String {
+        return readVideoConfig().optString("streamUrl", DEFAULT_STREAM_BASE_URL)
+            .ifBlank { DEFAULT_STREAM_BASE_URL }
+    }
+
+    private fun readVideoConfig(): JSONObject {
+        return runCatching {
+            val preferences = activity.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val rawState = preferences.getString("flutter.$APP_LOCAL_STATE_KEY", null)
+            if (rawState.isNullOrBlank()) {
+                JSONObject()
+            } else {
+                JSONObject(rawState).optJSONObject("video") ?: JSONObject()
+            }
+        }.getOrDefault(JSONObject())
+    }
+
+    private fun normalizeRtspStreamUrl(rawUrl: String, androidId: String): String {
+        val trimmed = rawUrl.trim().trimEnd('/')
+        val rtspUrl = when {
+            trimmed.startsWith("rtsp://", ignoreCase = true) -> trimmed
+            trimmed.equals("http://127.0.0.1", ignoreCase = true) -> DEFAULT_STREAM_BASE_URL
+            trimmed.equals("https://127.0.0.1", ignoreCase = true) -> DEFAULT_STREAM_BASE_URL
+            trimmed.startsWith("http://", ignoreCase = true) -> "rtsp://${trimmed.removePrefixIgnoreCase("http://")}"
+            trimmed.startsWith("https://", ignoreCase = true) -> "rtsp://${trimmed.removePrefixIgnoreCase("https://")}"
+            trimmed.isNotBlank() -> "rtsp://$trimmed"
+            else -> DEFAULT_STREAM_BASE_URL
+        }.trimEnd('/')
+
+        return if (rtspUrl.substringAfterLast('/').equals(androidId, ignoreCase = false) ||
+            rtspUrl.substringAfterLast('/').endsWith("-operation")
+        ) {
+            rtspUrl
+        } else {
+            "$rtspUrl/app/$androidId".replace("/app/app/", "/app/")
+        }
+    }
+
+    private fun String.removePrefixIgnoreCase(prefix: String): String {
+        return if (startsWith(prefix, ignoreCase = true)) substring(prefix.length) else this
     }
 
     fun keepScreenOn() {
@@ -713,6 +789,7 @@ class KioskManager(private val activity: Activity) {
     companion object {
         private const val OUTSIDE_ENVIRONMENT_CAMERA_ROLE = "outsideEnvironment"
         private const val OPERATION_AREA_CAMERA_ROLE = "operationArea"
+        private const val DEFAULT_OUTSIDE_ENVIRONMENT_CAMERA_ID = "0"
         private const val STREAM_WIDTH = 640
         private const val STREAM_HEIGHT = 480
         private const val STREAM_FPS = 15
@@ -720,12 +797,14 @@ class KioskManager(private val activity: Activity) {
         private const val STREAM_IFRAME_INTERVAL = 1
         private const val RECONNECT_DELAY_MS = 3000L
         private const val MAX_RECONNECT_ATTEMPTS = 100
+        private const val ERROR_UPLOAD_FAILURE_COOLDOWN_MS = 60_000L
         private const val TAG = "SmartCabinetStream"
         private const val H265_BUILD_MARK = "rkmpp-h265-diagnostics-20260626-1718"
         private const val APP_LOCAL_STATE_KEY = "app.localState"
         private const val OUTSIDE_ENVIRONMENT_LOG_FILE_NAME = "smart_cabinet_rtsp_h265.log"
         private const val UNIFIED_ERROR_LOG_FILE_NAME = "smart_cabinet_error.log"
         private const val DEFAULT_ERROR_REPORT_URL = "http://192.168.1.100:3000/api/logs/error"
+        private const val DEFAULT_STREAM_BASE_URL = "rtsp://127.0.0.1:8554/app"
         private const val DOWNLOADS_LOG_PATH = "Download/SmartCabinetLogs/smart_cabinet_rtsp_h265.log"
 
         private val CAMERA_ROLES = listOf(
