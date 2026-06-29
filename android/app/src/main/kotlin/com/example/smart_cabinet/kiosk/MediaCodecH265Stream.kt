@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
+import android.util.Range
 import android.view.Surface
 import androidx.core.app.ActivityCompat
 import java.util.concurrent.atomic.AtomicBoolean
@@ -38,7 +39,10 @@ class MediaCodecH265Stream(
     private val streaming = AtomicBoolean(false)
     private var pushedFrameCount = 0
     private var pushedByteCount = 0L
+    private var streamFps = 0
     private var codecConfig: ByteArray? = null
+    private var waitingParameterSetCount = 0
+    private val stopping = AtomicBoolean(false)
     override var currentCameraId: String? = null
         private set
 
@@ -53,6 +57,7 @@ class MediaCodecH265Stream(
         }
 
         return runCatching {
+            stopping.set(false)
             val codecName = findHevcEncoderName()
             if (codecName.isNullOrBlank()) {
                 statusListener("MediaCodec H265 初始化失败：设备无 HEVC 编码器")
@@ -60,6 +65,7 @@ class MediaCodecH265Stream(
             }
             currentCameraId = cameraId
             rtspUrl = url
+            streamFps = fps
 
             statusListener("正在初始化 MediaCodec H265：$codecName")
             startWorkerThread()
@@ -70,6 +76,7 @@ class MediaCodecH265Stream(
             startDiagnosticsPolling()
             pushedFrameCount = 0
             pushedByteCount = 0L
+            waitingParameterSetCount = 0
             true
         }.getOrElse { error ->
             Log.e(TAG, "MediaCodec H265 stream start failed", error)
@@ -80,6 +87,9 @@ class MediaCodecH265Stream(
     }
 
     override fun stop() {
+        if (!stopping.compareAndSet(false, true) && !streaming.get()) {
+            return
+        }
         streaming.set(false)
         diagnosticsRunnable?.let { runnable -> workerHandler?.removeCallbacks(runnable) }
         diagnosticsRunnable = null
@@ -88,7 +98,10 @@ class MediaCodecH265Stream(
         captureSession = null
         runCatching { cameraDevice?.close() }
         cameraDevice = null
-        drainThread?.join(1000)
+        val currentDrainThread = drainThread
+        if (currentDrainThread != null && Thread.currentThread() != currentDrainThread) {
+            currentDrainThread.join(1000)
+        }
         drainThread = null
         runCatching { encoderInputSurface?.release() }
         encoderInputSurface = null
@@ -141,22 +154,21 @@ class MediaCodecH265Stream(
                         cameraDevice = camera
                         createCaptureSession(camera, encoderInputSurface ?: error("encoder input surface is not ready"))
                     }.onFailure { error ->
-                        statusListener("MediaCodec H265 摄像头启动失败：${error.message ?: error::class.java.simpleName}")
-                        Log.e(TAG, "MediaCodec H265 camera open callback failed", error)
-                        stop()
+                        stopAfterRuntimeFailure(
+                            "MediaCodec H265 摄像头启动失败：${error.message ?: error::class.java.simpleName}",
+                            error,
+                        )
                     }
                 }
 
                 override fun onDisconnected(camera: CameraDevice) {
-                    statusListener("MediaCodec H265 摄像头断开")
-                    camera.close()
-                    stop()
+                    cameraDevice = camera
+                    stopAfterRuntimeFailure("MediaCodec H265 摄像头断开")
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
-                    statusListener("MediaCodec H265 摄像头错误：$error")
-                    camera.close()
-                    stop()
+                    cameraDevice = camera
+                    stopAfterRuntimeFailure("MediaCodec H265 摄像头错误：$error")
                 }
             },
             workerHandler,
@@ -174,19 +186,20 @@ class MediaCodecH265Stream(
                         val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(targetSurface)
                             set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
+                            set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(streamFps.coerceAtLeast(1), streamFps.coerceAtLeast(1)))
                         }
                         session.setRepeatingRequest(request.build(), null, workerHandler)
                         statusListener("MediaCodec H265 推流启动中")
                     }.onFailure { error ->
-                        statusListener("MediaCodec H265 摄像头会话启动失败：${error.message ?: error::class.java.simpleName}")
-                        Log.e(TAG, "MediaCodec H265 camera session configure callback failed", error)
-                        stop()
+                        stopAfterRuntimeFailure(
+                            "MediaCodec H265 摄像头会话启动失败：${error.message ?: error::class.java.simpleName}",
+                            error,
+                        )
                     }
                 }
 
                 override fun onConfigureFailed(session: CameraCaptureSession) {
-                    statusListener("MediaCodec H265 摄像头会话配置失败")
-                    stop()
+                    stopAfterRuntimeFailure("MediaCodec H265 摄像头会话配置失败")
                 }
             },
             workerHandler,
@@ -198,11 +211,18 @@ class MediaCodecH265Stream(
             val bufferInfo = MediaCodec.BufferInfo()
             val codec = encoder ?: return@Thread
             while (streaming.get()) {
-                val outputIndex = codec.dequeueOutputBuffer(bufferInfo, ENCODER_TIMEOUT_US)
-                when {
-                    outputIndex == MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
-                    outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> readCodecConfig(codec.outputFormat)
-                    outputIndex >= 0 -> drainOutputBuffer(codec, outputIndex, bufferInfo)
+                runCatching {
+                    val outputIndex = codec.dequeueOutputBuffer(bufferInfo, ENCODER_TIMEOUT_US)
+                    when {
+                        outputIndex == MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                        outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> readCodecConfig(codec.outputFormat)
+                        outputIndex >= 0 -> drainOutputBuffer(codec, outputIndex, bufferInfo)
+                    }
+                }.onFailure { error ->
+                    stopAfterRuntimeFailure(
+                        "MediaCodec H265 推流失败：${error.message ?: error::class.java.simpleName}",
+                        error,
+                    )
                 }
             }
         }.apply {
@@ -244,7 +264,6 @@ class MediaCodecH265Stream(
         if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
             codecConfig = data
             statusListener("MediaCodec H265 参数集已生成：bytes=${data.size}")
-            ensureRtspPublisherStarted()
             return
         }
 
@@ -254,7 +273,13 @@ class MediaCodecH265Stream(
         } else {
             data
         }
-        ensureRtspPublisherStarted()
+        if (!ensureRtspPublisherStarted(frame)) {
+            waitingParameterSetCount += 1
+            if (waitingParameterSetCount <= 3 || waitingParameterSetCount % 30 == 0) {
+                statusListener("MediaCodec H265 等待 VPS/SPS/PPS：frames=$waitingParameterSetCount bytes=${frame.size}")
+            }
+            return
+        }
         rtspPublisher?.sendFrame(frame, bufferInfo.presentationTimeUs, keyFrame)
         pushedFrameCount += 1
         pushedByteCount += frame.size.toLong()
@@ -272,13 +297,22 @@ class MediaCodecH265Stream(
         codecConfig?.let { statusListener("MediaCodec H265 输出格式就绪：csd=${it.size}") }
     }
 
-    private fun ensureRtspPublisherStarted() {
-        if (rtspPublisher != null || rtspUrl.isBlank()) {
-            return
+    private fun ensureRtspPublisherStarted(codecConfig: ByteArray?): Boolean {
+        val publisher = rtspPublisher
+        if (publisher != null) {
+            return true
         }
-        rtspPublisher = RtspTcpH265Publisher(statusListener).also { publisher ->
-            publisher.start(rtspUrl, codecConfig)
+        if (rtspUrl.isBlank()) {
+            return false
         }
+        val nextPublisher = RtspTcpH265Publisher(statusListener)
+        if (!nextPublisher.canStart(codecConfig)) {
+            return false
+        }
+        nextPublisher.start(rtspUrl, codecConfig)
+        rtspPublisher = nextPublisher
+        waitingParameterSetCount = 0
+        return true
     }
 
     private fun startWorkerThread() {
@@ -289,10 +323,31 @@ class MediaCodecH265Stream(
     }
 
     private fun stopWorkerThread() {
-        workerThread?.quitSafely()
-        workerThread?.join(1000)
+        val thread = workerThread
+        thread?.quitSafely()
+        if (thread != null && Thread.currentThread() != thread) {
+            thread.join(1000)
+        }
         workerThread = null
         workerHandler = null
+    }
+
+    private fun stopAfterRuntimeFailure(status: String, error: Throwable? = null) {
+        if (!streaming.getAndSet(false)) {
+            return
+        }
+        statusListener(status)
+        if (error != null) {
+            Log.e(TAG, status, error)
+        } else {
+            Log.w(TAG, status)
+        }
+        Thread {
+            stop()
+        }.apply {
+            name = "SmartCabinetMediaCodecSafeStop"
+            start()
+        }
     }
 
     private fun findHevcEncoderName(): String? {

@@ -37,4 +37,9 @@ class MethodChannelKioskDevice implements KioskDevice {
   Future<void> openSystemSettings() async {
     await _channel.invokeMethod<void>('openSystemSettings');
   }
+
+  @override
+  Future<void> startConfiguredStreams() async {
+    await _channel.invokeMethod<void>('startConfiguredStreams');
+  }
 }

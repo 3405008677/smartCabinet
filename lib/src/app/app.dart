@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'localization/app_localizations.dart';
 import 'router/app_router.dart';
+import 'stream_failure_overlay.dart';
 import 'startup/startup_media.dart';
 import 'theme/app_theme.dart';
 
@@ -45,7 +46,9 @@ class SmartCabinetApp extends StatelessWidget {
 
             /// 在首页初始化完成前显示启动媒体层，避免启动白屏。
             builder: (context, child) {
-              return StartupMedia(child: child ?? const SizedBox.shrink());
+              return StreamFailureOverlay(
+                child: StartupMedia(child: child ?? const SizedBox.shrink()),
+              );
             },
 
             /// 当前界面语言。

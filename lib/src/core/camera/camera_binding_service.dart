@@ -53,6 +53,22 @@ class CameraStreamStatus {
   /// 当前绑定的摄像头 ID。
   final String cameraId;
 
+  /// 当前状态是否表示推流失败或正在重连。
+  bool get needsUserAttention {
+    return isFailureStatus(status);
+  }
+
+  /// 判断状态文案是否表示推流失败或重连中。
+  static bool isFailureStatus(String status) {
+    return status.contains('失败') ||
+        status.contains('错误') ||
+        status.contains('断开') ||
+        status.contains('重连') ||
+        status.toLowerCase().contains('failed') ||
+        status.toLowerCase().contains('error') ||
+        status.toLowerCase().contains('reconnect');
+  }
+
   /// 从原生通道返回的 Map 创建状态对象。
   factory CameraStreamStatus.fromMap(Map<String, Object?> map) {
     return CameraStreamStatus(
@@ -65,6 +81,9 @@ class CameraStreamStatus {
 
 /// 摄像头枚举、绑定读取和绑定保存服务。
 class CameraBindingService {
+  /// 创建摄像头绑定服务。
+  const CameraBindingService();
+
   /// Android 原生存储通道。
   static const MethodChannel _channel = MethodChannel('smart_cabinet/kiosk');
 

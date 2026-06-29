@@ -50,10 +50,11 @@ constexpr RK_S32 MPP_BUFFER_TYPE_DRM = 3;
 constexpr RK_S32 MPP_BUFFER_FLAGS_CACHABLE = 0x00020000;
 constexpr RK_S32 MPP_FMT_YUV420SP = 0;
 constexpr RK_S32 MPP_POLL_BLOCK = -1;
-constexpr RK_S32 MPP_SET_OUTPUT_TIMEOUT = 0x00200008;
+constexpr RK_S32 MPP_SET_OUTPUT_TIMEOUT = 0x00200007;
 constexpr RK_S32 MPP_ENC_SET_CFG = 0x00320001;
 constexpr RK_S32 MPP_ENC_GET_CFG = 0x00320002;
-constexpr RK_S32 MPP_ENC_GET_HDR_SYNC = 0x0032000E;
+constexpr RK_S32 MPP_ENC_GET_HDR_SYNC = 0x0032000D;
+constexpr RK_S32 MPP_ENC_GET_EXTRA_INFO = 0x0032000E;
 
 struct MppApi {
   RK_U32 size;
@@ -402,6 +403,98 @@ std::string pop_pipeline_diagnostics_locked() {
   return diagnostics;
 }
 
+void copy_yuv420_to_nv12(
+    const uint8_t *y,
+    const uint8_t *u,
+    const uint8_t *v,
+    int width,
+    int height,
+    int y_row_stride,
+    int y_pixel_stride,
+    int u_row_stride,
+    int u_pixel_stride,
+    int v_row_stride,
+    int v_pixel_stride,
+    jbyte *output) {
+  for (int row = 0; row < height; row += 1) {
+    const uint8_t *source = y + row * y_row_stride;
+    jbyte *target = output + row * width;
+    if (y_pixel_stride == 1) {
+      memcpy(target, source, static_cast<size_t>(width));
+    } else {
+      for (int col = 0; col < width; col += 1) {
+        target[col] = static_cast<jbyte>(source[col * y_pixel_stride]);
+      }
+    }
+  }
+  jbyte *chroma = output + width * height;
+  int out = 0;
+  for (int row = 0; row < height / 2; row += 1) {
+    const uint8_t *u_row = u + row * u_row_stride;
+    const uint8_t *v_row = v + row * v_row_stride;
+    for (int col = 0; col < width / 2; col += 1) {
+      chroma[out++] = static_cast<jbyte>(u_row[col * u_pixel_stride]);
+      chroma[out++] = static_cast<jbyte>(v_row[col * v_pixel_stride]);
+    }
+  }
+}
+
+jbyteArray encode_rkmpp_frame_locked(JNIEnv *env, jlong pts_us) {
+  MppFrame frame = nullptr;
+  MPP_RET ret = rkmpp_api.mpp_frame_init(&frame);
+  if (ret != MPP_OK || frame == nullptr) {
+    set_last_error("RKMPP mpp_frame_init failed ret=" + std::to_string(ret));
+    return nullptr;
+  }
+  rkmpp_api.mpp_frame_set_width(frame, rkmpp_encoder.width);
+  rkmpp_api.mpp_frame_set_height(frame, rkmpp_encoder.height);
+  rkmpp_api.mpp_frame_set_hor_stride(frame, rkmpp_encoder.stride);
+  rkmpp_api.mpp_frame_set_ver_stride(frame, rkmpp_encoder.height);
+  rkmpp_api.mpp_frame_set_fmt(frame, MPP_FMT_YUV420SP);
+  rkmpp_api.mpp_frame_set_pts(frame, pts_us);
+  rkmpp_api.mpp_frame_set_buffer(frame, rkmpp_encoder.frame_buffer);
+
+  ret = rkmpp_encoder.mpi->encode_put_frame(rkmpp_encoder.ctx, frame);
+  rkmpp_api.mpp_frame_deinit(&frame);
+  if (ret != MPP_OK) {
+    set_last_error("RKMPP encode_put_frame failed ret=" + std::to_string(ret));
+    return nullptr;
+  }
+
+  MppPacket packet = nullptr;
+  ret = rkmpp_encoder.mpi->encode_get_packet(rkmpp_encoder.ctx, &packet);
+  if (ret != MPP_OK || packet == nullptr) {
+    set_last_error("RKMPP encode_get_packet failed ret=" + std::to_string(ret));
+    return nullptr;
+  }
+  void *pos = rkmpp_api.mpp_packet_get_pos(packet);
+  const size_t length = rkmpp_api.mpp_packet_get_length(packet);
+  if (pos == nullptr || length == 0) {
+    rkmpp_api.mpp_packet_deinit(&packet);
+    set_last_error("RKMPP output packet is empty");
+    return nullptr;
+  }
+  const bool prepend_header = !rkmpp_encoder.header_sent && !rkmpp_encoder.header.empty();
+  const size_t output_length = length + (prepend_header ? rkmpp_encoder.header.size() : 0);
+  jbyteArray result = env->NewByteArray(static_cast<jsize>(output_length));
+  if (result != nullptr) {
+    jsize offset = 0;
+    if (prepend_header) {
+      env->SetByteArrayRegion(
+          result,
+          0,
+          static_cast<jsize>(rkmpp_encoder.header.size()),
+          reinterpret_cast<jbyte *>(rkmpp_encoder.header.data()));
+      offset = static_cast<jsize>(rkmpp_encoder.header.size());
+      rkmpp_encoder.header_sent = true;
+    }
+    env->SetByteArrayRegion(result, offset, static_cast<jsize>(length), reinterpret_cast<jbyte *>(pos));
+  }
+  rkmpp_api.mpp_packet_deinit(&packet);
+  last_error.clear();
+  return result;
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -456,7 +549,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartH265Rtsp(
 
   stop_pipeline_locked();
 
-  const char *required_factories[] = {"appsrc", "h265parse", "rtph265pay", "rtspclientsink"};
+  const char *required_factories[] = {"appsrc", "h265parse", "rtspclientsink"};
   for (const char *factory : required_factories) {
     if (!has_gstreamer_element_factory(factory)) {
       return JNI_FALSE;
@@ -468,11 +561,11 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartH265Rtsp(
       std::to_string(width) + ",height=" + std::to_string(height) + ",framerate=" +
       std::to_string(fps) + "/1";
   const std::string description =
-      "appsrc name=video_source is-live=true do-timestamp=false format=time stream-type=stream caps=\"" +
+      "rtspclientsink name=rtsp_sink protocols=tcp location=\"" + target_url +
+      "\" appsrc name=video_source is-live=true do-timestamp=false format=time stream-type=stream caps=\"" +
       caps +
       "\" ! queue leaky=downstream max-size-buffers=30 ! h265parse config-interval=-1 ! "
-      "rtph265pay pt=96 config-interval=1 ! rtspclientsink protocols=tcp location=\"" +
-      target_url + "\"";
+      "rtsp_sink.sink_0";
 
   GError *error = nullptr;
   pipeline = gst_parse_launch(description.c_str(), &error);
@@ -501,6 +594,10 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartH265Rtsp(
   GstStateChangeReturn result = gst_element_set_state(pipeline, GST_STATE_PLAYING);
   if (result == GST_STATE_CHANGE_FAILURE) {
     set_last_error("GStreamer pipeline failed to enter PLAYING state");
+    stop_pipeline_locked();
+    return JNI_FALSE;
+  }
+  if (!check_pipeline_bus_locked()) {
     stop_pipeline_locked();
     return JNI_FALSE;
   }
@@ -697,23 +794,29 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartRkMppH265(
       "SmartCabinet",
       "nativeStartRkMppH265Header");
   if (ret == MPP_OK && enc.header_buffer != nullptr) {
-    MppPacket header_packet = nullptr;
-    ret = rkmpp_api.mpp_packet_init_with_buffer(&header_packet, enc.header_buffer);
-    if (ret == MPP_OK && header_packet != nullptr) {
+    const RK_S32 header_commands[] = {MPP_ENC_GET_HDR_SYNC, MPP_ENC_GET_EXTRA_INFO};
+    const char *header_command_names[] = {"MPP_ENC_GET_HDR_SYNC", "MPP_ENC_GET_EXTRA_INFO"};
+    for (size_t index = 0; index < 2 && enc.header.empty(); index += 1) {
+      MppPacket header_packet = nullptr;
+      ret = rkmpp_api.mpp_packet_init_with_buffer(&header_packet, enc.header_buffer);
+      if (ret != MPP_OK || header_packet == nullptr) {
+        LOGE("RKMPP header packet init failed ret=%d", ret);
+        continue;
+      }
       rkmpp_api.mpp_packet_set_length(header_packet, 0);
-      ret = enc.mpi->control(enc.ctx, MPP_ENC_GET_HDR_SYNC, header_packet);
+      ret = enc.mpi->control(enc.ctx, header_commands[index], header_packet);
       if (ret == MPP_OK) {
         void *header_pos = rkmpp_api.mpp_packet_get_pos(header_packet);
         const size_t header_length = rkmpp_api.mpp_packet_get_length(header_packet);
         if (header_pos != nullptr && header_length > 0) {
           auto *bytes = reinterpret_cast<unsigned char *>(header_pos);
           enc.header.assign(bytes, bytes + header_length);
-          LOGI("RKMPP H265 header generated, bytes=%zu", header_length);
+          LOGI("RKMPP H265 header generated by %s, bytes=%zu", header_command_names[index], header_length);
         } else {
-          LOGI("RKMPP H265 header packet is empty");
+          LOGI("RKMPP H265 header packet is empty from %s", header_command_names[index]);
         }
       } else {
-        LOGE("RKMPP MPP_ENC_GET_HDR_SYNC failed ret=%d", ret);
+        LOGE("RKMPP %s failed ret=%d", header_command_names[index], ret);
       }
       rkmpp_api.mpp_packet_deinit(&header_packet);
     }
@@ -752,58 +855,100 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265Frame
   }
   env->GetByteArrayRegion(nv12, 0, input_size, reinterpret_cast<jbyte *>(frame_ptr));
   rkmpp_api.mpp_buffer_sync_end_f(rkmpp_encoder.frame_buffer, 0, "nativeEncodeRkMppH265Frame");
+  return encode_rkmpp_frame_locked(env, pts_us);
+}
 
-  MppFrame frame = nullptr;
-  MPP_RET ret = rkmpp_api.mpp_frame_init(&frame);
-  if (ret != MPP_OK || frame == nullptr) {
-    set_last_error("RKMPP mpp_frame_init failed ret=" + std::to_string(ret));
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265Image(
+    JNIEnv *env,
+    jobject /* thiz */,
+    jobject y_buffer,
+    jobject u_buffer,
+    jobject v_buffer,
+    jint width,
+    jint height,
+    jint y_row_stride,
+    jint y_pixel_stride,
+    jint u_row_stride,
+    jint u_pixel_stride,
+    jint v_row_stride,
+    jint v_pixel_stride,
+    jlong pts_us) {
+  std::lock_guard<std::mutex> lock(rkmpp_mutex);
+  if (rkmpp_encoder.ctx == nullptr || y_buffer == nullptr || u_buffer == nullptr || v_buffer == nullptr) {
+    set_last_error("RKMPP encoder or YUV input is not ready");
     return nullptr;
   }
-  rkmpp_api.mpp_frame_set_width(frame, rkmpp_encoder.width);
-  rkmpp_api.mpp_frame_set_height(frame, rkmpp_encoder.height);
-  rkmpp_api.mpp_frame_set_hor_stride(frame, rkmpp_encoder.stride);
-  rkmpp_api.mpp_frame_set_ver_stride(frame, rkmpp_encoder.height);
-  rkmpp_api.mpp_frame_set_fmt(frame, MPP_FMT_YUV420SP);
-  rkmpp_api.mpp_frame_set_pts(frame, pts_us);
-  rkmpp_api.mpp_frame_set_buffer(frame, rkmpp_encoder.frame_buffer);
+  if (width != static_cast<jint>(rkmpp_encoder.width) || height != static_cast<jint>(rkmpp_encoder.height)) {
+    set_last_error("RKMPP image size mismatch width=" + std::to_string(width) + " height=" + std::to_string(height));
+    return nullptr;
+  }
+  auto *y = reinterpret_cast<const uint8_t *>(env->GetDirectBufferAddress(y_buffer));
+  auto *u = reinterpret_cast<const uint8_t *>(env->GetDirectBufferAddress(u_buffer));
+  auto *v = reinterpret_cast<const uint8_t *>(env->GetDirectBufferAddress(v_buffer));
+  if (y == nullptr || u == nullptr || v == nullptr) {
+    set_last_error("RKMPP direct YUV buffer address is null");
+    return nullptr;
+  }
+  void *frame_ptr = rkmpp_api.mpp_buffer_get_ptr_with_caller(
+      rkmpp_encoder.frame_buffer,
+      "nativeEncodeRkMppH265Image");
+  if (frame_ptr == nullptr) {
+    set_last_error("RKMPP frame buffer pointer is null");
+    return nullptr;
+  }
+  copy_yuv420_to_nv12(
+      y,
+      u,
+      v,
+      width,
+      height,
+      y_row_stride,
+      y_pixel_stride,
+      u_row_stride,
+      u_pixel_stride,
+      v_row_stride,
+      v_pixel_stride,
+      reinterpret_cast<jbyte *>(frame_ptr));
+  rkmpp_api.mpp_buffer_sync_end_f(rkmpp_encoder.frame_buffer, 0, "nativeEncodeRkMppH265Image");
+  return encode_rkmpp_frame_locked(env, pts_us);
+}
 
-  ret = rkmpp_encoder.mpi->encode_put_frame(rkmpp_encoder.ctx, frame);
-  rkmpp_api.mpp_frame_deinit(&frame);
-  if (ret != MPP_OK) {
-    set_last_error("RKMPP encode_put_frame failed ret=" + std::to_string(ret));
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeConvertYuv420ToNv12(
+    JNIEnv *env,
+    jobject /* thiz */,
+    jobject y_buffer,
+    jobject u_buffer,
+    jobject v_buffer,
+    jint width,
+    jint height,
+    jint y_row_stride,
+    jint y_pixel_stride,
+    jint u_row_stride,
+    jint u_pixel_stride,
+    jint v_row_stride,
+    jint v_pixel_stride) {
+  if (width <= 0 || height <= 0 || y_buffer == nullptr || u_buffer == nullptr || v_buffer == nullptr) {
+    set_last_error("YUV420 to NV12 invalid input");
     return nullptr;
   }
-
-  MppPacket packet = nullptr;
-  ret = rkmpp_encoder.mpi->encode_get_packet(rkmpp_encoder.ctx, &packet);
-  if (ret != MPP_OK || packet == nullptr) {
-    set_last_error("RKMPP encode_get_packet failed ret=" + std::to_string(ret));
+  auto *y = reinterpret_cast<const uint8_t *>(env->GetDirectBufferAddress(y_buffer));
+  auto *u = reinterpret_cast<const uint8_t *>(env->GetDirectBufferAddress(u_buffer));
+  auto *v = reinterpret_cast<const uint8_t *>(env->GetDirectBufferAddress(v_buffer));
+  if (y == nullptr || u == nullptr || v == nullptr) {
+    set_last_error("YUV420 to NV12 direct buffer address is null");
     return nullptr;
   }
-  void *pos = rkmpp_api.mpp_packet_get_pos(packet);
-  const size_t length = rkmpp_api.mpp_packet_get_length(packet);
-  if (pos == nullptr || length == 0) {
-    rkmpp_api.mpp_packet_deinit(&packet);
-    set_last_error("RKMPP output packet is empty");
+  const int output_size = width * height * 3 / 2;
+  jbyteArray result = env->NewByteArray(output_size);
+  if (result == nullptr) {
+    set_last_error("YUV420 to NV12 output alloc failed");
     return nullptr;
   }
-  const bool prepend_header = !rkmpp_encoder.header_sent && !rkmpp_encoder.header.empty();
-  const size_t output_length = length + (prepend_header ? rkmpp_encoder.header.size() : 0);
-  jbyteArray result = env->NewByteArray(static_cast<jsize>(output_length));
-  if (result != nullptr) {
-    jsize offset = 0;
-    if (prepend_header) {
-      env->SetByteArrayRegion(
-          result,
-          0,
-          static_cast<jsize>(rkmpp_encoder.header.size()),
-          reinterpret_cast<jbyte *>(rkmpp_encoder.header.data()));
-      offset = static_cast<jsize>(rkmpp_encoder.header.size());
-      rkmpp_encoder.header_sent = true;
-    }
-    env->SetByteArrayRegion(result, offset, static_cast<jsize>(length), reinterpret_cast<jbyte *>(pos));
-  }
-  rkmpp_api.mpp_packet_deinit(&packet);
+  std::vector<jbyte> output(static_cast<size_t>(output_size));
+  copy_yuv420_to_nv12(y, u, v, width, height, y_row_stride, y_pixel_stride, u_row_stride, u_pixel_stride, v_row_stride, v_pixel_stride, output.data());
+  env->SetByteArrayRegion(result, 0, output_size, output.data());
   last_error.clear();
   return result;
 }

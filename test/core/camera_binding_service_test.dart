@@ -1,6 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_cabinet/src/core/camera/camera_binding_service.dart';
+import 'package:smart_cabinet/src/core/config/app_config.dart';
 
 void main() {
   tearDown(CameraBindingService.debugReset);
@@ -55,7 +56,7 @@ void main() {
       cameras: const [],
       outsideEnvironmentStreamStatus: const CameraStreamStatus(
         status: '推流中',
-        url: 'rtsp://192.168.2.167/app/device-001',
+        url: '${AppConfig.streamBaseUrl}/device-001',
         cameraId: 'cameraId_1',
       ),
     );
@@ -64,24 +65,44 @@ void main() {
         .readOutsideEnvironmentStreamStatus();
 
     expect(status.status, '推流中');
-    expect(status.url, 'rtsp://192.168.2.167/app/device-001');
+    expect(status.url, '${AppConfig.streamBaseUrl}/device-001');
     expect(status.cameraId, 'cameraId_1');
   });
 
-  test('reads operation area RTSP H265 stream status from debug data', () async {
-    CameraBindingService.debugUseCameraData(
-      cameras: const [],
-      operationAreaStreamStatus: const CameraStreamStatus(
-        status: '推流中',
-        url: 'rtsp://192.168.2.167/app/device-001-operation',
-        cameraId: 'cameraId_2',
-      ),
+  test(
+    'reads operation area RTSP H265 stream status from debug data',
+    () async {
+      CameraBindingService.debugUseCameraData(
+        cameras: const [],
+        operationAreaStreamStatus: const CameraStreamStatus(
+          status: '推流中',
+          url: '${AppConfig.streamBaseUrl}/device-001-operation',
+          cameraId: 'cameraId_2',
+        ),
+      );
+
+      final status = await CameraBindingService()
+          .readOperationAreaStreamStatus();
+
+      expect(status.status, '推流中');
+      expect(status.url, '${AppConfig.streamBaseUrl}/device-001-operation');
+      expect(status.cameraId, 'cameraId_2');
+    },
+  );
+
+  test('detects stream failure statuses that need user attention', () {
+    const disconnectedStatus = CameraStreamStatus(
+      status: '推流断开：Broken pipe，3 秒后重连第 1 次',
+      url: '${AppConfig.streamBaseUrl}/device-001',
+      cameraId: 'cameraId_1',
+    );
+    const normalStatus = CameraStreamStatus(
+      status: 'RKMPP H265 推流中：encoded=30 pushed=30',
+      url: '${AppConfig.streamBaseUrl}/device-001',
+      cameraId: 'cameraId_1',
     );
 
-    final status = await CameraBindingService().readOperationAreaStreamStatus();
-
-    expect(status.status, '推流中');
-    expect(status.url, 'rtsp://192.168.2.167/app/device-001-operation');
-    expect(status.cameraId, 'cameraId_2');
+    expect(disconnectedStatus.needsUserAttention, isTrue);
+    expect(normalStatus.needsUserAttention, isFalse);
   });
 }

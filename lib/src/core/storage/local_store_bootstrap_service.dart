@@ -1,3 +1,4 @@
+import '../config/app_config.dart';
 import '../device/device_info_service.dart';
 import 'app_local_store.dart';
 
@@ -16,10 +17,6 @@ class LocalStoreBootstrapService {
 
   /// 创建本地 Store 启动缓存服务内部构造器。
   const LocalStoreBootstrapService._(this._store, this._fetchDeviceInfo);
-
-  /// 默认 RTSP 服务地址前缀。
-  // static const String streamBaseUrl = 'rtsp://192.168.2.167/app';
-  static const String streamBaseUrl = 'rtsp://127.0.0.1:8554/app';
 
   /// 本地 Store。
   final AppLocalStore _store;
@@ -58,7 +55,7 @@ class LocalStoreBootstrapService {
         ? 'unknown'
         : uniqueDeviceId;
 
-    return '$streamBaseUrl/$streamId';
+    return '${AppConfig.streamBaseUrl}/$streamId';
   }
 
   /// 默认从原生通道读取设备信息。

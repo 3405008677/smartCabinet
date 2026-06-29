@@ -2,6 +2,7 @@ package com.example.smart_cabinet.kiosk
 
 import android.content.Context
 import android.util.Log
+import java.nio.ByteBuffer
 import org.freedesktop.gstreamer.GStreamer
 
 class GStreamerBridge {
@@ -95,6 +96,78 @@ class GStreamerBridge {
             .getOrNull()
     }
 
+    fun encodeRkMppH265Image(
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        presentationTimeUs: Long,
+    ): ByteArray? {
+        if (!isSmartCabinetLibraryLoaded) {
+            return null
+        }
+        return runCatching {
+            nativeEncodeRkMppH265Image(
+                yBuffer,
+                uBuffer,
+                vBuffer,
+                width,
+                height,
+                yRowStride,
+                yPixelStride,
+                uRowStride,
+                uPixelStride,
+                vRowStride,
+                vPixelStride,
+                presentationTimeUs,
+            )
+        }
+            .onFailure { error -> Log.e(TAG, "RKMPP H265 image encode failed", error) }
+            .getOrNull()
+    }
+
+    fun convertYuv420ToNv12(
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+    ): ByteArray? {
+        if (!isSmartCabinetLibraryLoaded) {
+            return null
+        }
+        return runCatching {
+            nativeConvertYuv420ToNv12(
+                yBuffer,
+                uBuffer,
+                vBuffer,
+                width,
+                height,
+                yRowStride,
+                yPixelStride,
+                uRowStride,
+                uPixelStride,
+                vRowStride,
+                vPixelStride,
+            )
+        }
+            .onFailure { error -> Log.e(TAG, "native YUV420 to NV12 conversion failed", error) }
+            .getOrNull()
+    }
+
     fun stopRkMppH265() {
         if (!isSmartCabinetLibraryLoaded) {
             return
@@ -122,6 +195,35 @@ class GStreamerBridge {
     private external fun nativeStartRkMppH265(width: Int, height: Int, fps: Int, bitrate: Int, gop: Int): Boolean
 
     private external fun nativeEncodeRkMppH265Frame(nv12: ByteArray, presentationTimeUs: Long): ByteArray?
+
+    private external fun nativeEncodeRkMppH265Image(
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        presentationTimeUs: Long,
+    ): ByteArray?
+
+    private external fun nativeConvertYuv420ToNv12(
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+    ): ByteArray?
 
     private external fun nativeStopRkMppH265()
 

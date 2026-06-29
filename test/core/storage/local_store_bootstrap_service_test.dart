@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smart_cabinet/src/core/config/app_config.dart';
 import 'package:smart_cabinet/src/core/device/device_info_service.dart';
 import 'package:smart_cabinet/src/core/storage/app_local_store.dart';
 import 'package:smart_cabinet/src/core/storage/local_store_bootstrap_service.dart';
@@ -40,7 +41,7 @@ void main() {
       '型号': 'SC-Board-A1',
     });
     expect(state.video, <String, Object?>{
-      'streamUrl': 'rtsp://192.168.2.167/app/a1b2c3d4e5f67890',
+      'streamUrl': '${AppConfig.streamBaseUrl}/a1b2c3d4e5f67890',
       'streamingEnabled': false,
     });
     expect(state.logging, <String, Object?>{

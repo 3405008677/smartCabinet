@@ -5,6 +5,7 @@ import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.net.URI
 import java.net.Socket
+import java.util.ArrayDeque
 import kotlin.random.Random
 
 class RtspTcpH265Publisher(
@@ -18,11 +19,26 @@ class RtspTcpH265Publisher(
     private var sequenceNumber = Random.nextInt(0, 0xffff)
     private val ssrc = Random.nextInt()
     private var firstPresentationTimeUs: Long = -1L
+    private var parameterSets: H265ParameterSets? = null
+    private val sendLock = Object()
+    private val pendingFrames = ArrayDeque<PendingFrame>()
+    @Volatile
+    private var senderRunning = false
+    private var senderThread: Thread? = null
+    private var droppedFrameCount = 0
+
+    fun canStart(codecConfig: ByteArray?): Boolean {
+        return codecConfig?.let(::extractParameterSets)?.isComplete == true
+    }
 
     fun start(url: String, codecConfig: ByteArray?) {
         if (socket?.isConnected == true) {
             return
         }
+        val currentParameterSets = codecConfig?.let(::extractParameterSets)
+            ?.takeIf(H265ParameterSets::isComplete)
+            ?: error("H265 VPS/SPS/PPS is not ready")
+        parameterSets = currentParameterSets
         val uri = URI(url)
         val host = uri.host ?: error("RTSP host is empty")
         val port = if (uri.port > 0) uri.port else 554
@@ -35,7 +51,7 @@ class RtspTcpH265Publisher(
             method = "ANNOUNCE",
             url = url,
             headers = linkedMapOf("Content-Type" to "application/sdp"),
-            body = buildSdp(codecConfig),
+            body = buildSdp(currentParameterSets),
         )
         val setup = request(
             method = "SETUP",
@@ -49,25 +65,31 @@ class RtspTcpH265Publisher(
             headers = linkedMapOf("Session" to session, "Range" to "npt=0.000-"),
         )
         statusListener("RTSP直推已开始：session=$session")
+        startSenderThread()
     }
 
     fun sendFrame(data: ByteArray, presentationTimeUs: Long, marker: Boolean) {
         if (socket?.isConnected != true) {
             return
         }
-        if (firstPresentationTimeUs < 0) {
-            firstPresentationTimeUs = presentationTimeUs
+        synchronized(sendLock) {
+            while (pendingFrames.size >= MAX_PENDING_FRAMES) {
+                pendingFrames.removeFirst()
+                droppedFrameCount += 1
+            }
+            pendingFrames.addLast(PendingFrame(data, presentationTimeUs, marker))
+            sendLock.notifyAll()
         }
-        val timestamp = (((presentationTimeUs - firstPresentationTimeUs) * 90L / 1000L) and 0xffffffffL).toInt()
-        val nals = splitAnnexB(data)
-        nals.forEachIndexed { index, nal ->
-            val isLastNal = index == nals.lastIndex
-            packetizeNal(nal, timestamp, marker && isLastNal)
-        }
-        output?.flush()
     }
 
     fun stop() {
+        senderRunning = false
+        synchronized(sendLock) {
+            pendingFrames.clear()
+            sendLock.notifyAll()
+        }
+        runCatching { senderThread?.join(1000) }
+        senderThread = null
         runCatching {
             if (socket?.isConnected == true && session.isNotBlank()) {
                 request("TEARDOWN", "*", linkedMapOf("Session" to session))
@@ -81,6 +103,47 @@ class RtspTcpH265Publisher(
         socket = null
         session = ""
         firstPresentationTimeUs = -1L
+        parameterSets = null
+        droppedFrameCount = 0
+    }
+
+    private fun startSenderThread() {
+        senderRunning = true
+        senderThread = Thread {
+            runCatching {
+                while (senderRunning) {
+                    val frame = synchronized(sendLock) {
+                        while (senderRunning && pendingFrames.isEmpty()) {
+                            sendLock.wait(200)
+                        }
+                        if (!senderRunning || pendingFrames.isEmpty()) null else pendingFrames.removeFirst()
+                    } ?: continue
+                    sendFrameNow(frame)
+                }
+            }.onFailure { error ->
+                statusListener("RTSP异步发送失败：${error.message ?: error::class.java.simpleName}")
+            }
+        }.apply {
+            name = "SmartCabinetRtspSender"
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun sendFrameNow(frame: PendingFrame) {
+        if (firstPresentationTimeUs < 0) {
+            firstPresentationTimeUs = frame.presentationTimeUs
+        }
+        val timestamp = (((frame.presentationTimeUs - firstPresentationTimeUs) * 90L / 1000L) and 0xffffffffL).toInt()
+        val nals = splitAnnexB(frame.data)
+        nals.forEachIndexed { index, nal ->
+            val isLastNal = index == nals.lastIndex
+            packetizeNal(nal, timestamp, frame.marker && isLastNal)
+        }
+        output?.flush()
+        if (droppedFrameCount > 0 && droppedFrameCount % DROP_REPORT_INTERVAL == 0) {
+            statusListener("RTSP异步发送丢弃旧帧：dropped=$droppedFrameCount queued=${pendingFrames.size}")
+        }
     }
 
     private fun request(
@@ -141,13 +204,8 @@ class RtspTcpH265Publisher(
         return RtspResponse(code, statusLine, headers)
     }
 
-    private fun buildSdp(codecConfig: ByteArray?): String {
-        val params = codecConfig?.let(::extractParameterSets).orEmpty()
-        val fmtp = if (params.isNotEmpty()) {
-            "a=fmtp:96 ${params.entries.joinToString(";") { (name, value) -> "$name=$value" }}\r\n"
-        } else {
-            ""
-        }
+    private fun buildSdp(params: H265ParameterSets): String {
+        val fmtp = "a=fmtp:96 sprop-vps=${params.vps};sprop-sps=${params.sps};sprop-pps=${params.pps}\r\n"
         return "v=0\r\n" +
             "o=- 0 0 IN IP4 127.0.0.1\r\n" +
             "s=SmartCabinet\r\n" +
@@ -159,19 +217,21 @@ class RtspTcpH265Publisher(
             "a=control:trackID=0\r\n"
     }
 
-    private fun extractParameterSets(codecConfig: ByteArray): Map<String, String> {
-        val params = linkedMapOf<String, String>()
+    private fun extractParameterSets(codecConfig: ByteArray): H265ParameterSets {
+        var vps = ""
+        var sps = ""
+        var pps = ""
         splitAnnexB(codecConfig).forEach { nal ->
             if (nal.size < 2) return@forEach
             val type = (nal[0].toInt() ushr 1) and 0x3f
             val encoded = Base64.encodeToString(nal, Base64.NO_WRAP)
             when (type) {
-                32 -> params["sprop-vps"] = encoded
-                33 -> params["sprop-sps"] = encoded
-                34 -> params["sprop-pps"] = encoded
+                32 -> vps = encoded
+                33 -> sps = encoded
+                34 -> pps = encoded
             }
         }
-        return params
+        return H265ParameterSets(vps = vps, sps = sps, pps = pps)
     }
 
     private fun splitAnnexB(data: ByteArray): List<ByteArray> {
@@ -261,7 +321,24 @@ class RtspTcpH265Publisher(
         val headers: Map<String, String>,
     )
 
+    private data class PendingFrame(
+        val data: ByteArray,
+        val presentationTimeUs: Long,
+        val marker: Boolean,
+    )
+
+    private data class H265ParameterSets(
+        val vps: String,
+        val sps: String,
+        val pps: String,
+    ) {
+        val isComplete: Boolean
+            get() = vps.isNotBlank() && sps.isNotBlank() && pps.isNotBlank()
+    }
+
     companion object {
         private const val MAX_RTP_PAYLOAD = 1200
+        private const val MAX_PENDING_FRAMES = 8
+        private const val DROP_REPORT_INTERVAL = 30
     }
 }
