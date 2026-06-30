@@ -108,6 +108,30 @@ class HomeModel {
     required this.footer,
   });
 
+  /// 页面首帧兜底展示数据。
+  factory HomeModel.fallback() {
+    return HomeModel.fromMap(const {
+      'cabinetCode': 'CAB-A01',
+      'region': 'A · B 区',
+      'status': '在线运行',
+      'headline': '智能柜统计信息',
+      'stats': {
+        'documentCount': '12 份',
+        'occupiedSlots': '6 / 12',
+        'pendingPickup': '3 份',
+        'todayStored': '5 份',
+        'todayPickedUp': '2 份',
+        'occupancyRateText': '50%',
+        'occupancyRateValue': 0.5,
+      },
+      'footer': {
+        'statusSummary': 'CAB-A01 · 在线',
+        'doorStatus': '柜门已锁定',
+        'slotSummary': '格位 A·B 区 · 共 12 个',
+      },
+    });
+  }
+
   /// 柜体编号。
   final String cabinetCode;
 

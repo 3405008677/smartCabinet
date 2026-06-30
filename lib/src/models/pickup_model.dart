@@ -19,6 +19,27 @@ class PickupModel {
     required this.pickupSuccessSummary,
   });
 
+  /// 页面首帧兜底展示数据。
+  factory PickupModel.fallback() {
+    return PickupModel.fromMap(const {
+      'personName': '张晓明',
+      'personTitle': '涉密文件取件人',
+      'employeeCode': 'EMP-2026-0612',
+      'phone': '138****6721',
+      'idCard': '1101**********3219',
+      'organization': '法务合规部',
+      'permissionLevel': 'L3 · 取件权限',
+      'faceResult': '已通过',
+      'fingerprintResult': '已通过',
+      'nfcResult': '已通过',
+      'pickupCodeResult': '已通过',
+      'doorNo': 'A-08',
+      'doorLocation': 'A区第2列第4格 · 标准文件柜 · 已锁定',
+      'fileName': '合格证原件',
+      'pickupSuccessSummary': '已取出 1 份文件 · 柜门 A-08 · 已写入审计日志',
+    });
+  }
+
   /// 取件人姓名。
   final String personName;
 

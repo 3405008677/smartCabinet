@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../components/Feedback/Message/index.dart';
 import '../core/camera/camera_binding_service.dart';
 
 /// 全局推流失败提示层。
@@ -9,6 +10,7 @@ class StreamFailureOverlay extends StatefulWidget {
   /// 创建全局推流失败提示层。
   const StreamFailureOverlay({
     required this.child,
+    required this.navigatorKey,
     this.cameraBindingService = const CameraBindingService(),
     this.pollingInterval = const Duration(seconds: 2),
     super.key,
@@ -16,6 +18,9 @@ class StreamFailureOverlay extends StatefulWidget {
 
   /// 正常应用内容。
   final Widget child;
+
+  /// 应用导航器，用于在 [MaterialApp.builder] 外层安全展示全局弹窗。
+  final GlobalKey<NavigatorState> navigatorKey;
 
   /// 摄像头绑定与推流状态服务。
   final CameraBindingService cameraBindingService;
@@ -34,8 +39,8 @@ class _StreamFailureOverlayState extends State<StreamFailureOverlay> {
   /// 当前正在展示的失败消息。
   String? _visibleMessage;
 
-  /// 当前是否已有弹窗在展示。
-  bool _dialogVisible = false;
+  /// 当前正在展示的消息句柄。
+  MessageHandle? _messageHandle;
 
   /// 是否正在读取原生状态，避免轮询重入。
   bool _checkingStatus = false;
@@ -75,41 +80,36 @@ class _StreamFailureOverlayState extends State<StreamFailureOverlay> {
       );
       if (failureMessage == null) {
         _visibleMessage = null;
+        _messageHandle?.close();
+        _messageHandle = null;
         return;
       }
       if (_visibleMessage == failureMessage) {
         return;
       }
       _visibleMessage = failureMessage;
-      _showFailureDialog(failureMessage);
+      _showFailureMessage(failureMessage);
     } finally {
       _checkingStatus = false;
     }
   }
 
-  /// 展示推流失败全局弹窗。
-  Future<void> _showFailureDialog(String message) async {
-    if (_dialogVisible || !mounted) {
+  /// 展示推流失败全局提示。
+  void _showFailureMessage(String message) {
+    if (!mounted) {
       return;
     }
-    _dialogVisible = true;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('推流异常'),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('知道了'),
-            ),
-          ],
-        );
-      },
+    final overlay = widget.navigatorKey.currentState?.overlay;
+    if (overlay == null) {
+      return;
+    }
+    _messageHandle?.close();
+    _messageHandle = Message.showInOverlay(
+      overlay,
+      '推流异常：$message',
+      type: MessageType.error,
+      duration: null,
     );
-    _dialogVisible = false;
   }
 
   /// 生成需要展示给用户的推流失败文案。

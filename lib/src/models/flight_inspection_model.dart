@@ -54,6 +54,17 @@ class FlightInspectionModel {
     required this.tasks,
   });
 
+  /// 页面首帧兜底展示数据。
+  factory FlightInspectionModel.fallback() {
+    return FlightInspectionModel.fromMap(const {
+      'inspectorName': '李晨',
+      'employeeCode': 'INS-2026-014',
+      'permissionLevel': 'L3',
+      'batchNo': 'FI-20260616-01',
+      'tasks': [],
+    });
+  }
+
   /// 飞检人员姓名。
   final String inspectorName;
 

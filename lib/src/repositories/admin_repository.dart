@@ -1,4 +1,4 @@
-import '../api/admin_api.dart';
+import '../api/src/Admin/index.dart';
 import '../models/admin_model.dart';
 
 /// 管理员后台仓库接口。

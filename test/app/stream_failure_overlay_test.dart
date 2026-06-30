@@ -4,11 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_cabinet/src/app/stream_failure_overlay.dart';
 import 'package:smart_cabinet/src/core/camera/camera_binding_service.dart';
 
-/// 全局推流异常弹窗测试。
+/// 全局推流异常提示测试。
 void main() {
   tearDown(CameraBindingService.debugReset);
 
-  testWidgets('shows global dialog when outside stream status fails', (
+  testWidgets('shows global message when outside stream status fails', (
     tester,
   ) async {
     CameraBindingService.debugUseCameraData(
@@ -19,19 +19,22 @@ void main() {
         cameraId: 'cameraId_1',
       ),
     );
+    final navigatorKey = GlobalKey<NavigatorState>();
 
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
+        navigatorKey: navigatorKey,
         home: StreamFailureOverlay(
+          navigatorKey: navigatorKey,
           pollingInterval: Duration(milliseconds: 10),
-          child: Scaffold(body: Text('首页')),
+          child: const Scaffold(body: Text('首页')),
         ),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 20));
 
-    expect(find.text('推流异常'), findsOneWidget);
+    expect(find.textContaining('推流异常：柜外环境推流异常'), findsOneWidget);
     expect(find.textContaining('柜外环境推流异常'), findsOneWidget);
     expect(find.textContaining('3 秒后重连第 1 次'), findsOneWidget);
   });

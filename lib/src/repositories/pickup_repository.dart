@@ -1,4 +1,4 @@
-import '../api/pickup_api.dart';
+import '../api/src/Pickup/index.dart';
 import '../dto/pickup_response_dto.dart';
 import '../models/pickup_model.dart';
 

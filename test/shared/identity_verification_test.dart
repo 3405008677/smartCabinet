@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_cabinet/src/shared/widgets/identity_verification/face_verification_card.dart';
-import 'package:smart_cabinet/src/shared/widgets/identity_verification/sensor_verification_card.dart';
+import 'package:smart_cabinet/src/components/Verification/FaceVerificationCard/index.dart';
+import 'package:smart_cabinet/src/components/Verification/SensorVerificationCard/index.dart';
 
 /// 共享身份认证组件测试。
 ///

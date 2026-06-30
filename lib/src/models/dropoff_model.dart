@@ -15,6 +15,23 @@ class DropoffModel {
     required this.successSummary,
   });
 
+  /// 页面首帧兜底展示数据。
+  factory DropoffModel.fallback() {
+    return DropoffModel.fromMap(const {
+      'personName': '张晓明',
+      'employeeCode': 'EMP-2026-0612',
+      'department': '法务合规部',
+      'permissionLevel': 'L3 · 文件存放权限',
+      'fileCode': 'FILE-2026-001',
+      'fileName': '合格证原件',
+      'frcResult': '已匹配',
+      'doorNo': 'A-08',
+      'doorLocation': 'A区第2列第4格 · 标准文件柜 · 待开门',
+      'openDoorTitle': '柜门 A-08 已打开',
+      'successSummary': '已存入 1 份文件 · 柜门 A-08 · 已写入审计日志',
+    });
+  }
+
   /// 放件人员姓名。
   final String personName;
 

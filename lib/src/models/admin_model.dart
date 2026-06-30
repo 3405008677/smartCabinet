@@ -47,6 +47,20 @@ class AdminDeviceStatusModel {
     required this.scannerStatus,
   });
 
+  /// 页面首帧兜底展示数据。
+  factory AdminDeviceStatusModel.fallback() {
+    return const AdminDeviceStatusModel(
+      cabinetCode: 'CAB-A01',
+      region: 'A · B 区',
+      wifiName: 'SmartCabinet-5G',
+      rj45Status: '未连接',
+      nfcStatus: '正常 · 读卡器在线',
+      fingerprintStatus: '正常 · 指纹模块在线',
+      cabinetBoardStatus: '正常 · 12 路柜控板已连接',
+      scannerStatus: '正常 · 扫码器待命',
+    );
+  }
+
   /// 柜体编号。
   final String cabinetCode;
 

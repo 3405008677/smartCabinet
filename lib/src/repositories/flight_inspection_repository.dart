@@ -1,4 +1,4 @@
-import '../api/flight_inspection_api.dart';
+import '../api/src/FlightInspection/index.dart';
 import '../dto/flight_inspection_response_dto.dart';
 import '../models/flight_inspection_model.dart';
 

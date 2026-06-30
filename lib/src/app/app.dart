@@ -7,6 +7,9 @@ import 'stream_failure_overlay.dart';
 import 'startup/startup_media.dart';
 import 'theme/app_theme.dart';
 
+/// 应用主导航器，用于展示全局弹窗。
+final appNavigatorKey = GlobalKey<NavigatorState>();
+
 /// 应用的根组件。
 ///
 /// [SmartCabinetApp] 是整个 Flutter UI 树的入口，负责配置：
@@ -29,6 +32,8 @@ class SmartCabinetApp extends StatelessWidget {
         return AppLocalizationsScope(
           localizations: localizations,
           child: MaterialApp(
+            navigatorKey: appNavigatorKey,
+
             /// 系统任务列表、无障碍服务等地方可能会使用这个标题。
             title: localizations.t('appTitle', '智能文件保管柜'),
 
@@ -47,6 +52,7 @@ class SmartCabinetApp extends StatelessWidget {
             /// 在首页初始化完成前显示启动媒体层，避免启动白屏。
             builder: (context, child) {
               return StreamFailureOverlay(
+                navigatorKey: appNavigatorKey,
                 child: StartupMedia(child: child ?? const SizedBox.shrink()),
               );
             },

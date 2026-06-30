@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 
-import '../../features/admin/page/admin_console_page.dart';
-import '../../features/admin/page/admin_verification_page.dart';
-import '../../features/dropoff/page/dropoff_confirm_opening_page.dart';
-import '../../features/dropoff/page/dropoff_file_verification_page.dart';
-import '../../features/dropoff/page/dropoff_open_cabinet_page.dart';
-import '../../features/dropoff/page/dropoff_person_verification_page.dart';
-import '../../features/dropoff/page/dropoff_success_page.dart';
-import '../../features/flight_inspection/page/flight_inspection_task_page.dart';
-import '../../features/flight_inspection/page/flight_inspection_verification_page.dart';
-import '../../features/pickup/page/cabinet_door_info_page.dart';
-import '../../features/pickup/page/open_cabinet_door_page.dart';
-import '../../features/pickup/page/pickup_verification_page.dart';
-import '../../features/pickup/page/verification_loading_page.dart';
-import 'foundation_home_page.dart';
-import 'smart_cabinet_home_page.dart';
+import '../../views/business/Admin/Console/index.dart';
+import '../../views/business/Admin/Verification/index.dart';
+import '../../views/business/FlightInspection/Task/index.dart';
+import '../../views/business/FlightInspection/Verification/index.dart';
+import '../../views/business/Home/index.dart';
+import '../../views/business/Storage/CabinetDoorInfo/index.dart';
+import '../../views/business/Storage/DropoffConfirmOpening/index.dart';
+import '../../views/business/Storage/DropoffFileVerification/index.dart';
+import '../../views/business/Storage/DropoffOpenCabinet/index.dart';
+import '../../views/business/Storage/DropoffPersonVerification/index.dart';
+import '../../views/business/Storage/DropoffSuccess/index.dart';
+import '../../views/business/Storage/FoundationHome/index.dart';
+import '../../views/business/Storage/OpenCabinetDoor/index.dart';
+import '../../views/business/Storage/PickupVerification/index.dart';
+import '../../views/business/Storage/VerificationLoading/index.dart';
 
 /// 应用内所有路由名称的集中定义。
 ///

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_cabinet/src/core/device/hardware_recovery_advice.dart';
-import 'package:smart_cabinet/src/shared/widgets/identity_verification/sensor_verification_card.dart';
+import 'package:smart_cabinet/src/components/Verification/SensorVerificationCard/index.dart';
 
 void main() {
   testWidgets('sensor card shows hardware recovery advice when unavailable', (
