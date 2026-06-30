@@ -19,7 +19,7 @@ class AppConfig {
   /// 固定 RTSP 服务地址前缀。
   // static const String streamBaseUrl = 'rtsp://192.168.2.167/app';
   // static const String streamBaseUrl = 'rtsp://127.0.0.1:8554/app';
-  static const String streamBaseUrl = 'https://rtsp.pengqianjing.top/app';
+  static const String streamBaseUrl = 'rtsp://183.56.183.39:8888/app';
 
   /// 固定 H265 推流宽度。
   static const int streamWidth = 1920;
