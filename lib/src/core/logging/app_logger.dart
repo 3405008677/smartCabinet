@@ -62,7 +62,9 @@ class AppLogger {
         });
       } catch (recordError) {
         if (recordError is FlutterError &&
-            recordError.message.contains('Binding has not yet been initialized')) {
+            recordError.message.contains(
+              'Binding has not yet been initialized',
+            )) {
           return;
         }
         debugPrint('[ERROR] Failed to persist error log: $recordError');

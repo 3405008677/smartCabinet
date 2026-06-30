@@ -1,6 +1,3 @@
-
-
-
 import 'src/app/bootstrap/bootstrap.dart';
 
 /// Flutter 应用的入口函数。

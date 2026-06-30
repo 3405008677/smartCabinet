@@ -17,7 +17,6 @@
 | `assets/images/` | 图片资源目录，已在 `pubspec.yaml` 中声明。 | 是 |
 | `assets/icons/` | 图标资源目录，已在 `pubspec.yaml` 中声明。 | 是 |
 | `assets/i18n/` | 国际化资源目录，已在 `pubspec.yaml` 中声明。 | 是 |
-| `assets/fonts/` | 字体资源目录，当前存在目录但未在 `pubspec.yaml` 中配置字体。 | 按需 |
 | `assets/GLB/` | 3D 模型或 GLB 资源目录。 | 按需 |
 | `assets/原型页面/` | 原型页面资源目录，已在 `pubspec.yaml` 中声明。 | 是 |
 | `test/` | Flutter 测试目录，包含 Widget 测试、单元测试和分层测试目录。 | 是 |
