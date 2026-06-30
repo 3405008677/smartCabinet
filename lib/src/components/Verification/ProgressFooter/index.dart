@@ -10,7 +10,7 @@ class VerificationProgressFooter extends StatelessWidget {
   const VerificationProgressFooter({
     required this.completedCount,
     required this.totalCount,
-    this.accentColor = const Color(0xFF4664E9),
+    this.accentColor,
     super.key,
   });
 
@@ -21,7 +21,9 @@ class VerificationProgressFooter extends StatelessWidget {
   final int totalCount;
 
   /// 进度条主题色。
-  final Color accentColor;
+  ///
+  /// 为空时使用当前应用主题主色。
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +32,10 @@ class VerificationProgressFooter extends StatelessWidget {
 
     /// 当前界面语言的文案读取入口。
     final l10n = context.l10n;
+
+    /// 当前组件实际使用的强调色。
+    final effectiveAccentColor =
+        accentColor ?? Theme.of(context).colorScheme.primary;
 
     return Container(
       height: 48,
@@ -61,7 +67,9 @@ class VerificationProgressFooter extends StatelessWidget {
                     value: value,
                     minHeight: 8,
                     backgroundColor: const Color(0xFFE9EEF8),
-                    valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      effectiveAccentColor,
+                    ),
                   ),
                 );
               },
@@ -71,7 +79,7 @@ class VerificationProgressFooter extends StatelessWidget {
           Text(
             '$completedCount / $totalCount',
             style: TextStyle(
-              color: accentColor,
+              color: effectiveAccentColor,
               fontSize: 13,
               letterSpacing: 2,
               fontWeight: FontWeight.w800,

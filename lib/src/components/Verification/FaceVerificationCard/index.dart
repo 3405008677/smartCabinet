@@ -19,7 +19,7 @@ class FaceVerificationCard extends StatefulWidget {
     required this.onVerified,
     this.title = '人脸识别',
     this.subtitle = 'Face Recognition',
-    this.accentColor = const Color(0xFF4664E9),
+    this.accentColor,
     this.stepNumber,
     this.allowFallbackWithoutCamera = false,
     this.compact = false,
@@ -39,7 +39,9 @@ class FaceVerificationCard extends StatefulWidget {
   final String subtitle;
 
   /// 主题强调色。
-  final Color accentColor;
+  ///
+  /// 为空时使用当前应用主题主色。
+  final Color? accentColor;
 
   /// 右上角显示的步骤编号。
   final int? stepNumber;
@@ -275,11 +277,15 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
       _message = verifiedSubmittedText;
     }
 
+    /// 当前组件实际使用的强调色。
+    final effectiveAccentColor =
+        widget.accentColor ?? Theme.of(context).colorScheme.primary;
+
     /// 当前状态对应的主色。
     final activeColor = switch (_status) {
       FaceVerificationStatus.success => const Color(0xFF22A857),
       FaceVerificationStatus.failure => const Color(0xFFE05252),
-      _ => widget.accentColor,
+      _ => effectiveAccentColor,
     };
 
     /// 中部取景圆形框尺寸。
@@ -332,12 +338,12 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
                     width: headerIconBoxSize,
                     height: headerIconBoxSize,
                     decoration: BoxDecoration(
-                      color: widget.accentColor.withValues(alpha: .1),
+                      color: effectiveAccentColor.withValues(alpha: .1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.center_focus_strong_rounded,
-                      color: widget.accentColor,
+                      color: effectiveAccentColor,
                       size: headerIconSize,
                     ),
                   ),
@@ -362,7 +368,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
                     decoration: BoxDecoration(
                       color: widget.verified
                           ? const Color(0xFF59BE5A)
-                          : widget.accentColor,
+                          : effectiveAccentColor,
                       shape: BoxShape.circle,
                     ),
                     child: widget.verified
@@ -491,7 +497,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
             child: ElevatedButton(
               onPressed: _canConfirm ? _captureAndVerify : null,
               style: ElevatedButton.styleFrom(
-                backgroundColor: widget.accentColor,
+                backgroundColor: effectiveAccentColor,
                 disabledBackgroundColor: const Color(0xFFEAF0FF),
                 disabledForegroundColor: const Color(0xFF22A857),
                 foregroundColor: Colors.white,

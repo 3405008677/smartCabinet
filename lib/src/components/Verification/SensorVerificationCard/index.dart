@@ -16,7 +16,7 @@ class SensorVerificationCard extends StatelessWidget {
     required this.actionText,
     required this.verifiedText,
     required this.onConfirm,
-    this.accentColor = const Color(0xFF4664E9),
+    this.accentColor,
     this.compact = false,
     this.showHeader = true,
     this.recoveryAdvice,
@@ -50,7 +50,9 @@ class SensorVerificationCard extends StatelessWidget {
   final VoidCallback onConfirm;
 
   /// 主题强调色。
-  final Color accentColor;
+  ///
+  /// 为空时使用当前应用主题主色。
+  final Color? accentColor;
 
   /// 是否使用紧凑模式。
   final bool compact;
@@ -69,8 +71,14 @@ class SensorVerificationCard extends StatelessWidget {
     /// 当前语言文案集合。
     final l10n = context.l10n;
 
+    /// 当前组件实际使用的强调色。
+    final effectiveAccentColor =
+        accentColor ?? Theme.of(context).colorScheme.primary;
+
     /// 当前视觉状态下使用的主色，认证完成后统一切为成功绿。
-    final activeColor = verified ? const Color(0xFF22A857) : accentColor;
+    final activeColor = verified
+        ? const Color(0xFF22A857)
+        : effectiveAccentColor;
 
     /// 中部状态图标尺寸。
     final iconSize = compact ? 42.0 : 48.0;
@@ -128,10 +136,14 @@ class SensorVerificationCard extends StatelessWidget {
                     width: headerIconBoxSize,
                     height: headerIconBoxSize,
                     decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: .1),
+                      color: effectiveAccentColor.withValues(alpha: .1),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(icon, color: accentColor, size: headerIconSize),
+                    child: Icon(
+                      icon,
+                      color: effectiveAccentColor,
+                      size: headerIconSize,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -152,7 +164,9 @@ class SensorVerificationCard extends StatelessWidget {
                     height: 28,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: verified ? const Color(0xFF59BE5A) : accentColor,
+                      color: verified
+                          ? const Color(0xFF59BE5A)
+                          : effectiveAccentColor,
                       shape: BoxShape.circle,
                     ),
                     child: verified
@@ -252,7 +266,7 @@ class SensorVerificationCard extends StatelessWidget {
             child: ElevatedButton(
               onPressed: verified ? null : onConfirm,
               style: ElevatedButton.styleFrom(
-                backgroundColor: accentColor,
+                backgroundColor: effectiveAccentColor,
                 foregroundColor: Colors.white,
                 disabledBackgroundColor: const Color(0xFFEAF0FF),
                 disabledForegroundColor: const Color(0xFF22A857),

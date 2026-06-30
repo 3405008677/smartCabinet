@@ -79,7 +79,7 @@ class _TerminalShellState extends State<TerminalShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFD6DEEF),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: FittedBox(
           fit: BoxFit.contain,
@@ -133,6 +133,7 @@ class _GlobalHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       height: 86,
@@ -146,8 +147,8 @@ class _GlobalHeader extends StatelessWidget {
           Container(
             width: 36,
             height: 36,
-            decoration: const BoxDecoration(
-              color: Color(0xFF2F64F6),
+            decoration: BoxDecoration(
+              color: colorScheme.primary,
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -370,27 +371,29 @@ class FlowStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       height: 30,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF0FF),
+        color: colorScheme.primaryContainer.withValues(alpha: .45),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFC8D5FF)),
+        border: Border.all(color: colorScheme.primary.withValues(alpha: .22)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             Icons.verified_user_outlined,
-            color: Color(0xFF2F64F6),
+            color: colorScheme.primary,
             size: 15,
           ),
           const SizedBox(width: 7),
           Text(
             text,
-            style: const TextStyle(
-              color: Color(0xFF2F64F6),
+            style: TextStyle(
+              color: colorScheme.primary,
               fontSize: 13,
               height: 1,
               letterSpacing: .4,
