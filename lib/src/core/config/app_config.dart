@@ -17,8 +17,10 @@ class AppConfig {
   static const AppConfig current = AppConfig(appName: '智能柜终端', apiBaseUrl: '');
 
   /// 固定 RTSP 服务地址前缀。
-  static const String streamBaseUrl = 'rtsp://192.168.2.167/app';
+  // static const String streamBaseUrl = 'rtsp://192.168.2.167/app';
   // static const String streamBaseUrl = 'rtsp://127.0.0.1:8554/app';
+  // https://zlmediakit.pengqianjing.top/
+  static const String streamBaseUrl = 'http://zlmediakit.pengqianjing.top/app';
 
   /// 固定 H265 推流宽度。
   static const int streamWidth = 1920;

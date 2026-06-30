@@ -877,7 +877,7 @@ class KioskManager(private val activity: Activity) {
         private const val OUTSIDE_ENVIRONMENT_LOG_FILE_NAME = "smart_cabinet_rtsp_h265.log"
         private const val UNIFIED_ERROR_LOG_FILE_NAME = "smart_cabinet_error.log"
         private const val DEFAULT_ERROR_REPORT_URL = "http://192.168.1.100:3000/api/logs/error"
-        private const val DEFAULT_STREAM_BASE_URL = "rtsp://192.168.2.167/app"
+        private const val DEFAULT_STREAM_BASE_URL = "http://zlmediakit.pengqianjing.top/app"
         private const val DOWNLOADS_LOG_PATH = "Download/SmartCabinetLogs/smart_cabinet_rtsp_h265.log"
 
         private val CAMERA_ROLES = listOf(
