@@ -29,7 +29,7 @@ void main() {
     });
     expect(state.video, <String, Object?>{
       'streamUrl': '',
-      'streamingEnabled': false,
+      'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
     });
     expect(await store.snapshot(), <String, Object?>{
       'authToken': '',
@@ -41,7 +41,10 @@ void main() {
         'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
         'uploadEnabled': true,
       },
-      'video': <String, Object?>{'streamUrl': '', 'streamingEnabled': false},
+      'video': <String, Object?>{
+        'streamUrl': '',
+        'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
+      },
     });
   });
 
@@ -61,7 +64,6 @@ void main() {
         },
         video: <String, Object?>{
           'streamUrl': '${AppConfig.streamBaseUrl}/a1b2c3d4e5f67890',
-          'streamingEnabled': true,
         },
       ),
     );
@@ -78,7 +80,7 @@ void main() {
       },
       'video': <String, Object?>{
         'streamUrl': '${AppConfig.streamBaseUrl}/a1b2c3d4e5f67890',
-        'streamingEnabled': true,
+        'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
       },
     });
   });
@@ -90,7 +92,7 @@ void main() {
 
     await store.update(
       (state) => state.copyWith(
-        video: <String, Object?>{...state.video, 'streamingEnabled': true},
+        video: <String, Object?>{...state.video, 'activeProfile': '720p'},
       ),
     );
 
@@ -99,7 +101,8 @@ void main() {
     expect(state.authToken, '');
     expect(state.video, <String, Object?>{
       'streamUrl': '',
-      'streamingEnabled': true,
+      'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
+      'activeProfile': '720p',
     });
   });
 }

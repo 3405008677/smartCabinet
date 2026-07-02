@@ -17,15 +17,26 @@ class MainActivity : FlutterActivity() {
             kioskManager.keepScreenOn()
             kioskManager.hideSystemBars()
         }
+        runKioskAction("start stream control server") { kioskManager.startStreamControlServer() }
+        runKioskAction("apply configured stream switches") { kioskManager.applyConfiguredStreamSwitches() }
+        runKioskAction("handle debug stream trigger") { handleDebugStreamTrigger() }
+    }
+
+    override fun onDestroy() {
+        runKioskAction("stop stream control server") { kioskManager.stopStreamControlServer() }
+        super.onDestroy()
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        runKioskAction("handle debug stream trigger") { handleDebugStreamTrigger() }
     }
 
     override fun onResume() {
         super.onResume()
         runKioskAction("hide system bars") { kioskManager.hideSystemBars() }
         runKioskAction("enter kiosk mode") { kioskManager.enterKioskMode() }
-        runKioskAction("start configured streams") {
-            kioskManager.startOutsideEnvironmentStreamIfConfigured()
-        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -73,8 +84,26 @@ class MainActivity : FlutterActivity() {
                     kioskManager.openSystemSettings()
                     result.success(null)
                 }
+                "startStreamProfile" -> {
+                    val profile = call.argument<String>("profile")
+                    if (profile.isNullOrBlank()) {
+                        result.error("invalid_stream_profile", "profile is empty", null)
+                    } else {
+                        kioskManager.startStreamProfile(profile)
+                        result.success(null)
+                    }
+                }
+                "stopStreamProfile" -> {
+                    val profile = call.argument<String>("profile")
+                    if (profile.isNullOrBlank()) {
+                        result.error("invalid_stream_profile", "profile is empty", null)
+                    } else {
+                        kioskManager.stopStreamProfile(profile)
+                        result.success(null)
+                    }
+                }
                 "startConfiguredStreams" -> {
-                    kioskManager.startConfiguredStreamsFromFlutter()
+                    Log.i(TAG, "startConfiguredStreams ignored; streams are profile-driven now")
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -101,8 +130,17 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    private fun handleDebugStreamTrigger() {
+        if (intent?.getBooleanExtra(DEBUG_START_DUAL_STREAM_EXTRA, false) == true) {
+            Log.i(TAG, "debug dual stream trigger received")
+            kioskManager.startStreamProfile("720p")
+            kioskManager.startStreamProfile("1080p")
+        }
+    }
+
     companion object {
         private const val TAG = "SmartCabinetMain"
         private const val KIOSK_CHANNEL = "smart_cabinet/kiosk"
+        private const val DEBUG_START_DUAL_STREAM_EXTRA = "debugStartDualStream"
     }
 }

@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/camera/camera_binding_service.dart';
-import '../../core/device/kiosk_device_provider.dart';
 import '../../core/storage/app_local_store_provider.dart';
 import '../../core/storage/local_store_bootstrap_service.dart';
 import 'startup_task.dart';
@@ -33,7 +32,6 @@ class CacheLocalStoreStartupTask implements StartupTask {
   Future<void> run() async {
     final store = await _providerContainer.read(appLocalStoreProvider.future);
     await LocalStoreBootstrapService(store: store).cacheStartupData();
-    await _providerContainer.read(kioskDeviceProvider).startConfiguredStreams();
   }
 }
 

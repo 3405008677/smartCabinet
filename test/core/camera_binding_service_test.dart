@@ -58,6 +58,8 @@ void main() {
         status: '推流中',
         url: '${AppConfig.streamBaseUrl}/device-001',
         cameraId: 'cameraId_1',
+        profile: '720p',
+        streamMode: 'dual_active_profiles',
       ),
     );
 
@@ -67,6 +69,8 @@ void main() {
     expect(status.status, '推流中');
     expect(status.url, '${AppConfig.streamBaseUrl}/device-001');
     expect(status.cameraId, 'cameraId_1');
+    expect(status.profile, '720p');
+    expect(status.streamMode, 'dual_active_profiles');
   });
 
   test(
@@ -104,5 +108,25 @@ void main() {
 
     expect(disconnectedStatus.needsUserAttention, isTrue);
     expect(normalStatus.needsUserAttention, isFalse);
+  });
+
+  test('parses active stream profile from native status map', () {
+    final status = CameraStreamStatus.fromMap(const <String, Object?>{
+      'status': '720p/1080p 双路推流中',
+      'url':
+          '${AppConfig.streamBaseUrl}/device-001_720p,${AppConfig.streamBaseUrl}/device-001_1080p',
+      'cameraId': 'cameraId_1',
+      'profile': '720p,1080p',
+      'streamMode': 'dual_active_profiles',
+    });
+
+    expect(status.status, '720p/1080p 双路推流中');
+    expect(
+      status.url,
+      '${AppConfig.streamBaseUrl}/device-001_720p,${AppConfig.streamBaseUrl}/device-001_1080p',
+    );
+    expect(status.cameraId, 'cameraId_1');
+    expect(status.profile, '720p,1080p');
+    expect(status.streamMode, 'dual_active_profiles');
   });
 }

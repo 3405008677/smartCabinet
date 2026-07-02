@@ -78,6 +78,10 @@ class RtspTcpH265Publisher(
                 droppedFrameCount += 1
             }
             pendingFrames.addLast(PendingFrame(data, presentationTimeUs, marker))
+            val queuedFrames = pendingFrames.size
+            if (queuedFrames > 1 || droppedFrameCount > 0) {
+                statusListener("RTSP发送队列：queued=$queuedFrames dropped=$droppedFrameCount")
+            }
             sendLock.notifyAll()
         }
     }
@@ -338,7 +342,7 @@ class RtspTcpH265Publisher(
 
     companion object {
         private const val MAX_RTP_PAYLOAD = 1200
-        private const val MAX_PENDING_FRAMES = 8
+        private const val MAX_PENDING_FRAMES = 3
         private const val DROP_REPORT_INTERVAL = 30
     }
 }

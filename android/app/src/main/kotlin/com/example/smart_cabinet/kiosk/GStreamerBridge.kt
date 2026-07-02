@@ -87,6 +87,15 @@ class GStreamerBridge {
             .getOrDefault(false)
     }
 
+    fun createRkMppH265Encoder(width: Int, height: Int, fps: Int, bitrate: Int, gop: Int): Long {
+        if (!isSmartCabinetLibraryLoaded) {
+            return 0L
+        }
+        return runCatching { nativeCreateRkMppH265Encoder(width, height, fps, bitrate, gop) }
+            .onFailure { error -> Log.e(TAG, "RKMPP H265 handle create failed", error) }
+            .getOrDefault(0L)
+    }
+
     fun encodeRkMppH265Frame(nv12: ByteArray, presentationTimeUs: Long): ByteArray? {
         if (!isSmartCabinetLibraryLoaded) {
             return null
@@ -133,6 +142,45 @@ class GStreamerBridge {
             .getOrNull()
     }
 
+    fun encodeRkMppH265ImageWithHandle(
+        handle: Long,
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        presentationTimeUs: Long,
+    ): ByteArray? {
+        if (!isSmartCabinetLibraryLoaded || handle == 0L) {
+            return null
+        }
+        return runCatching {
+            nativeEncodeRkMppH265ImageWithHandle(
+                handle,
+                yBuffer,
+                uBuffer,
+                vBuffer,
+                width,
+                height,
+                yRowStride,
+                yPixelStride,
+                uRowStride,
+                uPixelStride,
+                vRowStride,
+                vPixelStride,
+                presentationTimeUs,
+            )
+        }
+            .onFailure { error -> Log.e(TAG, "RKMPP H265 handle image encode failed", error) }
+            .getOrNull()
+    }
+
     fun convertYuv420ToNv12(
         yBuffer: ByteBuffer,
         uBuffer: ByteBuffer,
@@ -176,6 +224,14 @@ class GStreamerBridge {
             .onFailure { error -> Log.e(TAG, "RKMPP H265 stop failed", error) }
     }
 
+    fun destroyRkMppH265Encoder(handle: Long) {
+        if (!isSmartCabinetLibraryLoaded || handle == 0L) {
+            return
+        }
+        runCatching { nativeDestroyRkMppH265Encoder(handle) }
+            .onFailure { error -> Log.e(TAG, "RKMPP H265 handle destroy failed", error) }
+    }
+
     private external fun nativeInitialize(): Boolean
 
     private external fun nativeVersion(): String
@@ -194,9 +250,27 @@ class GStreamerBridge {
 
     private external fun nativeStartRkMppH265(width: Int, height: Int, fps: Int, bitrate: Int, gop: Int): Boolean
 
+    private external fun nativeCreateRkMppH265Encoder(width: Int, height: Int, fps: Int, bitrate: Int, gop: Int): Long
+
     private external fun nativeEncodeRkMppH265Frame(nv12: ByteArray, presentationTimeUs: Long): ByteArray?
 
     private external fun nativeEncodeRkMppH265Image(
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        presentationTimeUs: Long,
+    ): ByteArray?
+
+    private external fun nativeEncodeRkMppH265ImageWithHandle(
+        handle: Long,
         yBuffer: ByteBuffer,
         uBuffer: ByteBuffer,
         vBuffer: ByteBuffer,
@@ -226,6 +300,8 @@ class GStreamerBridge {
     ): ByteArray?
 
     private external fun nativeStopRkMppH265()
+
+    private external fun nativeDestroyRkMppH265Encoder(handle: Long)
 
     companion object {
         private const val TAG = "SmartCabinetGst"

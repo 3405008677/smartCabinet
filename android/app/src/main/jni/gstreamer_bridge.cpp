@@ -234,23 +234,27 @@ bool load_rkmpp_locked() {
   return true;
 }
 
+void release_rkmpp_encoder_locked(RkMppEncoder &encoder, const char *caller) {
+  if (encoder.frame_buffer != nullptr) {
+    rkmpp_api.mpp_buffer_put_with_caller(encoder.frame_buffer, caller);
+  }
+  if (encoder.header_buffer != nullptr) {
+    rkmpp_api.mpp_buffer_put_with_caller(encoder.header_buffer, caller);
+  }
+  if (encoder.group != nullptr) {
+    rkmpp_api.mpp_buffer_group_put(encoder.group);
+  }
+  if (encoder.cfg != nullptr) {
+    rkmpp_api.mpp_enc_cfg_deinit(encoder.cfg);
+  }
+  if (encoder.ctx != nullptr) {
+    rkmpp_api.mpp_destroy(encoder.ctx);
+  }
+  encoder = RkMppEncoder();
+}
+
 void stop_rkmpp_locked() {
-  if (rkmpp_encoder.frame_buffer != nullptr) {
-    rkmpp_api.mpp_buffer_put_with_caller(rkmpp_encoder.frame_buffer, "stopRkMppH265");
-  }
-  if (rkmpp_encoder.header_buffer != nullptr) {
-    rkmpp_api.mpp_buffer_put_with_caller(rkmpp_encoder.header_buffer, "stopRkMppH265");
-  }
-  if (rkmpp_encoder.group != nullptr) {
-    rkmpp_api.mpp_buffer_group_put(rkmpp_encoder.group);
-  }
-  if (rkmpp_encoder.cfg != nullptr) {
-    rkmpp_api.mpp_enc_cfg_deinit(rkmpp_encoder.cfg);
-  }
-  if (rkmpp_encoder.ctx != nullptr) {
-    rkmpp_api.mpp_destroy(rkmpp_encoder.ctx);
-  }
-  rkmpp_encoder = RkMppEncoder();
+  release_rkmpp_encoder_locked(rkmpp_encoder, "stopRkMppH265");
 }
 
 // Converts a Java string into a UTF-8 std::string.
@@ -439,22 +443,22 @@ void copy_yuv420_to_nv12(
   }
 }
 
-jbyteArray encode_rkmpp_frame_locked(JNIEnv *env, jlong pts_us) {
+jbyteArray encode_rkmpp_frame_locked(JNIEnv *env, RkMppEncoder &encoder, jlong pts_us) {
   MppFrame frame = nullptr;
   MPP_RET ret = rkmpp_api.mpp_frame_init(&frame);
   if (ret != MPP_OK || frame == nullptr) {
     set_last_error("RKMPP mpp_frame_init failed ret=" + std::to_string(ret));
     return nullptr;
   }
-  rkmpp_api.mpp_frame_set_width(frame, rkmpp_encoder.width);
-  rkmpp_api.mpp_frame_set_height(frame, rkmpp_encoder.height);
-  rkmpp_api.mpp_frame_set_hor_stride(frame, rkmpp_encoder.stride);
-  rkmpp_api.mpp_frame_set_ver_stride(frame, rkmpp_encoder.height);
+  rkmpp_api.mpp_frame_set_width(frame, encoder.width);
+  rkmpp_api.mpp_frame_set_height(frame, encoder.height);
+  rkmpp_api.mpp_frame_set_hor_stride(frame, encoder.stride);
+  rkmpp_api.mpp_frame_set_ver_stride(frame, encoder.height);
   rkmpp_api.mpp_frame_set_fmt(frame, MPP_FMT_YUV420SP);
   rkmpp_api.mpp_frame_set_pts(frame, pts_us);
-  rkmpp_api.mpp_frame_set_buffer(frame, rkmpp_encoder.frame_buffer);
+  rkmpp_api.mpp_frame_set_buffer(frame, encoder.frame_buffer);
 
-  ret = rkmpp_encoder.mpi->encode_put_frame(rkmpp_encoder.ctx, frame);
+  ret = encoder.mpi->encode_put_frame(encoder.ctx, frame);
   rkmpp_api.mpp_frame_deinit(&frame);
   if (ret != MPP_OK) {
     set_last_error("RKMPP encode_put_frame failed ret=" + std::to_string(ret));
@@ -462,7 +466,7 @@ jbyteArray encode_rkmpp_frame_locked(JNIEnv *env, jlong pts_us) {
   }
 
   MppPacket packet = nullptr;
-  ret = rkmpp_encoder.mpi->encode_get_packet(rkmpp_encoder.ctx, &packet);
+  ret = encoder.mpi->encode_get_packet(encoder.ctx, &packet);
   if (ret != MPP_OK || packet == nullptr) {
     set_last_error("RKMPP encode_get_packet failed ret=" + std::to_string(ret));
     return nullptr;
@@ -474,8 +478,8 @@ jbyteArray encode_rkmpp_frame_locked(JNIEnv *env, jlong pts_us) {
     set_last_error("RKMPP output packet is empty");
     return nullptr;
   }
-  const bool prepend_header = !rkmpp_encoder.header_sent && !rkmpp_encoder.header.empty();
-  const size_t output_length = length + (prepend_header ? rkmpp_encoder.header.size() : 0);
+  const bool prepend_header = !encoder.header_sent && !encoder.header.empty();
+  const size_t output_length = length + (prepend_header ? encoder.header.size() : 0);
   jbyteArray result = env->NewByteArray(static_cast<jsize>(output_length));
   if (result != nullptr) {
     jsize offset = 0;
@@ -483,16 +487,115 @@ jbyteArray encode_rkmpp_frame_locked(JNIEnv *env, jlong pts_us) {
       env->SetByteArrayRegion(
           result,
           0,
-          static_cast<jsize>(rkmpp_encoder.header.size()),
-          reinterpret_cast<jbyte *>(rkmpp_encoder.header.data()));
-      offset = static_cast<jsize>(rkmpp_encoder.header.size());
-      rkmpp_encoder.header_sent = true;
+          static_cast<jsize>(encoder.header.size()),
+          reinterpret_cast<jbyte *>(encoder.header.data()));
+      offset = static_cast<jsize>(encoder.header.size());
+      encoder.header_sent = true;
     }
     env->SetByteArrayRegion(result, offset, static_cast<jsize>(length), reinterpret_cast<jbyte *>(pos));
   }
   rkmpp_api.mpp_packet_deinit(&packet);
   last_error.clear();
   return result;
+}
+
+jbyteArray encode_rkmpp_frame_locked(JNIEnv *env, jlong pts_us) {
+  return encode_rkmpp_frame_locked(env, rkmpp_encoder, pts_us);
+}
+
+bool start_rkmpp_encoder_locked(RkMppEncoder &enc, jint width, jint height, jint fps, jint bitrate, jint gop, const char *tag) {
+  const MPP_RET support = rkmpp_api.mpp_check_support_format(MPP_CTX_ENC, MPP_VIDEO_CodingHEVC);
+  if (support != MPP_OK) {
+    set_last_error("RKMPP HEVC encoder unsupported ret=" + std::to_string(support));
+    return false;
+  }
+
+  enc.width = static_cast<RK_U32>(width);
+  enc.height = static_cast<RK_U32>(height);
+  enc.stride = static_cast<RK_U32>((width + 7) & ~7);
+  enc.frame_size = static_cast<size_t>(enc.stride) * static_cast<size_t>(height) * 3 / 2;
+
+  MPP_RET ret = rkmpp_api.mpp_buffer_group_get(&enc.group, MPP_BUFFER_TYPE_DRM | MPP_BUFFER_FLAGS_CACHABLE, MPP_BUFFER_INTERNAL, "SmartCabinet", tag);
+  if (ret != MPP_OK) {
+    set_last_error("RKMPP buffer group init failed ret=" + std::to_string(ret));
+    return false;
+  }
+  ret = rkmpp_api.mpp_buffer_get_with_tag(enc.group, &enc.frame_buffer, enc.frame_size, "SmartCabinet", tag);
+  if (ret != MPP_OK) {
+    set_last_error("RKMPP frame buffer alloc failed ret=" + std::to_string(ret));
+    release_rkmpp_encoder_locked(enc, tag);
+    return false;
+  }
+  ret = rkmpp_api.mpp_create(&enc.ctx, &enc.mpi);
+  if (ret != MPP_OK || enc.ctx == nullptr || enc.mpi == nullptr) {
+    set_last_error("RKMPP mpp_create failed ret=" + std::to_string(ret));
+    release_rkmpp_encoder_locked(enc, tag);
+    return false;
+  }
+  RK_S32 timeout = MPP_POLL_BLOCK;
+  enc.mpi->control(enc.ctx, MPP_SET_OUTPUT_TIMEOUT, &timeout);
+  ret = rkmpp_api.mpp_init(enc.ctx, MPP_CTX_ENC, MPP_VIDEO_CodingHEVC);
+  if (ret != MPP_OK) {
+    set_last_error("RKMPP mpp_init HEVC failed ret=" + std::to_string(ret));
+    release_rkmpp_encoder_locked(enc, tag);
+    return false;
+  }
+  ret = rkmpp_api.mpp_enc_cfg_init(&enc.cfg);
+  if (ret != MPP_OK) {
+    set_last_error("RKMPP mpp_enc_cfg_init failed ret=" + std::to_string(ret));
+    release_rkmpp_encoder_locked(enc, tag);
+    return false;
+  }
+  enc.mpi->control(enc.ctx, MPP_ENC_GET_CFG, enc.cfg);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "codec:type", MPP_VIDEO_CodingHEVC);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "prep:width", width);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "prep:height", height);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "prep:hor_stride", static_cast<RK_S32>(enc.stride));
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "prep:ver_stride", height);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "prep:format", MPP_FMT_YUV420SP);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:mode", 1);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_in_flex", 0);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_in_num", fps);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_in_denom", 1);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_out_flex", 0);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_out_num", fps);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_out_denom", 1);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:gop", gop <= 0 ? fps : gop * fps);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:bps_target", bitrate);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:bps_max", bitrate * 17 / 16);
+  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:bps_min", bitrate * 15 / 16);
+  ret = enc.mpi->control(enc.ctx, MPP_ENC_SET_CFG, enc.cfg);
+  if (ret != MPP_OK) {
+    set_last_error("RKMPP MPP_ENC_SET_CFG failed ret=" + std::to_string(ret));
+    release_rkmpp_encoder_locked(enc, tag);
+    return false;
+  }
+
+  ret = rkmpp_api.mpp_buffer_get_with_tag(enc.group, &enc.header_buffer, 4096, "SmartCabinet", "nativeStartRkMppH265Header");
+  if (ret == MPP_OK && enc.header_buffer != nullptr) {
+    const RK_S32 header_commands[] = {MPP_ENC_GET_HDR_SYNC, MPP_ENC_GET_EXTRA_INFO};
+    const char *header_command_names[] = {"MPP_ENC_GET_HDR_SYNC", "MPP_ENC_GET_EXTRA_INFO"};
+    for (size_t index = 0; index < 2 && enc.header.empty(); index += 1) {
+      MppPacket header_packet = nullptr;
+      ret = rkmpp_api.mpp_packet_init_with_buffer(&header_packet, enc.header_buffer);
+      if (ret != MPP_OK || header_packet == nullptr) continue;
+      rkmpp_api.mpp_packet_set_length(header_packet, 0);
+      ret = enc.mpi->control(enc.ctx, header_commands[index], header_packet);
+      if (ret == MPP_OK) {
+        void *header_pos = rkmpp_api.mpp_packet_get_pos(header_packet);
+        const size_t header_length = rkmpp_api.mpp_packet_get_length(header_packet);
+        if (header_pos != nullptr && header_length > 0) {
+          auto *bytes = reinterpret_cast<unsigned char *>(header_pos);
+          enc.header.assign(bytes, bytes + header_length);
+          LOGI("RKMPP H265 header generated by %s, bytes=%zu", header_command_names[index], header_length);
+        }
+      }
+      rkmpp_api.mpp_packet_deinit(&header_packet);
+    }
+  }
+  last_error.clear();
+  LOGI("RKMPP H265 encoder started, size=%dx%d fps=%d bitrate=%d", width, height, fps, bitrate);
+  return true;
 }
 
 }  // namespace
@@ -700,134 +803,28 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartRkMppH265(
   }
 
   stop_rkmpp_locked();
+  return start_rkmpp_encoder_locked(rkmpp_encoder, width, height, fps, bitrate, gop, "nativeStartRkMppH265") ? JNI_TRUE : JNI_FALSE;
+}
 
-  const MPP_RET support = rkmpp_api.mpp_check_support_format(MPP_CTX_ENC, MPP_VIDEO_CodingHEVC);
-  if (support != MPP_OK) {
-    set_last_error("RKMPP HEVC encoder unsupported ret=" + std::to_string(support));
-    return JNI_FALSE;
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeCreateRkMppH265Encoder(
+    JNIEnv * /* env */,
+    jobject /* thiz */,
+    jint width,
+    jint height,
+    jint fps,
+    jint bitrate,
+    jint gop) {
+  std::lock_guard<std::mutex> lock(rkmpp_mutex);
+  if (!load_rkmpp_locked()) {
+    return 0L;
   }
-
-  RkMppEncoder enc;
-  enc.width = static_cast<RK_U32>(width);
-  enc.height = static_cast<RK_U32>(height);
-  enc.stride = static_cast<RK_U32>((width + 7) & ~7);
-  enc.frame_size = static_cast<size_t>(enc.stride) * static_cast<size_t>(height) * 3 / 2;
-
-  MPP_RET ret = rkmpp_api.mpp_buffer_group_get(
-      &enc.group,
-      MPP_BUFFER_TYPE_DRM | MPP_BUFFER_FLAGS_CACHABLE,
-      MPP_BUFFER_INTERNAL,
-      "SmartCabinet",
-      "nativeStartRkMppH265");
-  if (ret != MPP_OK) {
-    set_last_error("RKMPP buffer group init failed ret=" + std::to_string(ret));
-    return JNI_FALSE;
+  auto *encoder = new RkMppEncoder();
+  if (!start_rkmpp_encoder_locked(*encoder, width, height, fps, bitrate, gop, "nativeCreateRkMppH265Encoder")) {
+    delete encoder;
+    return 0L;
   }
-  ret = rkmpp_api.mpp_buffer_get_with_tag(
-      enc.group,
-      &enc.frame_buffer,
-      enc.frame_size,
-      "SmartCabinet",
-      "nativeStartRkMppH265");
-  if (ret != MPP_OK) {
-    set_last_error("RKMPP frame buffer alloc failed ret=" + std::to_string(ret));
-    rkmpp_api.mpp_buffer_group_put(enc.group);
-    return JNI_FALSE;
-  }
-  ret = rkmpp_api.mpp_create(&enc.ctx, &enc.mpi);
-  if (ret != MPP_OK || enc.ctx == nullptr || enc.mpi == nullptr) {
-    set_last_error("RKMPP mpp_create failed ret=" + std::to_string(ret));
-    rkmpp_api.mpp_buffer_put_with_caller(enc.frame_buffer, "nativeStartRkMppH265");
-    rkmpp_api.mpp_buffer_group_put(enc.group);
-    return JNI_FALSE;
-  }
-  RK_S32 timeout = MPP_POLL_BLOCK;
-  enc.mpi->control(enc.ctx, MPP_SET_OUTPUT_TIMEOUT, &timeout);
-  ret = rkmpp_api.mpp_init(enc.ctx, MPP_CTX_ENC, MPP_VIDEO_CodingHEVC);
-  if (ret != MPP_OK) {
-    set_last_error("RKMPP mpp_init HEVC failed ret=" + std::to_string(ret));
-    rkmpp_api.mpp_destroy(enc.ctx);
-    rkmpp_api.mpp_buffer_put_with_caller(enc.frame_buffer, "nativeStartRkMppH265");
-    rkmpp_api.mpp_buffer_group_put(enc.group);
-    return JNI_FALSE;
-  }
-  ret = rkmpp_api.mpp_enc_cfg_init(&enc.cfg);
-  if (ret != MPP_OK) {
-    set_last_error("RKMPP mpp_enc_cfg_init failed ret=" + std::to_string(ret));
-    rkmpp_api.mpp_destroy(enc.ctx);
-    rkmpp_api.mpp_buffer_put_with_caller(enc.frame_buffer, "nativeStartRkMppH265");
-    rkmpp_api.mpp_buffer_group_put(enc.group);
-    return JNI_FALSE;
-  }
-  enc.mpi->control(enc.ctx, MPP_ENC_GET_CFG, enc.cfg);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "codec:type", MPP_VIDEO_CodingHEVC);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "prep:width", width);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "prep:height", height);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "prep:hor_stride", static_cast<RK_S32>(enc.stride));
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "prep:ver_stride", height);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "prep:format", MPP_FMT_YUV420SP);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:mode", 1);  // MPP_ENC_RC_MODE_CBR
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_in_flex", 0);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_in_num", fps);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_in_denom", 1);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_out_flex", 0);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_out_num", fps);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:fps_out_denom", 1);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:gop", gop <= 0 ? fps : gop * fps);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:bps_target", bitrate);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:bps_max", bitrate * 17 / 16);
-  rkmpp_api.mpp_enc_cfg_set_s32(enc.cfg, "rc:bps_min", bitrate * 15 / 16);
-  ret = enc.mpi->control(enc.ctx, MPP_ENC_SET_CFG, enc.cfg);
-  if (ret != MPP_OK) {
-    set_last_error("RKMPP MPP_ENC_SET_CFG failed ret=" + std::to_string(ret));
-    if (enc.cfg) rkmpp_api.mpp_enc_cfg_deinit(enc.cfg);
-    if (enc.ctx) rkmpp_api.mpp_destroy(enc.ctx);
-    if (enc.frame_buffer) rkmpp_api.mpp_buffer_put_with_caller(enc.frame_buffer, "nativeStartRkMppH265");
-    if (enc.group) rkmpp_api.mpp_buffer_group_put(enc.group);
-    return JNI_FALSE;
-  }
-
-  ret = rkmpp_api.mpp_buffer_get_with_tag(
-      enc.group,
-      &enc.header_buffer,
-      4096,
-      "SmartCabinet",
-      "nativeStartRkMppH265Header");
-  if (ret == MPP_OK && enc.header_buffer != nullptr) {
-    const RK_S32 header_commands[] = {MPP_ENC_GET_HDR_SYNC, MPP_ENC_GET_EXTRA_INFO};
-    const char *header_command_names[] = {"MPP_ENC_GET_HDR_SYNC", "MPP_ENC_GET_EXTRA_INFO"};
-    for (size_t index = 0; index < 2 && enc.header.empty(); index += 1) {
-      MppPacket header_packet = nullptr;
-      ret = rkmpp_api.mpp_packet_init_with_buffer(&header_packet, enc.header_buffer);
-      if (ret != MPP_OK || header_packet == nullptr) {
-        LOGE("RKMPP header packet init failed ret=%d", ret);
-        continue;
-      }
-      rkmpp_api.mpp_packet_set_length(header_packet, 0);
-      ret = enc.mpi->control(enc.ctx, header_commands[index], header_packet);
-      if (ret == MPP_OK) {
-        void *header_pos = rkmpp_api.mpp_packet_get_pos(header_packet);
-        const size_t header_length = rkmpp_api.mpp_packet_get_length(header_packet);
-        if (header_pos != nullptr && header_length > 0) {
-          auto *bytes = reinterpret_cast<unsigned char *>(header_pos);
-          enc.header.assign(bytes, bytes + header_length);
-          LOGI("RKMPP H265 header generated by %s, bytes=%zu", header_command_names[index], header_length);
-        } else {
-          LOGI("RKMPP H265 header packet is empty from %s", header_command_names[index]);
-        }
-      } else {
-        LOGE("RKMPP %s failed ret=%d", header_command_names[index], ret);
-      }
-      rkmpp_api.mpp_packet_deinit(&header_packet);
-    }
-  } else {
-    LOGE("RKMPP header buffer alloc failed ret=%d", ret);
-  }
-
-  rkmpp_encoder = enc;
-  last_error.clear();
-  LOGI("RKMPP H265 encoder started, size=%dx%d fps=%d bitrate=%d", width, height, fps, bitrate);
-  return JNI_TRUE;
+  return reinterpret_cast<jlong>(encoder);
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL
@@ -856,6 +853,62 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265Frame
   env->GetByteArrayRegion(nv12, 0, input_size, reinterpret_cast<jbyte *>(frame_ptr));
   rkmpp_api.mpp_buffer_sync_end_f(rkmpp_encoder.frame_buffer, 0, "nativeEncodeRkMppH265Frame");
   return encode_rkmpp_frame_locked(env, pts_us);
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265ImageWithHandle(
+    JNIEnv *env,
+    jobject /* thiz */,
+    jlong handle,
+    jobject y_buffer,
+    jobject u_buffer,
+    jobject v_buffer,
+    jint width,
+    jint height,
+    jint y_row_stride,
+    jint y_pixel_stride,
+    jint u_row_stride,
+    jint u_pixel_stride,
+    jint v_row_stride,
+    jint v_pixel_stride,
+    jlong pts_us) {
+  std::lock_guard<std::mutex> lock(rkmpp_mutex);
+  auto *encoder = reinterpret_cast<RkMppEncoder *>(handle);
+  if (encoder == nullptr || encoder->ctx == nullptr || y_buffer == nullptr || u_buffer == nullptr || v_buffer == nullptr) {
+    set_last_error("RKMPP encoder handle or YUV input is not ready");
+    return nullptr;
+  }
+  if (width != static_cast<jint>(encoder->width) || height != static_cast<jint>(encoder->height)) {
+    set_last_error("RKMPP image size mismatch width=" + std::to_string(width) + " height=" + std::to_string(height));
+    return nullptr;
+  }
+  auto *y = reinterpret_cast<const uint8_t *>(env->GetDirectBufferAddress(y_buffer));
+  auto *u = reinterpret_cast<const uint8_t *>(env->GetDirectBufferAddress(u_buffer));
+  auto *v = reinterpret_cast<const uint8_t *>(env->GetDirectBufferAddress(v_buffer));
+  if (y == nullptr || u == nullptr || v == nullptr) {
+    set_last_error("RKMPP direct YUV buffer address is null");
+    return nullptr;
+  }
+  void *frame_ptr = rkmpp_api.mpp_buffer_get_ptr_with_caller(encoder->frame_buffer, "nativeEncodeRkMppH265ImageWithHandle");
+  if (frame_ptr == nullptr) {
+    set_last_error("RKMPP frame buffer pointer is null");
+    return nullptr;
+  }
+  copy_yuv420_to_nv12(
+      y,
+      u,
+      v,
+      width,
+      height,
+      y_row_stride,
+      y_pixel_stride,
+      u_row_stride,
+      u_pixel_stride,
+      v_row_stride,
+      v_pixel_stride,
+      reinterpret_cast<jbyte *>(frame_ptr));
+  rkmpp_api.mpp_buffer_sync_end_f(encoder->frame_buffer, 0, "nativeEncodeRkMppH265ImageWithHandle");
+  return encode_rkmpp_frame_locked(env, *encoder, pts_us);
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL
@@ -961,4 +1014,18 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStopRkMppH265(
   if (rkmpp_api.handle != nullptr) {
     stop_rkmpp_locked();
   }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeDestroyRkMppH265Encoder(
+    JNIEnv * /* env */,
+    jobject /* thiz */,
+    jlong handle) {
+  std::lock_guard<std::mutex> lock(rkmpp_mutex);
+  auto *encoder = reinterpret_cast<RkMppEncoder *>(handle);
+  if (encoder == nullptr) {
+    return;
+  }
+  release_rkmpp_encoder_locked(*encoder, "nativeDestroyRkMppH265Encoder");
+  delete encoder;
 }

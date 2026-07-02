@@ -42,8 +42,26 @@ class LocalStoreBootstrapService {
           ...state.logging,
         },
         video: <String, Object?>{
-          ...state.video,
           'streamUrl': buildStreamUrl(deviceInfo['唯一设备ID']?.toString()),
+          'streamSwitches': <String, Object?>{
+            '720p': state.video['streamSwitches'] is Map
+                ? ((state.video['streamSwitches'] as Map)['720p'] == true)
+                : false,
+            '1080p': state.video['streamSwitches'] is Map
+                ? ((state.video['streamSwitches'] as Map)['1080p'] == true)
+                : false,
+          },
+          'streamProfiles': [
+            for (final profile in AppConfig.streamProfiles)
+              <String, Object?>{
+                'name': profile.name,
+                'width': profile.width,
+                'height': profile.height,
+                'fps': profile.fps,
+                'bitrate': profile.bitrate,
+                'gopSeconds': profile.gopSeconds,
+              },
+          ],
         },
       ),
     );

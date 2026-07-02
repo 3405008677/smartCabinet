@@ -1,5 +1,5 @@
-E:\App\vide\android\app\src\main\jni/obj/local/arm64-v8a/objs/smartcabinet_gstreamer/gstreamer_bridge.o: \
-  E:/App/vide/android/app/src/main/jni/gstreamer_bridge.cpp \
+./obj/local/arm64-v8a/objs/smartcabinet_gstreamer/gstreamer_bridge.o: \
+  gstreamer_bridge.cpp \
   E:/GStreamer/1.0/android/arm64/include/gstreamer-1.0/gst/gst.h \
   E:/GStreamer/1.0/android/arm64/include/glib-2.0/glib.h \
   E:/GStreamer/1.0/android/arm64/include/glib-2.0/glib/galloca.h \

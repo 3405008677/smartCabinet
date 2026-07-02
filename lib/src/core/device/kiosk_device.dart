@@ -22,6 +22,9 @@ abstract interface class KioskDevice {
   /// 当需要用户手动授权或排查设备配置时可以调用。
   Future<void> openSystemSettings();
 
-  /// 按最新本地 Store 配置启动或重启原生推流。
-  Future<void> startConfiguredStreams();
+  /// 按指定清晰度按需启动原生推流。
+  Future<void> startStreamProfile(String profile);
+
+  /// 停止指定清晰度的原生推流。
+  Future<void> stopStreamProfile(String profile);
 }

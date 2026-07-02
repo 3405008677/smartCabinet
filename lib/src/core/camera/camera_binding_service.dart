@@ -42,6 +42,8 @@ class CameraStreamStatus {
     required this.status,
     required this.url,
     required this.cameraId,
+    this.profile = '',
+    this.streamMode = '',
   });
 
   /// 当前推流状态文案。
@@ -52,6 +54,12 @@ class CameraStreamStatus {
 
   /// 当前绑定的摄像头 ID。
   final String cameraId;
+
+  /// 当前正在推流的清晰度。
+  final String profile;
+
+  /// 当前推流能力模式，例如单路按需或多路并发。
+  final String streamMode;
 
   /// 当前状态是否表示推流失败或正在重连。
   bool get needsUserAttention {
@@ -75,6 +83,8 @@ class CameraStreamStatus {
       status: map['status']?.toString() ?? '未知',
       url: map['url']?.toString() ?? '',
       cameraId: map['cameraId']?.toString() ?? '',
+      profile: map['profile']?.toString() ?? '',
+      streamMode: map['streamMode']?.toString() ?? '',
     );
   }
 }

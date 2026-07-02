@@ -827,6 +827,43 @@ void main() {
     expect(find.text('配置 合格证采集摄像头'), findsNothing);
     expect(find.textContaining('cameraId_1'), findsWidgets);
   });
+
+  testWidgets('admin stream profile controls expose single active mode', (
+    WidgetTester tester,
+  ) async {
+    CameraBindingService.debugUseCameraData(
+      cameras: _testCameras,
+      bindings: const {
+        CabinetCameraRole.faceRecognition: 'cameraId_0',
+        CabinetCameraRole.outsideEnvironment: 'cameraId_1',
+      },
+      outsideEnvironmentStreamStatus: const CameraStreamStatus(
+        status: '720p/1080p 双路推流中',
+        url:
+            'rtsp://183.56.183.39:8888/app/device-001_720p,rtsp://183.56.183.39:8888/app/device-001_1080p',
+        cameraId: 'cameraId_1',
+        profile: '720p,1080p',
+        streamMode: 'dual_active_profiles',
+      ),
+    );
+
+    await _pumpSmartCabinetApp(tester);
+    await _openAdminConsole(tester);
+    await _expectAdminDeviceGridText(tester, '柜外环境推流按需加载');
+
+    expect(find.text('双路按需，同时推送720p和1080p'), findsOneWidget);
+    expect(find.text('360p'), findsNothing);
+    expect(find.text('720p运行中'), findsOneWidget);
+    expect(find.text('1080p运行中'), findsOneWidget);
+
+    final activeProfileButton = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('720p运行中'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    expect(activeProfileButton.onPressed, isNotNull);
+  });
 }
 
 /// 登录并完成管理员认证后进入管理员控制台。

@@ -21,18 +21,54 @@ class AppConfig {
   // static const String streamBaseUrl = 'rtsp://127.0.0.1:8554/app';
   static const String streamBaseUrl = 'rtsp://183.56.183.39:8888/app';
 
-  /// 固定 H265 推流宽度。
-  static const int streamWidth = 1920;
+  /// 可按需启动的 H265 推流清晰度配置。
+  static const List<StreamProfileConfig> streamProfiles = [
+    StreamProfileConfig(
+      name: '720p',
+      width: 1280,
+      height: 720,
+      fps: 20,
+      bitrate: 3000 * 1000,
+      gopSeconds: 1,
+    ),
+    StreamProfileConfig(
+      name: '1080p',
+      width: 1920,
+      height: 1080,
+      fps: 15,
+      bitrate: 5000 * 1000,
+      gopSeconds: 1,
+    ),
+  ];
+}
 
-  /// 固定 H265 推流高度。
-  static const int streamHeight = 1080;
+/// H265 推流清晰度配置。
+class StreamProfileConfig {
+  /// 创建一份清晰度配置。
+  const StreamProfileConfig({
+    required this.name,
+    required this.width,
+    required this.height,
+    required this.fps,
+    required this.bitrate,
+    required this.gopSeconds,
+  });
 
-  /// 固定 H265 推流帧率。
-  static const int streamFps = 15;
+  /// 清晰度名称，例如 `720p` 或 `1080p`。
+  final String name;
 
-  /// 固定 H265 推流码率，单位 bps。
-  static const int streamBitrate = 3000 * 1000;
+  /// H265 推流宽度。
+  final int width;
 
-  /// 固定 H265 推流关键帧间隔，单位秒。
-  static const int streamGopSeconds = 3;
+  /// H265 推流高度。
+  final int height;
+
+  /// H265 推流帧率。
+  final int fps;
+
+  /// H265 推流码率，单位 bps。
+  final int bitrate;
+
+  /// H265 推流关键帧间隔，单位秒。
+  final int gopSeconds;
 }

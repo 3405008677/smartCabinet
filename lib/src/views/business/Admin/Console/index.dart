@@ -6,6 +6,7 @@ import '../../../../app/localization/app_localizations.dart';
 import '../../../../components/Layout/TerminalShell/index.dart';
 import '../../../../core/camera/camera_binding_service.dart';
 import '../../../../core/device/hardware_status_service.dart';
+import '../../../../core/device/kiosk_device_provider.dart';
 import '../../../../core/storage/app_local_store_provider.dart';
 import '../../../../models/admin_model.dart';
 
@@ -46,6 +47,9 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
 
   /// 摄像头绑定服务。
   final CameraBindingService _cameraBindingService = CameraBindingService();
+
+  /// 当前正在执行的推流控制动作。
+  String? _streamProfileAction;
 
   @override
   void initState() {
@@ -137,6 +141,48 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
     });
   }
 
+  /// 按清晰度启动柜外环境推流。
+  Future<void> _startOutsideEnvironmentStreamProfile(String profile) async {
+    if (_streamProfileAction != null) {
+      return;
+    }
+    setState(() => _streamProfileAction = 'start:$profile');
+    try {
+      await ref.read(kioskDeviceProvider).startStreamProfile(profile);
+      final status = await _cameraBindingService
+          .readOutsideEnvironmentStreamStatus();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _outsideEnvironmentStreamStatus = status);
+    } finally {
+      if (mounted) {
+        setState(() => _streamProfileAction = null);
+      }
+    }
+  }
+
+  /// 停止柜外环境当前清晰度推流。
+  Future<void> _stopOutsideEnvironmentStreamProfile(String profile) async {
+    if (_streamProfileAction != null) {
+      return;
+    }
+    setState(() => _streamProfileAction = 'stop:$profile');
+    try {
+      await ref.read(kioskDeviceProvider).stopStreamProfile(profile);
+      final status = await _cameraBindingService
+          .readOutsideEnvironmentStreamStatus();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _outsideEnvironmentStreamStatus = status);
+    } finally {
+      if (mounted) {
+        setState(() => _streamProfileAction = null);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -170,7 +216,12 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
                 cameraConfigError: _cameraConfigError,
                 outsideEnvironmentStreamStatus: _outsideEnvironmentStreamStatus,
                 operationAreaStreamStatus: _operationAreaStreamStatus,
+                streamProfileAction: _streamProfileAction,
                 onConfigureCamera: _configureCameraRole,
+                onStartOutsideEnvironmentStreamProfile:
+                    _startOutsideEnvironmentStreamProfile,
+                onStopOutsideEnvironmentStreamProfile:
+                    _stopOutsideEnvironmentStreamProfile,
               ),
             ),
             const SizedBox(width: 24),
@@ -226,7 +277,10 @@ class _DeviceInfoPanel extends StatelessWidget {
     required this.cameraConfigError,
     required this.outsideEnvironmentStreamStatus,
     required this.operationAreaStreamStatus,
+    required this.streamProfileAction,
     required this.onConfigureCamera,
+    required this.onStartOutsideEnvironmentStreamProfile,
+    required this.onStopOutsideEnvironmentStreamProfile,
   });
 
   /// 当前柜体设备状态。
@@ -250,8 +304,17 @@ class _DeviceInfoPanel extends StatelessWidget {
   /// 操作区摄像头原生 RTSP-H265 推流状态。
   final CameraStreamStatus? operationAreaStreamStatus;
 
+  /// 当前正在执行的推流控制动作。
+  final String? streamProfileAction;
+
   /// 配置摄像头角色时执行的动作。
   final ValueChanged<CabinetCameraRole> onConfigureCamera;
+
+  /// 按清晰度启动柜外环境推流。
+  final ValueChanged<String> onStartOutsideEnvironmentStreamProfile;
+
+  /// 停止柜外环境指定清晰度推流。
+  final ValueChanged<String> onStopOutsideEnvironmentStreamProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -309,6 +372,17 @@ class _DeviceInfoPanel extends StatelessWidget {
         Icons.qr_code_scanner,
       ),
     ];
+    final gridChildren = <Widget>[
+      for (final item in items) _DeviceStatusTile(item),
+      _OutsideEnvironmentStreamControls(
+        status: outsideEnvironmentStreamStatus,
+        action: streamProfileAction,
+        cameraConfigured:
+            cameraBindings[CabinetCameraRole.outsideEnvironment] != null,
+        onStartProfile: onStartOutsideEnvironmentStreamProfile,
+        onStopProfile: onStopOutsideEnvironmentStreamProfile,
+      ),
+    ];
 
     return _ConsoleCard(
       child: Column(
@@ -330,8 +404,8 @@ class _DeviceInfoPanel extends StatelessWidget {
                 crossAxisSpacing: 14,
                 childAspectRatio: 2.35,
               ),
-              itemCount: items.length,
-              itemBuilder: (context, index) => _DeviceStatusTile(items[index]),
+              itemCount: gridChildren.length,
+              itemBuilder: (context, index) => gridChildren[index],
             ),
           ),
         ],
@@ -488,6 +562,163 @@ class _DeviceStatusTile extends StatelessWidget {
         child: content,
       ),
     );
+  }
+}
+
+/// 柜外环境按需推流控制区。
+class _OutsideEnvironmentStreamControls extends StatelessWidget {
+  /// 创建柜外环境按需推流控制区。
+  const _OutsideEnvironmentStreamControls({
+    required this.status,
+    required this.action,
+    required this.cameraConfigured,
+    required this.onStartProfile,
+    required this.onStopProfile,
+  });
+
+  /// 当前柜外环境推流状态。
+  final CameraStreamStatus? status;
+
+  /// 当前正在执行的推流动作。
+  final String? action;
+
+  /// 柜外环境摄像头是否已配置。
+  final bool cameraConfigured;
+
+  /// 启动指定清晰度推流。
+  final ValueChanged<String> onStartProfile;
+
+  /// 停止指定清晰度推流。
+  final ValueChanged<String> onStopProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeProfile = status?.profile ?? '';
+    final activeProfiles = activeProfile
+        .split(',')
+        .map((profile) => profile.trim())
+        .where((profile) => profile.isNotEmpty)
+        .toSet();
+    final statusText = status?.status ?? '未启动';
+    final dualMode = status?.streamMode == 'dual_active_profiles';
+    final modeText = dualMode ? '双路按需，同时推送720p和1080p' : '独立按需，720p和1080p可分别开关';
+    final profiles = const ['720p', '1080p'];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBFE),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE9D7E7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '柜外环境推流按需加载',
+            style: TextStyle(
+              color: Color(0xFF17213D),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '当前：${activeProfile.isEmpty ? '未选择清晰度' : activeProfile} · $statusText',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF6877A2),
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            modeText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF9B6B87),
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          Wrap(
+            spacing: 5,
+            runSpacing: 4,
+            children: [
+              for (final profile in profiles)
+                _StreamProfileMiniButton(
+                  key: ValueKey('admin_stream_start_$profile'),
+                  onPressed: !cameraConfigured || action != null
+                      ? null
+                      : activeProfiles.contains(profile)
+                      ? () => onStopProfile(profile)
+                      : () => onStartProfile(profile),
+                  label: action == 'start:$profile'
+                      ? '启动中'
+                      : action == 'stop:$profile'
+                      ? '停止中'
+                      : activeProfiles.contains(profile)
+                      ? '$profile运行中'
+                      : profile,
+                ),
+              _StreamProfileMiniButton(
+                key: const ValueKey('admin_stream_stop_active'),
+                onPressed: activeProfiles.length != 1 || action != null
+                    ? null
+                    : () => onStopProfile(activeProfiles.first),
+                label:
+                    activeProfiles.length == 1 &&
+                        action == 'stop:${activeProfiles.first}'
+                    ? '停止中'
+                    : '停止',
+                outlined: true,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 推流清晰度小按钮。
+class _StreamProfileMiniButton extends StatelessWidget {
+  /// 创建推流清晰度小按钮。
+  const _StreamProfileMiniButton({
+    required this.label,
+    required this.onPressed,
+    this.outlined = false,
+    super.key,
+  });
+
+  /// 按钮文案。
+  final String label;
+
+  /// 点击动作。
+  final VoidCallback? onPressed;
+
+  /// 是否使用描边样式。
+  final bool outlined;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = Text(label, style: const TextStyle(fontSize: 10));
+    final style = ButtonStyle(
+      visualDensity: VisualDensity.compact,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      minimumSize: const WidgetStatePropertyAll(Size(42, 28)),
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      ),
+    );
+
+    if (outlined) {
+      return OutlinedButton(onPressed: onPressed, style: style, child: child);
+    }
+    return FilledButton.tonal(onPressed: onPressed, style: style, child: child);
   }
 }
 

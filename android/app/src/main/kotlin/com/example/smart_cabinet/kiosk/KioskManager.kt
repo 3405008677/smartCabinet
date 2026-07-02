@@ -20,18 +20,25 @@ import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
 import org.json.JSONObject
+import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
+import java.net.ServerSocket
+import java.net.Socket
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class KioskManager(private val activity: Activity) {
     private val cameraBindingPreferences =
         activity.getSharedPreferences("camera_bindings", Context.MODE_PRIVATE)
 
-    private var outsideEnvironmentStream: H265RtspStream? = null
+    private var outsideEnvironmentStream: DualMediaCodecH265Stream? = null
 
     private var operationAreaStream: H265RtspStream? = null
 
@@ -40,6 +47,16 @@ class KioskManager(private val activity: Activity) {
     private var outsideEnvironmentStreamStatus: String = "未启动"
 
     private var operationAreaStreamStatus: String = "未启动"
+
+    private var activeOutsideEnvironmentProfiles: List<StreamProfile> = emptyList()
+
+    private var enabledOutsideEnvironmentProfiles: Set<String> = emptySet()
+
+    @Volatile
+    private var streamControlServerSocket: ServerSocket? = null
+
+    @Volatile
+    private var streamControlServerThread: Thread? = null
 
     private val streamHandler = Handler(Looper.getMainLooper())
 
@@ -70,15 +87,15 @@ class KioskManager(private val activity: Activity) {
         }
     }
 
-    private val startConfiguredStreamsRunnable = Runnable {
-        startConfiguredStreamsNow()
-    }
-
     private val devicePolicyManager: DevicePolicyManager =
         activity.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
 
     private val activityManager: ActivityManager =
         activity.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+
+    init {
+        enabledOutsideEnvironmentProfiles = readEnabledVideoStreamSwitches()
+    }
 
     private val adminComponent: ComponentName =
         ComponentName(activity, KioskDeviceAdminReceiver::class.java)
@@ -222,42 +239,59 @@ class KioskManager(private val activity: Activity) {
         cameraBindingPreferences.edit().putString(role, cameraId).apply()
         if (role == OUTSIDE_ENVIRONMENT_CAMERA_ROLE) {
             Log.i(TAG, "outside environment camera binding saved, cameraId=$cameraId")
-            startOutsideEnvironmentStream(cameraId, resetReconnect = true)
         }
         if (role == OPERATION_AREA_CAMERA_ROLE) {
             Log.i(TAG, "operation area camera binding saved, cameraId=$cameraId")
-            startOperationAreaStream(cameraId, resetReconnect = true)
         }
     }
 
-    fun startOutsideEnvironmentStreamIfConfigured() {
-        streamHandler.removeCallbacks(startConfiguredStreamsRunnable)
-        streamHandler.postDelayed(startConfiguredStreamsRunnable, START_CONFIGURED_STREAMS_DELAY_MS)
-    }
-
-    fun startConfiguredStreamsFromFlutter() {
-        streamHandler.removeCallbacks(startConfiguredStreamsRunnable)
-        stopOutsideEnvironmentStream()
-        stopOperationAreaStream()
-        startConfiguredStreamsNow()
-    }
-
-    private fun startConfiguredStreamsNow() {
+    fun startStreamProfile(profileName: String) {
+        val profile = findStreamProfile(profileName)
+            ?: throw IllegalArgumentException("unsupported stream profile: $profileName")
+        enabledOutsideEnvironmentProfiles = enabledOutsideEnvironmentProfiles + profile.name
+        updateVideoStreamSwitch(profile.name, true)
         val cameraId = readOutsideEnvironmentCameraId()
-        Log.i(TAG, "start outside environment RTSP H265 stream on app resume, cameraId=$cameraId")
-        startOutsideEnvironmentStream(cameraId)
-        val operationCameraId = cameraBindingPreferences.getString(OPERATION_AREA_CAMERA_ROLE, null)
-        if (!operationCameraId.isNullOrBlank()) {
-            Log.i(TAG, "start operation area RKMPP RTSP H265 stream from saved binding, cameraId=$operationCameraId")
-            startOperationAreaStream(operationCameraId)
+        Log.i(TAG, "start outside environment stream profile on demand, requestedProfile=$profileName, enabled=$enabledOutsideEnvironmentProfiles, cameraId=$cameraId")
+        startOutsideEnvironmentStream(cameraId, resetReconnect = true)
+    }
+
+    fun stopStreamProfile(profileName: String) {
+        val profile = findStreamProfile(profileName)
+            ?: throw IllegalArgumentException("unsupported stream profile: $profileName")
+        enabledOutsideEnvironmentProfiles = enabledOutsideEnvironmentProfiles - profile.name
+        updateVideoStreamSwitch(profile.name, false)
+        streamHandler.removeCallbacks(reconnectRunnable)
+        reconnectAttempts = 0
+        reconnectingCameraId = null
+        if (enabledOutsideEnvironmentProfiles.isEmpty()) {
+            stopOutsideEnvironmentStream()
+            outsideEnvironmentStreamStatus = "720p/1080p 已停止"
+            return
         }
+        val cameraId = readOutsideEnvironmentCameraId()
+        Log.i(TAG, "stop outside environment stream profile on demand, requestedProfile=$profileName, remaining=$enabledOutsideEnvironmentProfiles, cameraId=$cameraId")
+        startOutsideEnvironmentStream(cameraId, resetReconnect = true)
+    }
+
+    fun applyConfiguredStreamSwitches() {
+        enabledOutsideEnvironmentProfiles = readEnabledVideoStreamSwitches()
+        if (enabledOutsideEnvironmentProfiles.isEmpty()) {
+            outsideEnvironmentStreamStatus = "720p/1080p 已停止"
+            return
+        }
+        val cameraId = readOutsideEnvironmentCameraId()
+        Log.i(TAG, "apply configured outside environment stream switches, enabled=$enabledOutsideEnvironmentProfiles, cameraId=$cameraId")
+        startOutsideEnvironmentStream(cameraId, resetReconnect = true)
     }
 
     fun readOutsideEnvironmentStreamStatus(): Map<String, String> {
         return linkedMapOf(
             "status" to outsideEnvironmentStreamStatus,
-            "url" to buildOutsideEnvironmentRtspUrl(),
+            "url" to activeOutsideEnvironmentProfiles.joinToString(",") { profile -> buildOutsideEnvironmentRtspUrl(profile) },
             "cameraId" to readOutsideEnvironmentCameraId(),
+            "profile" to activeOutsideEnvironmentProfiles.joinToString(",") { profile -> profile.name },
+            "enabledProfiles" to enabledOutsideEnvironmentProfiles.joinToString(","),
+            "streamMode" to if (activeOutsideEnvironmentProfiles.size > 1) OUTSIDE_ENVIRONMENT_STREAM_MODE else "profile_active",
             "logFile" to outsideEnvironmentLogFile().absolutePath,
             "downloadsLogFile" to DOWNLOADS_LOG_PATH,
         )
@@ -297,16 +331,179 @@ class KioskManager(private val activity: Activity) {
         )
     }
 
+    fun startStreamControlServer() {
+        if (streamControlServerThread?.isAlive == true) {
+            return
+        }
+        streamControlServerThread = Thread {
+            runCatching {
+                ServerSocket(STREAM_CONTROL_PORT).use { serverSocket ->
+                    streamControlServerSocket = serverSocket
+                    Log.i(TAG, "stream control HTTP server started, port=$STREAM_CONTROL_PORT")
+                    while (!Thread.currentThread().isInterrupted) {
+                        val socket = runCatching { serverSocket.accept() }.getOrNull() ?: break
+                        Thread { handleStreamControlSocket(socket) }.apply {
+                            name = "SmartCabinetStreamControlClient"
+                            start()
+                        }
+                    }
+                }
+            }.onFailure { error ->
+                if (streamControlServerThread?.isInterrupted != true) {
+                    Log.e(TAG, "stream control HTTP server failed", error)
+                }
+            }
+            streamControlServerSocket = null
+        }.apply {
+            name = "SmartCabinetStreamControlServer"
+            start()
+        }
+    }
+
+    fun stopStreamControlServer() {
+        streamControlServerThread?.interrupt()
+        runCatching { streamControlServerSocket?.close() }
+        streamControlServerSocket = null
+        streamControlServerThread = null
+    }
+
+    private fun handleStreamControlSocket(socket: Socket) {
+        socket.use { clientSocket ->
+            val input = BufferedReader(InputStreamReader(clientSocket.getInputStream(), Charsets.UTF_8))
+            val requestLine = input.readLine().orEmpty()
+            val headers = mutableMapOf<String, String>()
+            while (true) {
+                val line = input.readLine() ?: break
+                if (line.isEmpty()) {
+                    break
+                }
+                val separatorIndex = line.indexOf(':')
+                if (separatorIndex > 0) {
+                    headers[line.substring(0, separatorIndex).trim().lowercase(Locale.US)] = line.substring(separatorIndex + 1).trim()
+                }
+            }
+            val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
+            val body = if (contentLength > 0) {
+                CharArray(contentLength).also { chars -> input.read(chars, 0, contentLength) }.concatToString()
+            } else {
+                ""
+            }
+            val response = handleStreamControlRequest(requestLine, body)
+            writeHttpJsonResponse(clientSocket, response.first, response.second)
+        }
+    }
+
+    private fun handleStreamControlRequest(requestLine: String, body: String): Pair<Int, JSONObject> {
+        val parts = requestLine.split(' ')
+        val method = parts.getOrNull(0).orEmpty().uppercase(Locale.US)
+        val path = parts.getOrNull(1).orEmpty().substringBefore('?')
+        return runCatching {
+            when {
+                method == "GET" && path == "/stream/status" -> 200 to streamControlStatusJson()
+                method == "POST" && path == "/stream/profile" -> {
+                    val payload = JSONObject(body.ifBlank { "{}" })
+                    val profileName = payload.optString("profile")
+                    val enabled = payload.optBoolean("enabled")
+                    val profile = findStreamProfile(profileName)
+                        ?: return 400 to streamControlErrorJson("unsupported profile: $profileName")
+                    val resultJson = runStreamControlOnMainThread {
+                        if (enabled) {
+                            startStreamProfile(profile.name)
+                        } else {
+                            stopStreamProfile(profile.name)
+                        }
+                        streamControlStatusJson().put("changedProfile", profile.name).put("changedEnabled", enabled)
+                    }
+                    200 to resultJson
+                }
+                else -> 404 to streamControlErrorJson("unsupported endpoint: $method $path")
+            }
+        }.getOrElse { error ->
+            Log.e(TAG, "stream control request failed", error)
+            500 to streamControlErrorJson(error.message ?: error::class.java.simpleName)
+        }
+    }
+
+    private fun runStreamControlOnMainThread(action: () -> JSONObject): JSONObject {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return action()
+        }
+        var resultJson: JSONObject? = null
+        var resultError: Throwable? = null
+        val latch = CountDownLatch(1)
+        streamHandler.post {
+            runCatching(action)
+                .onSuccess { value -> resultJson = value }
+                .onFailure { error -> resultError = error }
+            latch.countDown()
+        }
+        if (!latch.await(STREAM_CONTROL_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            error("stream control timed out")
+        }
+        resultError?.let { error -> throw error }
+        return resultJson ?: JSONObject()
+    }
+
+    private fun streamControlStatusJson(): JSONObject {
+        val switchJson = JSONObject()
+        STREAM_PROFILES.forEach { profile ->
+            switchJson.put(profile.name, enabledOutsideEnvironmentProfiles.contains(profile.name))
+        }
+        val statusJson = JSONObject()
+        readOutsideEnvironmentStreamStatus().forEach { (key, value) -> statusJson.put(key, value) }
+        return JSONObject()
+            .put("ok", true)
+            .put("switches", switchJson)
+            .put("stream", statusJson)
+    }
+
+    private fun streamControlErrorJson(message: String): JSONObject {
+        return JSONObject().put("ok", false).put("error", message)
+    }
+
+    private fun writeHttpJsonResponse(socket: Socket, statusCode: Int, body: JSONObject) {
+        val statusText = if (statusCode in 200..299) "OK" else "Error"
+        val bodyText = body.toString()
+        OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8).use { writer ->
+            writer.write("HTTP/1.1 $statusCode $statusText\r\n")
+            writer.write("Content-Type: application/json; charset=utf-8\r\n")
+            writer.write("Content-Length: ${bodyText.toByteArray(Charsets.UTF_8).size}\r\n")
+            writer.write("Connection: close\r\n")
+            writer.write("\r\n")
+            writer.write(bodyText)
+            writer.flush()
+        }
+    }
+
+    private fun updateVideoStreamSwitch(profileName: String, enabled: Boolean) {
+        runCatching {
+            val preferences = activity.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val rawState = preferences.getString("flutter.$APP_LOCAL_STATE_KEY", null)
+            val stateJson = if (rawState.isNullOrBlank()) JSONObject() else JSONObject(rawState)
+            val videoJson = stateJson.optJSONObject("video") ?: JSONObject()
+            val switchJson = videoJson.optJSONObject("streamSwitches") ?: JSONObject()
+            switchJson.put(profileName, enabled)
+            videoJson.put("streamSwitches", switchJson)
+            stateJson.put("video", videoJson)
+            preferences.edit().putString("flutter.$APP_LOCAL_STATE_KEY", stateJson.toString()).apply()
+        }.onFailure { error ->
+            Log.e(TAG, "update video stream switch failed, profile=$profileName, enabled=$enabled", error)
+        }
+    }
+
+    private fun readEnabledVideoStreamSwitches(): Set<String> {
+        val switchJson = readVideoConfig().optJSONObject("streamSwitches") ?: JSONObject()
+        return STREAM_PROFILES
+            .filter { profile -> switchJson.optBoolean(profile.name, false) }
+            .map { profile -> profile.name }
+            .toSet()
+    }
+
     private fun startOutsideEnvironmentStream(
         cameraId: String,
         resetReconnect: Boolean = false,
         triggeredByReconnect: Boolean = false,
     ) {
-        if (outsideEnvironmentStream?.isStreaming() == true) {
-            outsideEnvironmentStreamStatus = "推流中"
-            return
-        }
-
         streamHandler.removeCallbacks(reconnectRunnable)
         if (resetReconnect) {
             reconnectAttempts = 0
@@ -317,33 +514,39 @@ class KioskManager(private val activity: Activity) {
 
         stopOutsideEnvironmentStream()
 
+        val profiles = STREAM_PROFILES.filter { profile -> enabledOutsideEnvironmentProfiles.contains(profile.name) }
+        if (profiles.isEmpty()) {
+            outsideEnvironmentStreamStatus = "720p/1080p 已停止"
+            appendOutsideEnvironmentLog("stream start skipped, no enabled profiles")
+            return
+        }
+
         try {
             val videoConfig = readVideoConfig()
-            val url = buildOutsideEnvironmentRtspUrl()
-            val streamWidth = STREAM_WIDTH
-            val streamHeight = STREAM_HEIGHT
-            val streamFps = STREAM_FPS
-            val streamBitrate = STREAM_VIDEO_BITRATE
-            val streamGopSeconds = STREAM_IFRAME_INTERVAL
-            Log.i(TAG, "starting outside environment GStreamer RTSP H265 stream, cameraId=$cameraId, url=$url, videoConfig=$videoConfig")
+            val requests = profiles.map { profile ->
+                DualMediaCodecH265Stream.StreamRequest(
+                    profile = profile.name,
+                    url = buildOutsideEnvironmentRtspUrl(profile),
+                    width = profile.width,
+                    height = profile.height,
+                    fps = profile.fps,
+                    bitrate = profile.bitrate,
+                    iframeInterval = profile.gopSeconds,
+                )
+            }
+            Log.i(TAG, "starting outside environment RKMPP RTSP H265 streams, cameraId=$cameraId, profiles=${profiles.map { it.name }}, videoConfig=$videoConfig")
             resetOutsideEnvironmentLog()
-            appendOutsideEnvironmentLog("build=$H265_BUILD_MARK encoder=${selectH265EncoderName()} protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=$url size=${streamWidth}x$streamHeight fps=$streamFps bitrate=$streamBitrate gop=${streamGopSeconds}s")
-            appendOutsideEnvironmentLog("starting H265 RTSP stream, cameraId=$cameraId, url=$url")
-            val stream = createH265Stream(gStreamerBridge) { status ->
-                outsideEnvironmentStreamStatus = status
+            requests.forEach { request ->
+                appendOutsideEnvironmentLog("profile=${request.profile} build=$H265_BUILD_MARK encoder=rkmpp protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=${request.url} size=${request.width}x${request.height} fps=${request.fps} bitrate=${request.bitrate} gop=${request.iframeInterval}s")
+            }
+            appendOutsideEnvironmentLog("starting H265 RTSP streams, cameraId=$cameraId, profiles=${profiles.joinToString(",") { it.name }}")
+            val stream = DualMediaCodecH265Stream(activity.applicationContext, gStreamerBridge) { status ->
+                outsideEnvironmentStreamStatus = "${profiles.joinToString(",") { it.name }} $status"
                 Log.i(TAG, "outside environment H265 status: $status")
                 appendOutsideEnvironmentLog("status=$status")
                 handleOutsideEnvironmentRuntimeStatus(cameraId, status)
             }
-            val started = stream.start(
-                cameraId = cameraId,
-                url = url,
-                width = streamWidth,
-                height = streamHeight,
-                fps = streamFps,
-                bitrate = streamBitrate,
-                iframeInterval = streamGopSeconds,
-            )
+            val started = stream.start(cameraId, requests)
             if (!started) {
                 val reason = outsideEnvironmentStreamStatus
                 outsideEnvironmentStreamStatus = "H265 推流启动失败：$reason"
@@ -354,10 +557,11 @@ class KioskManager(private val activity: Activity) {
             }
 
             outsideEnvironmentStream = stream
-            outsideEnvironmentStreamStatus = "推流启动中"
+            activeOutsideEnvironmentProfiles = profiles
+            outsideEnvironmentStreamStatus = "${profiles.joinToString(",") { it.name }} 推流启动中"
             appendOutsideEnvironmentLog("stream object started")
         } catch (error: Throwable) {
-            outsideEnvironmentStreamStatus = "推流启动失败：${error.message ?: error::class.java.simpleName}"
+            outsideEnvironmentStreamStatus = "${enabledOutsideEnvironmentProfiles.joinToString(",")} 推流启动失败：${error.message ?: error::class.java.simpleName}"
             Log.e(TAG, "outside environment GStreamer RTSP H265 stream start failed", error)
             appendOutsideEnvironmentLog("start failed", error)
             stopOutsideEnvironmentStream()
@@ -376,6 +580,7 @@ class KioskManager(private val activity: Activity) {
         runCatching { stream.stop() }
             .onFailure { error -> appendOutsideEnvironmentLog("stop failed", error) }
         outsideEnvironmentStream = null
+        activeOutsideEnvironmentProfiles = emptyList()
         appendOutsideEnvironmentLog("stream stopped")
     }
 
@@ -643,11 +848,12 @@ class KioskManager(private val activity: Activity) {
         try {
             val videoConfig = readVideoConfig()
             val url = buildOperationAreaRtspUrl()
-            val streamWidth = STREAM_WIDTH
-            val streamHeight = STREAM_HEIGHT
-            val streamFps = STREAM_FPS
-            val streamBitrate = STREAM_VIDEO_BITRATE
-            val streamGopSeconds = STREAM_IFRAME_INTERVAL
+            val profile = DEFAULT_STREAM_PROFILE
+            val streamWidth = profile.width
+            val streamHeight = profile.height
+            val streamFps = profile.fps
+            val streamBitrate = profile.bitrate
+            val streamGopSeconds = profile.gopSeconds
             Log.i(TAG, "starting operation area RTSP H265 stream, cameraId=$cameraId, url=$url, videoConfig=$videoConfig")
             appendOutsideEnvironmentLog("role=operationArea build=$H265_BUILD_MARK encoder=${selectH265EncoderName()} protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=$url size=${streamWidth}x$streamHeight fps=$streamFps bitrate=$streamBitrate gop=${streamGopSeconds}s")
             appendOutsideEnvironmentLog("role=operationArea starting H265 RTSP stream, cameraId=$cameraId, url=$url")
@@ -754,12 +960,13 @@ class KioskManager(private val activity: Activity) {
             manufacturer.contains("rockchip")
     }
 
-    private fun buildOutsideEnvironmentRtspUrl(): String {
+    private fun buildOutsideEnvironmentRtspUrl(profile: StreamProfile): String {
         val androidId = Settings.Secure.getString(
             activity.contentResolver,
             Settings.Secure.ANDROID_ID,
         ) ?: "unknown"
-        return normalizeRtspStreamUrl(readVideoStreamUrl(), androidId)
+        val deviceStreamUrl = normalizeRtspStreamUrl(readVideoStreamUrl(), androidId)
+        return "${deviceStreamUrl.substringBeforeLast('/')}/${androidId}_${profile.name}"
     }
 
     private fun buildOperationAreaRtspUrl(): String {
@@ -768,6 +975,12 @@ class KioskManager(private val activity: Activity) {
             Settings.Secure.ANDROID_ID,
         ) ?: "unknown"
         return "${normalizeRtspStreamUrl(readVideoStreamUrl(), androidId).trimEnd('/')}-operation"
+    }
+
+    private fun findStreamProfile(profileName: String): StreamProfile? {
+        return STREAM_PROFILES.firstOrNull { profile ->
+            profile.name.equals(profileName.trim(), ignoreCase = true)
+        }
     }
 
     private fun readVideoStreamUrl(): String {
@@ -859,16 +1072,24 @@ class KioskManager(private val activity: Activity) {
     }
 
     companion object {
+        private data class StreamProfile(
+            val name: String,
+            val width: Int,
+            val height: Int,
+            val fps: Int,
+            val bitrate: Int,
+            val gopSeconds: Int,
+        )
+
         private const val OUTSIDE_ENVIRONMENT_CAMERA_ROLE = "outsideEnvironment"
         private const val OPERATION_AREA_CAMERA_ROLE = "operationArea"
         private const val DEFAULT_OUTSIDE_ENVIRONMENT_CAMERA_ID = "0"
-        private const val STREAM_WIDTH = 1920
-        private const val STREAM_HEIGHT = 1080
-        private const val STREAM_FPS = 15
-        private const val STREAM_VIDEO_BITRATE = 3000 * 1000
-        private const val STREAM_IFRAME_INTERVAL = 3
+        private val STREAM_PROFILES = listOf(
+            StreamProfile("720p", 1280, 720, 20, 3000 * 1000, 1),
+            StreamProfile("1080p", 1920, 1080, 15, 5000 * 1000, 1),
+        )
+        private val DEFAULT_STREAM_PROFILE = STREAM_PROFILES.first { profile -> profile.name == "720p" }
         private const val RECONNECT_DELAY_MS = 3000L
-        private const val START_CONFIGURED_STREAMS_DELAY_MS = 2000L
         private const val MAX_RECONNECT_ATTEMPTS = 100
         private const val ERROR_UPLOAD_FAILURE_COOLDOWN_MS = 60_000L
         private const val TAG = "SmartCabinetStream"
@@ -878,7 +1099,10 @@ class KioskManager(private val activity: Activity) {
         private const val UNIFIED_ERROR_LOG_FILE_NAME = "smart_cabinet_error.log"
         private const val DEFAULT_ERROR_REPORT_URL = "http://192.168.1.100:3000/api/logs/error"
         private const val DEFAULT_STREAM_BASE_URL = "rtsp://183.56.183.39:8888/app"
+        private const val STREAM_CONTROL_PORT = 18080
+        private const val STREAM_CONTROL_TIMEOUT_MS = 15_000L
         private const val DOWNLOADS_LOG_PATH = "Download/SmartCabinetLogs/smart_cabinet_rtsp_h265.log"
+        private const val OUTSIDE_ENVIRONMENT_STREAM_MODE = "dual_active_profiles"
 
         private val CAMERA_ROLES = listOf(
             "faceRecognition",

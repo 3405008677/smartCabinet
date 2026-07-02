@@ -19,7 +19,7 @@ final class AppLocalState {
     },
     this.video = const <String, Object?>{
       'streamUrl': '',
-      'streamingEnabled': false,
+      'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
     },
   });
 
@@ -92,7 +92,7 @@ final class AppLocalState {
       }, json['logging']),
       video: _mergeObjectMap(const <String, Object?>{
         'streamUrl': '',
-        'streamingEnabled': false,
+        'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
       }, json['video']),
     );
   }
