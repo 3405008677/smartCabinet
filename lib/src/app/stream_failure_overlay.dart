@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../components/Feedback/Message/index.dart';
-import '../core/camera/camera_binding_service.dart';
+import '../core/camera/index.dart';
 
 /// 全局推流失败提示层。
 class StreamFailureOverlay extends StatefulWidget {
@@ -11,7 +11,7 @@ class StreamFailureOverlay extends StatefulWidget {
   const StreamFailureOverlay({
     required this.child,
     required this.navigatorKey,
-    this.cameraBindingService = const CameraBindingService(),
+    this.cameraService = const CabinetCameraService(),
     this.pollingInterval = const Duration(seconds: 2),
     super.key,
   });
@@ -22,8 +22,8 @@ class StreamFailureOverlay extends StatefulWidget {
   /// 应用导航器，用于在 [MaterialApp.builder] 外层安全展示全局弹窗。
   final GlobalKey<NavigatorState> navigatorKey;
 
-  /// 摄像头绑定与推流状态服务。
-  final CameraBindingService cameraBindingService;
+  /// 摄像头与推流状态服务。
+  final CabinetCameraService cameraService;
 
   /// 推流状态轮询间隔。
   final Duration pollingInterval;
@@ -67,9 +67,9 @@ class _StreamFailureOverlayState extends State<StreamFailureOverlay> {
     }
     _checkingStatus = true;
     try {
-      final outsideStatus = await widget.cameraBindingService
+      final outsideStatus = await widget.cameraService
           .readOutsideEnvironmentStreamStatus();
-      final operationStatus = await widget.cameraBindingService
+      final operationStatus = await widget.cameraService
           .readOperationAreaStreamStatus();
       if (!mounted) {
         return;

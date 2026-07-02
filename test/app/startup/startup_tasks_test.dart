@@ -1,13 +1,13 @@
 import 'package:camera/camera.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_cabinet/src/app/startup/startup_tasks.dart';
-import 'package:smart_cabinet/src/core/camera/camera_binding_service.dart';
+import 'package:smart_cabinet/src/core/camera/index.dart';
 
 void main() {
-  tearDown(CameraBindingService.debugReset);
+  tearDown(CabinetCameraService.debugReset);
 
   test('camera startup task succeeds when cameras are available', () async {
-    CameraBindingService.debugUseCameraData(
+    CabinetCameraService.debugUseCameraData(
       cameras: const [
         CameraDescription(
           name: 'cameraId_0',
@@ -21,7 +21,7 @@ void main() {
   });
 
   test('camera startup task fails when no camera is available', () async {
-    CameraBindingService.debugUseCameraData(cameras: const []);
+    CabinetCameraService.debugUseCameraData(cameras: const []);
 
     await expectLater(
       const LoadCamerasStartupTask(
@@ -66,7 +66,7 @@ void main() {
   test(
     'camera startup task can allow empty cameras for non-camera terminals',
     () async {
-      CameraBindingService.debugUseCameraData(cameras: const []);
+      CabinetCameraService.debugUseCameraData(cameras: const []);
 
       await const LoadCamerasStartupTask(requireAtLeastOneCamera: false).run();
     },

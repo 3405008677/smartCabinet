@@ -1,4 +1,4 @@
-import '../config/app_config.dart';
+import '../config/index.dart';
 import '../device/device_info_service.dart';
 import 'app_local_store.dart';
 

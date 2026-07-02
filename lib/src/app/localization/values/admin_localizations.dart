@@ -166,55 +166,6 @@ const adminLocalizations = {
     AppLanguage.english: 'Certificate Capture Camera',
     AppLanguage.japanese: '合格証撮影カメラ',
   },
-  'adminCameraUnconfigured': {
-    AppLanguage.simplifiedChinese: '未配置',
-    AppLanguage.traditionalChinese: '未配置',
-    AppLanguage.english: 'Not configured',
-    AppLanguage.japanese: '未設定',
-  },
-  'adminCameraTapToConfigure': {
-    AppLanguage.simplifiedChinese: '点击配置',
-    AppLanguage.traditionalChinese: '點擊配置',
-    AppLanguage.english: 'Tap to configure',
-    AppLanguage.japanese: 'タップして設定',
-  },
-  'adminCameraConfigTitle': {
-    AppLanguage.simplifiedChinese: '配置 {role}',
-    AppLanguage.traditionalChinese: '配置 {role}',
-    AppLanguage.english: 'Configure {role}',
-    AppLanguage.japanese: '{role} を設定',
-  },
-  'adminCameraConfigSubtitle': {
-    AppLanguage.simplifiedChinese: '请选择该业务场景要使用的物理摄像头，保存后业务流程会按角色读取配置。',
-    AppLanguage.traditionalChinese: '請選擇該業務場景要使用的實體攝影機，保存後業務流程會按角色讀取配置。',
-    AppLanguage.english:
-        'Select the physical camera for this scenario. Workflows will read the saved role binding.',
-    AppLanguage.japanese: 'この業務シナリオで使う物理カメラを選択してください。保存後、業務フローは役割設定を読み取ります。',
-  },
-  'adminCameraPhysicalCamera': {
-    AppLanguage.simplifiedChinese: '物理摄像头',
-    AppLanguage.traditionalChinese: '實體攝影機',
-    AppLanguage.english: 'Physical Camera',
-    AppLanguage.japanese: '物理カメラ',
-  },
-  'adminCameraPreviewPlaceholder': {
-    AppLanguage.simplifiedChinese: '预览区：后续接入真实摄像头画面',
-    AppLanguage.traditionalChinese: '預覽區：後續接入真實攝影機畫面',
-    AppLanguage.english: 'Preview: real camera feed will be connected later',
-    AppLanguage.japanese: 'プレビュー：後で実カメラ映像を接続します',
-  },
-  'adminCameraCancel': {
-    AppLanguage.simplifiedChinese: '取消',
-    AppLanguage.traditionalChinese: '取消',
-    AppLanguage.english: 'Cancel',
-    AppLanguage.japanese: 'キャンセル',
-  },
-  'adminCameraSave': {
-    AppLanguage.simplifiedChinese: '保存配置',
-    AppLanguage.traditionalChinese: '保存配置',
-    AppLanguage.english: 'Save Configuration',
-    AppLanguage.japanese: '設定を保存',
-  },
   'adminDeviceNfc': {
     AppLanguage.simplifiedChinese: 'NFC',
     AppLanguage.traditionalChinese: 'NFC',

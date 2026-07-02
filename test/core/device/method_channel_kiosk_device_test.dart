@@ -23,11 +23,14 @@ void main() {
           return null;
         });
 
-    await device.startStreamProfile('720p');
+    await device.startStreamProfile('720p', cameraId: '0');
 
     expect(calls, hasLength(1));
     expect(calls.single.method, 'startStreamProfile');
-    expect(calls.single.arguments, <String, Object?>{'profile': '720p'});
+    expect(calls.single.arguments, <String, Object?>{
+      'profile': '720p',
+      'cameraId': '0',
+    });
   });
 
   test('stops the requested stream profile on demand', () async {
@@ -40,10 +43,13 @@ void main() {
           return null;
         });
 
-    await device.stopStreamProfile('1080p');
+    await device.stopStreamProfile('1080p', cameraId: '0');
 
     expect(calls, hasLength(1));
     expect(calls.single.method, 'stopStreamProfile');
-    expect(calls.single.arguments, <String, Object?>{'profile': '1080p'});
+    expect(calls.single.arguments, <String, Object?>{
+      'profile': '1080p',
+      'cameraId': '0',
+    });
   });
 }

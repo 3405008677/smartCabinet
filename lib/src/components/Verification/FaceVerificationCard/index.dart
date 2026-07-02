@@ -4,7 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/localization/app_localizations.dart';
-import '../../../core/camera/camera_binding_service.dart';
+import '../../../core/camera/index.dart';
 import '../../../core/device/hardware_recovery_advice.dart';
 
 /// 人脸识别流程状态。
@@ -75,8 +75,8 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
   /// 当前摄像头异常恢复建议。
   HardwareRecoveryAdvice? _recoveryAdvice;
 
-  /// 摄像头绑定服务。
-  final CameraBindingService _cameraBindingService = CameraBindingService();
+  /// 摄像头服务。
+  final CabinetCameraService _cameraService = const CabinetCameraService();
 
   @override
   void initState() {
@@ -113,7 +113,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
     });
 
     try {
-      final selectedCamera = await _cameraBindingService
+      final selectedCamera = await _cameraService
           .resolveFaceRecognitionCamera();
       if (selectedCamera == null) {
         _markCameraFailure('未检测到可用摄像头');

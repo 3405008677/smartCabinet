@@ -16,6 +16,25 @@ enum CabinetCameraRole {
   certificateCapture,
 }
 
+/// 开发时指定的四路摄像头配置。
+///
+/// 需要更换摄像头时只改这里，不再通过管理员控制台配置。
+class CabinetCameraConfig {
+  const CabinetCameraConfig._();
+
+  /// 人脸识别摄像头 ID，对应 Flutter camera 插件的 CameraDescription.name。
+  static const String faceRecognitionCameraId = 'cameraId_0';
+
+  /// 柜外环境摄像头 ID，对应 Android Camera2 cameraId。
+  static const String outsideEnvironmentCameraId = '0';
+
+  /// 操作区域摄像头 ID，对应 Android Camera2 cameraId。
+  static const String operationAreaCameraId = '';
+
+  /// 合格证采集摄像头 ID，对应 Flutter camera 插件的 CameraDescription.name。
+  static const String certificateCaptureCameraId = 'cameraId_2';
+}
+
 /// 业务可展示和可保存的摄像头设备信息。
 class CabinetCameraDevice {
   /// 创建摄像头设备信息。
@@ -89,19 +108,16 @@ class CameraStreamStatus {
   }
 }
 
-/// 摄像头枚举、绑定读取和绑定保存服务。
-class CameraBindingService {
-  /// 创建摄像头绑定服务。
-  const CameraBindingService();
+/// 摄像头枚举和开发时指定摄像头解析服务。
+class CabinetCameraService {
+  /// 创建摄像头服务。
+  const CabinetCameraService();
 
   /// Android 原生存储通道。
   static const MethodChannel _channel = MethodChannel('smart_cabinet/kiosk');
 
   /// 测试环境覆盖的摄像头列表。
   static List<CameraDescription>? _debugCameras;
-
-  /// 测试环境覆盖的绑定关系。
-  static Map<CabinetCameraRole, String>? _debugBindings;
 
   /// 测试环境覆盖的柜外环境推流状态。
   static CameraStreamStatus? _debugOutsideEnvironmentStreamStatus;
@@ -145,54 +161,15 @@ class CameraBindingService {
     ];
   }
 
-  /// 读取当前四路摄像头角色绑定关系。
-  Future<Map<CabinetCameraRole, String>> loadBindings() async {
-    final debugBindings = _debugBindings;
-    if (debugBindings != null) {
-      return Map<CabinetCameraRole, String>.of(debugBindings);
-    }
-
-    final rawBindings = await _channel.invokeMapMethod<String, String>(
-      'readCameraBindings',
-    );
-    final bindings = <CabinetCameraRole, String>{};
-    rawBindings?.forEach((roleName, cameraId) {
-      final role = _roleFromName(roleName);
-      if (role != null && cameraId.isNotEmpty) {
-        bindings[role] = cameraId;
-      }
-    });
-    return bindings;
-  }
-
-  /// 保存指定业务角色和物理摄像头的绑定关系。
-  Future<void> saveBinding(CabinetCameraRole role, String cameraId) async {
-    final debugBindings = _debugBindings;
-    if (debugBindings != null) {
-      debugBindings[role] = cameraId;
-      return;
-    }
-
-    await _channel.invokeMethod<void>('writeCameraBinding', {
-      'role': role.name,
-      'cameraId': cameraId,
-    });
-  }
-
   /// 读取柜外环境摄像头原生推流状态。
   Future<CameraStreamStatus> readOutsideEnvironmentStreamStatus() async {
     final debugStatus = _debugOutsideEnvironmentStreamStatus;
     if (debugStatus != null) {
       return debugStatus;
     }
-    if (_debugBindings != null) {
-      return CameraStreamStatus(
-        status: '未启动',
-        url: '',
-        cameraId: _debugBindings?[CabinetCameraRole.outsideEnvironment] ?? '',
-      );
+    if (_debugCameras != null) {
+      return const CameraStreamStatus(status: '未启动', url: '', cameraId: '');
     }
-
     final rawStatus = await _channel.invokeMapMethod<String, Object?>(
       'readOutsideEnvironmentStreamStatus',
     );
@@ -209,14 +186,9 @@ class CameraBindingService {
     if (debugStatus != null) {
       return debugStatus;
     }
-    if (_debugBindings != null) {
-      return CameraStreamStatus(
-        status: '未启动',
-        url: '',
-        cameraId: _debugBindings?[CabinetCameraRole.operationArea] ?? '',
-      );
+    if (_debugCameras != null) {
+      return const CameraStreamStatus(status: '未启动', url: '', cameraId: '');
     }
-
     final rawStatus = await _channel.invokeMapMethod<String, Object?>(
       'readOperationAreaStreamStatus',
     );
@@ -234,13 +206,12 @@ class CameraBindingService {
       return null;
     }
 
-    final bindings = await loadBindings();
-    final configuredCameraId = bindings[CabinetCameraRole.faceRecognition];
-    if (configuredCameraId != null) {
-      final configuredCamera = _findById(cameras, configuredCameraId);
-      if (configuredCamera != null) {
-        return configuredCamera.description;
-      }
+    final configuredCamera = _findById(
+      cameras,
+      CabinetCameraConfig.faceRecognitionCameraId,
+    );
+    if (configuredCamera != null) {
+      return configuredCamera.description;
     }
 
     final frontCamera = cameras.where(
@@ -251,15 +222,13 @@ class CameraBindingService {
         : cameras.first.description;
   }
 
-  /// 设置测试摄像头列表和绑定关系。
+  /// 设置测试摄像头列表和推流状态。
   static void debugUseCameraData({
     required List<CameraDescription> cameras,
-    Map<CabinetCameraRole, String> bindings = const {},
     CameraStreamStatus? outsideEnvironmentStreamStatus,
     CameraStreamStatus? operationAreaStreamStatus,
   }) {
     _debugCameras = cameras;
-    _debugBindings = Map<CabinetCameraRole, String>.of(bindings);
     _debugOutsideEnvironmentStreamStatus = outsideEnvironmentStreamStatus;
     _debugOperationAreaStreamStatus = operationAreaStreamStatus;
   }
@@ -267,7 +236,6 @@ class CameraBindingService {
   /// 清理测试摄像头覆盖数据。
   static void debugReset() {
     _debugCameras = null;
-    _debugBindings = null;
     _debugOutsideEnvironmentStreamStatus = null;
     _debugOperationAreaStreamStatus = null;
     _cachedCameras = null;
@@ -278,6 +246,9 @@ class CameraBindingService {
     List<CabinetCameraDevice> cameras,
     String cameraId,
   ) {
+    if (cameraId.isEmpty) {
+      return null;
+    }
     for (final camera in cameras) {
       if (camera.id == cameraId) {
         return camera;
@@ -300,15 +271,5 @@ class CameraBindingService {
       CameraLensType.unknown => '标准',
     };
     return '${camera.name} · $directionName · $lensTypeName · ${camera.sensorOrientation}° · #${index + 1}';
-  }
-
-  /// 根据持久化名称还原摄像头角色。
-  CabinetCameraRole? _roleFromName(String roleName) {
-    for (final role in CabinetCameraRole.values) {
-      if (role.name == roleName) {
-        return role;
-      }
-    }
-    return null;
   }
 }

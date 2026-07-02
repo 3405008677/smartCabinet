@@ -10,7 +10,7 @@ import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/app/app.dart';
 import 'package:smart_cabinet/src/app/router/app_router.dart';
 import 'package:smart_cabinet/src/app/startup/startup_media.dart';
-import 'package:smart_cabinet/src/core/camera/camera_binding_service.dart';
+import 'package:smart_cabinet/src/core/camera/index.dart';
 
 const MethodChannel _kioskChannel = MethodChannel('smart_cabinet/kiosk');
 
@@ -49,17 +49,14 @@ void main() {
     /// 每个测试开始前都先恢复到简体中文，避免前一个用例修改全局语言造成串扰。
     appLocaleController.setLanguage(AppLanguage.simplifiedChinese);
     StartupMedia.minimumDisplayDuration = Duration.zero;
-    CameraBindingService.debugUseCameraData(
-      cameras: _testCameras,
-      bindings: const {CabinetCameraRole.faceRecognition: 'cameraId_0'},
-    );
+    CabinetCameraService.debugUseCameraData(cameras: _testCameras);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_kioskChannel, null);
   });
 
   tearDown(() {
     StartupMedia.minimumDisplayDuration = const Duration(milliseconds: 1200);
-    CameraBindingService.debugReset();
+    CabinetCameraService.debugReset();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_kioskChannel, null);
   });
@@ -791,7 +788,7 @@ void main() {
     expect(find.text('3. Auto Detect'), findsOneWidget);
   });
 
-  testWidgets('admin console configures camera role binding', (
+  testWidgets('admin console shows fixed camera roles without config dialog', (
     WidgetTester tester,
   ) async {
     await _pumpSmartCabinetApp(tester);
@@ -808,35 +805,20 @@ void main() {
     await tester.tap(certificateCamera);
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('配置 合格证采集摄像头'), findsOneWidget);
-    expect(find.text('物理摄像头'), findsOneWidget);
+    expect(find.text('开发时指定'), findsWidgets);
+    expect(find.text('配置 合格证采集摄像头'), findsNothing);
+    expect(find.text('物理摄像头'), findsNothing);
     expect(
       find.byKey(const ValueKey('admin_camera_preview_panel')),
-      findsOneWidget,
+      findsNothing,
     );
-
-    await tester.tap(
-      find.byKey(const ValueKey('admin_camera_config_dropdown')),
-    );
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.textContaining('cameraId_1').last);
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text('保存配置'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('配置 合格证采集摄像头'), findsNothing);
-    expect(find.textContaining('cameraId_1'), findsWidgets);
   });
 
   testWidgets('admin stream profile controls expose single active mode', (
     WidgetTester tester,
   ) async {
-    CameraBindingService.debugUseCameraData(
+    CabinetCameraService.debugUseCameraData(
       cameras: _testCameras,
-      bindings: const {
-        CabinetCameraRole.faceRecognition: 'cameraId_0',
-        CabinetCameraRole.outsideEnvironment: 'cameraId_1',
-      },
       outsideEnvironmentStreamStatus: const CameraStreamStatus(
         status: '720p/1080p 双路推流中',
         url:

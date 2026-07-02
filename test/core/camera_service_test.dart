@@ -1,13 +1,13 @@
 import 'package:camera/camera.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_cabinet/src/core/camera/camera_binding_service.dart';
-import 'package:smart_cabinet/src/core/config/app_config.dart';
+import 'package:smart_cabinet/src/core/camera/index.dart';
+import 'package:smart_cabinet/src/core/config/index.dart';
 
 void main() {
-  tearDown(CameraBindingService.debugReset);
+  tearDown(CabinetCameraService.debugReset);
 
-  test('face recognition uses admin configured camera binding', () async {
-    CameraBindingService.debugUseCameraData(
+  test('face recognition uses front camera by default', () async {
+    CabinetCameraService.debugUseCameraData(
       cameras: const [
         CameraDescription(
           name: 'cameraId_0',
@@ -20,17 +20,16 @@ void main() {
           sensorOrientation: 0,
         ),
       ],
-      bindings: const {CabinetCameraRole.faceRecognition: 'cameraId_2'},
     );
 
-    final selectedCamera = await CameraBindingService()
+    final selectedCamera = await const CabinetCameraService()
         .resolveFaceRecognitionCamera();
 
-    expect(selectedCamera?.name, 'cameraId_2');
+    expect(selectedCamera?.name, 'cameraId_0');
   });
 
   test('face recognition falls back to front camera without binding', () async {
-    CameraBindingService.debugUseCameraData(
+    CabinetCameraService.debugUseCameraData(
       cameras: const [
         CameraDescription(
           name: 'cameraId_1',
@@ -45,14 +44,14 @@ void main() {
       ],
     );
 
-    final selectedCamera = await CameraBindingService()
+    final selectedCamera = await const CabinetCameraService()
         .resolveFaceRecognitionCamera();
 
     expect(selectedCamera?.name, 'cameraId_0');
   });
 
   test('reads outside environment stream status from debug data', () async {
-    CameraBindingService.debugUseCameraData(
+    CabinetCameraService.debugUseCameraData(
       cameras: const [],
       outsideEnvironmentStreamStatus: const CameraStreamStatus(
         status: '推流中',
@@ -63,7 +62,7 @@ void main() {
       ),
     );
 
-    final status = await CameraBindingService()
+    final status = await const CabinetCameraService()
         .readOutsideEnvironmentStreamStatus();
 
     expect(status.status, '推流中');
@@ -76,7 +75,7 @@ void main() {
   test(
     'reads operation area RTSP H265 stream status from debug data',
     () async {
-      CameraBindingService.debugUseCameraData(
+      CabinetCameraService.debugUseCameraData(
         cameras: const [],
         operationAreaStreamStatus: const CameraStreamStatus(
           status: '推流中',
@@ -85,7 +84,7 @@ void main() {
         ),
       );
 
-      final status = await CameraBindingService()
+      final status = await const CabinetCameraService()
           .readOperationAreaStreamStatus();
 
       expect(status.status, '推流中');

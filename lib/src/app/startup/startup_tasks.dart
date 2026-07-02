@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/camera/camera_binding_service.dart';
+import '../../core/camera/index.dart';
 import '../../core/storage/app_local_store_provider.dart';
 import '../../core/storage/local_store_bootstrap_service.dart';
 import 'startup_task.dart';
@@ -39,13 +39,13 @@ class CacheLocalStoreStartupTask implements StartupTask {
 class LoadCamerasStartupTask implements StartupTask {
   /// 创建摄像头加载启动任务。
   const LoadCamerasStartupTask({
-    CameraBindingService? cameraBindingService,
+    CabinetCameraService? cameraService,
     bool requireAtLeastOneCamera = true,
     CameraLoader? cameraLoader,
     int maxAttempts = 6,
     Duration retryDelay = const Duration(seconds: 2),
   }) : this._(
-         cameraBindingService,
+         cameraService,
          requireAtLeastOneCamera,
          cameraLoader,
          maxAttempts,
@@ -53,14 +53,14 @@ class LoadCamerasStartupTask implements StartupTask {
        );
 
   const LoadCamerasStartupTask._(
-    this._cameraBindingService,
+    this._cameraService,
     this._requireAtLeastOneCamera,
     this._cameraLoader,
     this._maxAttempts,
     this._retryDelay,
   );
 
-  final CameraBindingService? _cameraBindingService;
+  final CabinetCameraService? _cameraService;
   final bool _requireAtLeastOneCamera;
   final CameraLoader? _cameraLoader;
   final int _maxAttempts;
@@ -109,7 +109,7 @@ class LoadCamerasStartupTask implements StartupTask {
       return cameraLoader(forceReload: forceReload);
     }
 
-    return (_cameraBindingService ?? CameraBindingService())
+    return (_cameraService ?? const CabinetCameraService())
         .loadAvailableCameras(forceReload: forceReload);
   }
 }

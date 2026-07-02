@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smart_cabinet/src/core/config/app_config.dart';
+import 'package:smart_cabinet/src/core/config/index.dart';
 import 'package:smart_cabinet/src/core/storage/app_local_store.dart';
 import 'package:smart_cabinet/src/core/storage/shared_preferences_key_value_storage.dart';
 

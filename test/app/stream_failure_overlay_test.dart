@@ -2,16 +2,16 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_cabinet/src/app/stream_failure_overlay.dart';
-import 'package:smart_cabinet/src/core/camera/camera_binding_service.dart';
+import 'package:smart_cabinet/src/core/camera/index.dart';
 
 /// 全局推流异常提示测试。
 void main() {
-  tearDown(CameraBindingService.debugReset);
+  tearDown(CabinetCameraService.debugReset);
 
   testWidgets('shows global message when outside stream status fails', (
     tester,
   ) async {
-    CameraBindingService.debugUseCameraData(
+    CabinetCameraService.debugUseCameraData(
       cameras: const <CameraDescription>[],
       outsideEnvironmentStreamStatus: const CameraStreamStatus(
         status: '推流断开：Broken pipe，3 秒后重连第 1 次',

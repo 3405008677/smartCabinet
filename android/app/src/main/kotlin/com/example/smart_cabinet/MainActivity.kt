@@ -53,7 +53,6 @@ class MainActivity : FlutterActivity() {
                 "isDeviceOwner" -> runKioskMethod(result) { kioskManager.isDeviceOwner() }
                 "getDeviceInfo" -> runKioskMethod(result) { kioskManager.getDeviceInfo() }
                 "getHardwareStatus" -> runKioskMethod(result) { kioskManager.getHardwareStatus() }
-                "readCameraBindings" -> runKioskMethod(result) { kioskManager.readCameraBindings() }
                 "readOutsideEnvironmentStreamStatus" -> result.success(
                     kioskManager.readOutsideEnvironmentStreamStatus(),
                 )
@@ -70,35 +69,27 @@ class MainActivity : FlutterActivity() {
                     )
                     result.success(null)
                 }
-                "writeCameraBinding" -> {
-                    val role = call.argument<String>("role")
-                    val cameraId = call.argument<String>("cameraId")
-                    if (role.isNullOrBlank() || cameraId.isNullOrBlank()) {
-                        result.error("invalid_camera_binding", "role or cameraId is empty", null)
-                    } else {
-                        kioskManager.writeCameraBinding(role, cameraId)
-                        result.success(null)
-                    }
-                }
                 "openSystemSettings" -> {
                     kioskManager.openSystemSettings()
                     result.success(null)
                 }
                 "startStreamProfile" -> {
                     val profile = call.argument<String>("profile")
-                    if (profile.isNullOrBlank()) {
-                        result.error("invalid_stream_profile", "profile is empty", null)
+                    val cameraId = call.argument<String>("cameraId")
+                    if (profile.isNullOrBlank() || cameraId.isNullOrBlank()) {
+                        result.error("invalid_stream_profile", "profile or cameraId is empty", null)
                     } else {
-                        kioskManager.startStreamProfile(profile)
+                        kioskManager.startStreamProfile(profile, cameraId)
                         result.success(null)
                     }
                 }
                 "stopStreamProfile" -> {
                     val profile = call.argument<String>("profile")
-                    if (profile.isNullOrBlank()) {
-                        result.error("invalid_stream_profile", "profile is empty", null)
+                    val cameraId = call.argument<String>("cameraId")
+                    if (profile.isNullOrBlank() || cameraId.isNullOrBlank()) {
+                        result.error("invalid_stream_profile", "profile or cameraId is empty", null)
                     } else {
-                        kioskManager.stopStreamProfile(profile)
+                        kioskManager.stopStreamProfile(profile, cameraId)
                         result.success(null)
                     }
                 }
@@ -133,8 +124,9 @@ class MainActivity : FlutterActivity() {
     private fun handleDebugStreamTrigger() {
         if (intent?.getBooleanExtra(DEBUG_START_DUAL_STREAM_EXTRA, false) == true) {
             Log.i(TAG, "debug dual stream trigger received")
-            kioskManager.startStreamProfile("720p")
-            kioskManager.startStreamProfile("1080p")
+            val cameraId = intent?.getStringExtra(DEBUG_STREAM_CAMERA_ID_EXTRA) ?: "0"
+            kioskManager.startStreamProfile("720p", cameraId)
+            kioskManager.startStreamProfile("1080p", cameraId)
         }
     }
 
@@ -142,5 +134,6 @@ class MainActivity : FlutterActivity() {
         private const val TAG = "SmartCabinetMain"
         private const val KIOSK_CHANNEL = "smart_cabinet/kiosk"
         private const val DEBUG_START_DUAL_STREAM_EXTRA = "debugStartDualStream"
+        private const val DEBUG_STREAM_CAMERA_ID_EXTRA = "debugStreamCameraId"
     }
 }

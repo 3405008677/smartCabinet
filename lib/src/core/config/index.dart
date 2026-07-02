@@ -17,8 +17,6 @@ class AppConfig {
   static const AppConfig current = AppConfig(appName: '智能柜终端', apiBaseUrl: '');
 
   /// 固定 RTSP 服务地址前缀。
-  // static const String streamBaseUrl = 'rtsp://192.168.2.167/app';
-  // static const String streamBaseUrl = 'rtsp://127.0.0.1:8554/app';
   static const String streamBaseUrl = 'rtsp://183.56.183.39:8888/app';
 
   /// 可按需启动的 H265 推流清晰度配置。

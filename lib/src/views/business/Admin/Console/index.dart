@@ -1,10 +1,9 @@
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/localization/app_localizations.dart';
 import '../../../../components/Layout/TerminalShell/index.dart';
-import '../../../../core/camera/camera_binding_service.dart';
+import '../../../../core/camera/index.dart';
 import '../../../../core/device/hardware_status_service.dart';
 import '../../../../core/device/kiosk_device_provider.dart';
 import '../../../../core/storage/app_local_store_provider.dart';
@@ -27,12 +26,6 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
   final HardwareStatusService _hardwareStatusService =
       const HardwareStatusService();
 
-  /// 当前柜体四路摄像头角色绑定。
-  Map<CabinetCameraRole, String> _cameraBindings = const {};
-
-  /// 当前系统可选真实摄像头列表。
-  List<CabinetCameraDevice> _availableCameras = const [];
-
   /// 摄像头配置加载状态。
   bool _cameraConfigLoading = true;
 
@@ -46,7 +39,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
   CameraStreamStatus? _operationAreaStreamStatus;
 
   /// 摄像头绑定服务。
-  final CameraBindingService _cameraBindingService = CameraBindingService();
+  final CabinetCameraService _cameraService = const CabinetCameraService();
 
   /// 当前正在执行的推流控制动作。
   String? _streamProfileAction;
@@ -73,21 +66,17 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
     setState(() => _deviceStatus = deviceStatus);
   }
 
-  /// 加载真实摄像头列表和已保存绑定关系。
+  /// 加载摄像头推流状态。
   Future<void> _loadCameraConfig() async {
     try {
-      final cameras = await _cameraBindingService.loadAvailableCameras();
-      final bindings = await _cameraBindingService.loadBindings();
-      final outsideEnvironmentStreamStatus = await _cameraBindingService
+      final outsideEnvironmentStreamStatus = await _cameraService
           .readOutsideEnvironmentStreamStatus();
-      final operationAreaStreamStatus = await _cameraBindingService
+      final operationAreaStreamStatus = await _cameraService
           .readOperationAreaStreamStatus();
       if (!mounted) {
         return;
       }
       setState(() {
-        _availableCameras = cameras;
-        _cameraBindings = bindings;
         _outsideEnvironmentStreamStatus = outsideEnvironmentStreamStatus;
         _operationAreaStreamStatus = operationAreaStreamStatus;
         _cameraConfigLoading = false;
@@ -104,43 +93,6 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
     }
   }
 
-  /// 打开摄像头角色配置弹窗。
-  Future<void> _configureCameraRole(CabinetCameraRole role) async {
-    if (_availableCameras.isEmpty) {
-      return;
-    }
-
-    final selectedCamera = await showDialog<String>(
-      context: context,
-      builder: (context) => _CameraRoleConfigDialog(
-        role: role,
-        selectedCameraId: _cameraBindings[role] ?? _availableCameras.first.id,
-        availableCameras: _availableCameras,
-      ),
-    );
-
-    if (selectedCamera == null || !mounted) {
-      return;
-    }
-
-    await _cameraBindingService.saveBinding(role, selectedCamera);
-    final outsideEnvironmentStreamStatus =
-        role == CabinetCameraRole.outsideEnvironment
-        ? await _cameraBindingService.readOutsideEnvironmentStreamStatus()
-        : _outsideEnvironmentStreamStatus;
-    final operationAreaStreamStatus = role == CabinetCameraRole.operationArea
-        ? await _cameraBindingService.readOperationAreaStreamStatus()
-        : _operationAreaStreamStatus;
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _cameraBindings = {..._cameraBindings, role: selectedCamera};
-      _outsideEnvironmentStreamStatus = outsideEnvironmentStreamStatus;
-      _operationAreaStreamStatus = operationAreaStreamStatus;
-    });
-  }
-
   /// 按清晰度启动柜外环境推流。
   Future<void> _startOutsideEnvironmentStreamProfile(String profile) async {
     if (_streamProfileAction != null) {
@@ -148,9 +100,13 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
     }
     setState(() => _streamProfileAction = 'start:$profile');
     try {
-      await ref.read(kioskDeviceProvider).startStreamProfile(profile);
-      final status = await _cameraBindingService
-          .readOutsideEnvironmentStreamStatus();
+      await ref
+          .read(kioskDeviceProvider)
+          .startStreamProfile(
+            profile,
+            cameraId: CabinetCameraConfig.outsideEnvironmentCameraId,
+          );
+      final status = await _cameraService.readOutsideEnvironmentStreamStatus();
       if (!mounted) {
         return;
       }
@@ -169,9 +125,13 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
     }
     setState(() => _streamProfileAction = 'stop:$profile');
     try {
-      await ref.read(kioskDeviceProvider).stopStreamProfile(profile);
-      final status = await _cameraBindingService
-          .readOutsideEnvironmentStreamStatus();
+      await ref
+          .read(kioskDeviceProvider)
+          .stopStreamProfile(
+            profile,
+            cameraId: CabinetCameraConfig.outsideEnvironmentCameraId,
+          );
+      final status = await _cameraService.readOutsideEnvironmentStreamStatus();
       if (!mounted) {
         return;
       }
@@ -210,14 +170,11 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
               flex: 5,
               child: _DeviceInfoPanel(
                 status: _deviceStatus,
-                cameraBindings: _cameraBindings,
-                availableCameras: _availableCameras,
                 cameraConfigLoading: _cameraConfigLoading,
                 cameraConfigError: _cameraConfigError,
                 outsideEnvironmentStreamStatus: _outsideEnvironmentStreamStatus,
                 operationAreaStreamStatus: _operationAreaStreamStatus,
                 streamProfileAction: _streamProfileAction,
-                onConfigureCamera: _configureCameraRole,
                 onStartOutsideEnvironmentStreamProfile:
                     _startOutsideEnvironmentStreamProfile,
                 onStopOutsideEnvironmentStreamProfile:
@@ -271,26 +228,17 @@ class _DeviceInfoPanel extends StatelessWidget {
   /// 创建设备信息面板。
   const _DeviceInfoPanel({
     required this.status,
-    required this.cameraBindings,
-    required this.availableCameras,
     required this.cameraConfigLoading,
     required this.cameraConfigError,
     required this.outsideEnvironmentStreamStatus,
     required this.operationAreaStreamStatus,
     required this.streamProfileAction,
-    required this.onConfigureCamera,
     required this.onStartOutsideEnvironmentStreamProfile,
     required this.onStopOutsideEnvironmentStreamProfile,
   });
 
   /// 当前柜体设备状态。
   final AdminDeviceStatusModel status;
-
-  /// 摄像头角色绑定关系。
-  final Map<CabinetCameraRole, String> cameraBindings;
-
-  /// 当前系统可用摄像头列表。
-  final List<CabinetCameraDevice> availableCameras;
 
   /// 摄像头配置是否正在加载。
   final bool cameraConfigLoading;
@@ -306,9 +254,6 @@ class _DeviceInfoPanel extends StatelessWidget {
 
   /// 当前正在执行的推流控制动作。
   final String? streamProfileAction;
-
-  /// 配置摄像头角色时执行的动作。
-  final ValueChanged<CabinetCameraRole> onConfigureCamera;
 
   /// 按清晰度启动柜外环境推流。
   final ValueChanged<String> onStartOutsideEnvironmentStreamProfile;
@@ -346,9 +291,6 @@ class _DeviceInfoPanel extends StatelessWidget {
           _cameraStatusText(context, role),
           Icons.video_camera_front_outlined,
           key: ValueKey('admin_camera_role_${role.name}'),
-          onTap: cameraConfigLoading || availableCameras.isEmpty
-              ? null
-              : () => onConfigureCamera(role),
         ),
       ),
       _DeviceInfoItem(
@@ -377,8 +319,7 @@ class _DeviceInfoPanel extends StatelessWidget {
       _OutsideEnvironmentStreamControls(
         status: outsideEnvironmentStreamStatus,
         action: streamProfileAction,
-        cameraConfigured:
-            cameraBindings[CabinetCameraRole.outsideEnvironment] != null,
+        cameraConfigured: !cameraConfigLoading && cameraConfigError == null,
         onStartProfile: onStartOutsideEnvironmentStreamProfile,
         onStopProfile: onStopOutsideEnvironmentStreamProfile,
       ),
@@ -423,40 +364,22 @@ class _DeviceInfoPanel extends StatelessWidget {
     if (error != null) {
       return error;
     }
-    if (availableCameras.isEmpty) {
-      return l10n.t('adminCameraNoDevice', '未检测到可用摄像头');
+    if (role == CabinetCameraRole.outsideEnvironment) {
+      final streamStatus = outsideEnvironmentStreamStatus?.status ?? '未启动';
+      return '开发时指定\nRTSP-H265：$streamStatus';
     }
-    final cameraId = cameraBindings[role];
-    if (cameraId == null) {
-      return l10n.t('adminCameraUnconfigured', '未配置');
+    if (role == CabinetCameraRole.operationArea) {
+      final streamStatus = operationAreaStreamStatus?.status ?? '未启动';
+      return '开发时指定\nRTSP-H265：$streamStatus';
     }
-    for (final camera in availableCameras) {
-      if (camera.id == cameraId) {
-        if (role == CabinetCameraRole.outsideEnvironment) {
-          final streamStatus = outsideEnvironmentStreamStatus?.status ?? '未启动';
-          return '${camera.displayName}\nRTSP-H265：$streamStatus';
-        }
-        if (role == CabinetCameraRole.operationArea) {
-          final streamStatus = operationAreaStreamStatus?.status ?? '未启动';
-          return '${camera.displayName}\nRTSP-H265：$streamStatus';
-        }
-        return camera.displayName;
-      }
-    }
-    return l10n.t('adminCameraMissing', '已绑定摄像头未连接');
+    return l10n.t('adminCameraFixedInCode', '开发时指定');
   }
 }
 
 /// 单项设备状态。
 class _DeviceInfoItem {
   /// 创建设备状态项。
-  const _DeviceInfoItem(
-    this.label,
-    this.value,
-    this.icon, {
-    this.key,
-    this.onTap,
-  });
+  const _DeviceInfoItem(this.label, this.value, this.icon, {this.key});
 
   /// 状态标签。
   final String label;
@@ -469,9 +392,6 @@ class _DeviceInfoItem {
 
   /// 状态卡片 key。
   final Key? key;
-
-  /// 点击状态项时执行的动作。
-  final VoidCallback? onTap;
 }
 
 /// 设备状态卡片。
@@ -484,7 +404,7 @@ class _DeviceStatusTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = Container(
+    return Container(
       key: item.key,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -532,34 +452,10 @@ class _DeviceStatusTile extends StatelessWidget {
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                if (item.onTap != null) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    context.l10n.t('adminCameraTapToConfigure', '点击配置'),
-                    style: const TextStyle(
-                      color: Color(0xFF8A2364),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
         ],
-      ),
-    );
-
-    if (item.onTap == null) {
-      return content;
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: item.onTap,
-        child: content,
       ),
     );
   }
@@ -744,381 +640,6 @@ extension _CabinetCameraRoleLabel on CabinetCameraRole {
         '合格证采集摄像头',
       ),
     };
-  }
-}
-
-/// 摄像头角色配置弹窗。
-class _CameraRoleConfigDialog extends StatefulWidget {
-  /// 创建摄像头角色配置弹窗。
-  const _CameraRoleConfigDialog({
-    required this.role,
-    required this.selectedCameraId,
-    required this.availableCameras,
-  });
-
-  /// 正在配置的摄像头角色。
-  final CabinetCameraRole role;
-
-  /// 当前已选摄像头 ID。
-  final String selectedCameraId;
-
-  /// 当前可选摄像头列表。
-  final List<CabinetCameraDevice> availableCameras;
-
-  @override
-  State<_CameraRoleConfigDialog> createState() =>
-      _CameraRoleConfigDialogState();
-}
-
-class _CameraRoleConfigDialogState extends State<_CameraRoleConfigDialog> {
-  /// 当前弹窗中选中的摄像头。
-  late String _selectedCamera;
-
-  /// 当前预览摄像头控制器。
-  CameraController? _previewController;
-
-  /// 当前正在初始化预览的摄像头 ID。
-  String? _previewingCameraId;
-
-  /// 预览是否正在初始化。
-  bool _previewLoading = false;
-
-  /// 预览初始化失败文案。
-  String? _previewError;
-
-  /// 当前是否正在保存配置。
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedCamera = widget.selectedCameraId;
-    _initializePreview(_selectedCamera);
-  }
-
-  @override
-  void dispose() {
-    _previewController?.dispose();
-    super.dispose();
-  }
-
-  /// 保存配置前释放 Flutter 预览，避免原生推流抢占同一路摄像头失败。
-  Future<void> _saveSelection() async {
-    if (_saving) {
-      return;
-    }
-    setState(() => _saving = true);
-    final selectedCamera = _selectedCamera;
-    final controller = _previewController;
-    _previewController = null;
-    await controller?.dispose();
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-    if (!mounted) {
-      return;
-    }
-    Navigator.of(context).pop(selectedCamera);
-  }
-
-  /// 初始化当前选中摄像头的实时预览。
-  Future<void> _initializePreview(String cameraId) async {
-    final camera = _findCamera(cameraId);
-    if (camera == null) {
-      setState(() {
-        _previewLoading = false;
-        _previewError = '未找到当前摄像头';
-      });
-      return;
-    }
-
-    setState(() {
-      _previewLoading = true;
-      _previewError = null;
-      _previewingCameraId = cameraId;
-    });
-
-    final previousController = _previewController;
-    _previewController = null;
-    await previousController?.dispose();
-
-    try {
-      final controller = CameraController(
-        camera.description,
-        ResolutionPreset.low,
-        enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.jpeg,
-      );
-      await controller.initialize();
-      if (!mounted || _previewingCameraId != cameraId) {
-        await controller.dispose();
-        return;
-      }
-      setState(() {
-        _previewController = controller;
-        _previewLoading = false;
-        _previewError = null;
-      });
-    } catch (error) {
-      if (!mounted || _previewingCameraId != cameraId) {
-        return;
-      }
-      setState(() {
-        _previewController = null;
-        _previewLoading = false;
-        _previewError = '摄像头预览启动失败：$error';
-      });
-    }
-  }
-
-  /// 根据摄像头 ID 查找摄像头。
-  CabinetCameraDevice? _findCamera(String cameraId) {
-    for (final camera in widget.availableCameras) {
-      if (camera.id == cameraId) {
-        return camera;
-      }
-    }
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final screenSize = MediaQuery.sizeOf(context);
-    final maxDialogWidth = screenSize.width - 48;
-    final maxDialogHeight = screenSize.height - 48;
-
-    return Dialog(
-      insetPadding: const EdgeInsets.all(16),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: maxDialogWidth > 760 ? 760 : maxDialogWidth,
-          maxHeight: maxDialogHeight,
-        ),
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  l10n
-                      .t('adminCameraConfigTitle', '配置 {role}')
-                      .replaceAll('{role}', widget.role.label(context)),
-                  style: const TextStyle(
-                    color: Color(0xFF111936),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.t(
-                    'adminCameraConfigSubtitle',
-                    '请选择该业务场景要使用的物理摄像头，保存后业务流程会按角色读取配置。',
-                  ),
-                  style: const TextStyle(
-                    color: Color(0xFF6877A2),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  key: const ValueKey('admin_camera_config_dropdown'),
-                  initialValue: _selectedCamera,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: l10n.t('adminCameraPhysicalCamera', '物理摄像头'),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  items: widget.availableCameras
-                      .map(
-                        (camera) => DropdownMenuItem<String>(
-                          value: camera.id,
-                          child: Text(
-                            camera.displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      )
-                      .toList(growable: false),
-                  selectedItemBuilder: (context) => widget.availableCameras
-                      .map(
-                        (camera) => Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            camera.displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() => _selectedCamera = value);
-                    _initializePreview(value);
-                  },
-                ),
-                const SizedBox(height: 12),
-                _CameraPreviewPanel(
-                  controller: _previewController,
-                  loading: _previewLoading,
-                  error: _previewError,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: Text(l10n.t('adminCameraCancel', '取消')),
-                    ),
-                    const SizedBox(width: 12),
-                    FilledButton(
-                      onPressed: _saving ? null : _saveSelection,
-                      child: Text(
-                        _saving
-                            ? l10n.t('adminCameraSaving', '正在保存...')
-                            : l10n.t('adminCameraSave', '保存配置'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 摄像头配置弹窗中的实时预览面板。
-class _CameraPreviewPanel extends StatelessWidget {
-  /// 创建摄像头预览面板。
-  const _CameraPreviewPanel({
-    required this.controller,
-    required this.loading,
-    required this.error,
-  });
-
-  /// 当前预览控制器。
-  final CameraController? controller;
-
-  /// 是否正在初始化预览。
-  final bool loading;
-
-  /// 预览错误文案。
-  final String? error;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = this.controller;
-    Widget child;
-    if (loading) {
-      child = const Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2.4),
-          ),
-          SizedBox(height: 12),
-          Text(
-            '正在打开摄像头预览...',
-            style: TextStyle(
-              color: Color(0xFF6877A2),
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      );
-    } else if (error != null) {
-      child = Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(
-          error!,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Color(0xFFE05252),
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      );
-    } else if (controller != null && controller.value.isInitialized) {
-      child = ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: _NaturalCameraPreview(controller: controller),
-      );
-    } else {
-      child = const Text(
-        '请选择摄像头后查看实时预览',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: Color(0xFF6877A2),
-          fontSize: 13,
-          fontWeight: FontWeight.w800,
-        ),
-      );
-    }
-
-    return ConstrainedBox(
-      key: const ValueKey('admin_camera_preview_panel'),
-      constraints: const BoxConstraints(maxHeight: 260),
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FBFF),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE4EAF6)),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: child,
-        ),
-      ),
-    );
-  }
-}
-
-/// 按摄像头原始比例显示预览，避免拉伸和误旋转。
-class _NaturalCameraPreview extends StatelessWidget {
-  /// 创建自然比例摄像头预览。
-  const _NaturalCameraPreview({required this.controller});
-
-  /// 当前摄像头控制器。
-  final CameraController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final previewSize = controller.value.previewSize;
-    final previewAspectRatio = previewSize == null || previewSize.isEmpty
-        ? controller.value.aspectRatio
-        : previewSize.width / previewSize.height;
-
-    return SizedBox.expand(
-      child: FittedBox(
-        fit: BoxFit.contain,
-        child: SizedBox(
-          width: 640,
-          height: 640 / previewAspectRatio,
-          child: AspectRatio(
-            aspectRatio: previewAspectRatio,
-            child: CameraPreview(controller),
-          ),
-        ),
-      ),
-    );
   }
 }
 

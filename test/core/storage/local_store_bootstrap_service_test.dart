@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smart_cabinet/src/core/config/app_config.dart';
+import 'package:smart_cabinet/src/core/config/index.dart';
 import 'package:smart_cabinet/src/core/device/device_info_service.dart';
 import 'package:smart_cabinet/src/core/storage/app_local_store.dart';
 import 'package:smart_cabinet/src/core/storage/local_store_bootstrap_service.dart';

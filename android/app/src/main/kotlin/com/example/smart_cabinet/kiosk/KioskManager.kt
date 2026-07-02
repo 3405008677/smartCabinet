@@ -35,9 +35,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class KioskManager(private val activity: Activity) {
-    private val cameraBindingPreferences =
-        activity.getSharedPreferences("camera_bindings", Context.MODE_PRIVATE)
-
     private var outsideEnvironmentStream: DualMediaCodecH265Stream? = null
 
     private var operationAreaStream: H265RtspStream? = null
@@ -51,6 +48,10 @@ class KioskManager(private val activity: Activity) {
     private var activeOutsideEnvironmentProfiles: List<StreamProfile> = emptyList()
 
     private var enabledOutsideEnvironmentProfiles: Set<String> = emptySet()
+
+    private var outsideEnvironmentCameraId: String = ""
+
+    private var operationAreaCameraId: String = ""
 
     @Volatile
     private var streamControlServerSocket: ServerSocket? = null
@@ -75,13 +76,13 @@ class KioskManager(private val activity: Activity) {
 
     private val reconnectRunnable = Runnable {
         val cameraId = reconnectingCameraId
-            ?: readOutsideEnvironmentCameraId()
+            ?: outsideEnvironmentCameraId
         startOutsideEnvironmentStream(cameraId, triggeredByReconnect = true)
     }
 
     private val operationReconnectRunnable = Runnable {
         val cameraId = operationReconnectingCameraId
-            ?: cameraBindingPreferences.getString(OPERATION_AREA_CAMERA_ROLE, null)
+            ?: operationAreaCameraId
         if (!cameraId.isNullOrBlank()) {
             startOperationAreaStream(cameraId, triggeredByReconnect = true)
         }
@@ -224,40 +225,20 @@ class KioskManager(private val activity: Activity) {
         }
     }
 
-    fun readCameraBindings(): Map<String, String> {
-        val bindings = linkedMapOf<String, String>()
-        CAMERA_ROLES.forEach { role ->
-            val cameraId = cameraBindingPreferences.getString(role, null)
-            if (!cameraId.isNullOrBlank()) {
-                bindings[role] = cameraId
-            }
-        }
-        return bindings
-    }
-
-    fun writeCameraBinding(role: String, cameraId: String) {
-        cameraBindingPreferences.edit().putString(role, cameraId).apply()
-        if (role == OUTSIDE_ENVIRONMENT_CAMERA_ROLE) {
-            Log.i(TAG, "outside environment camera binding saved, cameraId=$cameraId")
-        }
-        if (role == OPERATION_AREA_CAMERA_ROLE) {
-            Log.i(TAG, "operation area camera binding saved, cameraId=$cameraId")
-        }
-    }
-
-    fun startStreamProfile(profileName: String) {
+    fun startStreamProfile(profileName: String, cameraId: String) {
         val profile = findStreamProfile(profileName)
             ?: throw IllegalArgumentException("unsupported stream profile: $profileName")
+        outsideEnvironmentCameraId = cameraId
         enabledOutsideEnvironmentProfiles = enabledOutsideEnvironmentProfiles + profile.name
         updateVideoStreamSwitch(profile.name, true)
-        val cameraId = readOutsideEnvironmentCameraId()
         Log.i(TAG, "start outside environment stream profile on demand, requestedProfile=$profileName, enabled=$enabledOutsideEnvironmentProfiles, cameraId=$cameraId")
         startOutsideEnvironmentStream(cameraId, resetReconnect = true)
     }
 
-    fun stopStreamProfile(profileName: String) {
+    fun stopStreamProfile(profileName: String, cameraId: String) {
         val profile = findStreamProfile(profileName)
             ?: throw IllegalArgumentException("unsupported stream profile: $profileName")
+        outsideEnvironmentCameraId = cameraId
         enabledOutsideEnvironmentProfiles = enabledOutsideEnvironmentProfiles - profile.name
         updateVideoStreamSwitch(profile.name, false)
         streamHandler.removeCallbacks(reconnectRunnable)
@@ -268,7 +249,6 @@ class KioskManager(private val activity: Activity) {
             outsideEnvironmentStreamStatus = "720p/1080p 已停止"
             return
         }
-        val cameraId = readOutsideEnvironmentCameraId()
         Log.i(TAG, "stop outside environment stream profile on demand, requestedProfile=$profileName, remaining=$enabledOutsideEnvironmentProfiles, cameraId=$cameraId")
         startOutsideEnvironmentStream(cameraId, resetReconnect = true)
     }
@@ -279,7 +259,11 @@ class KioskManager(private val activity: Activity) {
             outsideEnvironmentStreamStatus = "720p/1080p 已停止"
             return
         }
-        val cameraId = readOutsideEnvironmentCameraId()
+        val cameraId = outsideEnvironmentCameraId
+        if (cameraId.isBlank()) {
+            outsideEnvironmentStreamStatus = "未指定柜外环境摄像头"
+            return
+        }
         Log.i(TAG, "apply configured outside environment stream switches, enabled=$enabledOutsideEnvironmentProfiles, cameraId=$cameraId")
         startOutsideEnvironmentStream(cameraId, resetReconnect = true)
     }
@@ -288,7 +272,7 @@ class KioskManager(private val activity: Activity) {
         return linkedMapOf(
             "status" to outsideEnvironmentStreamStatus,
             "url" to activeOutsideEnvironmentProfiles.joinToString(",") { profile -> buildOutsideEnvironmentRtspUrl(profile) },
-            "cameraId" to readOutsideEnvironmentCameraId(),
+            "cameraId" to outsideEnvironmentCameraId,
             "profile" to activeOutsideEnvironmentProfiles.joinToString(",") { profile -> profile.name },
             "enabledProfiles" to enabledOutsideEnvironmentProfiles.joinToString(","),
             "streamMode" to if (activeOutsideEnvironmentProfiles.size > 1) OUTSIDE_ENVIRONMENT_STREAM_MODE else "profile_active",
@@ -301,7 +285,7 @@ class KioskManager(private val activity: Activity) {
         return linkedMapOf(
             "status" to operationAreaStreamStatus,
             "url" to buildOperationAreaRtspUrl(),
-            "cameraId" to (cameraBindingPreferences.getString(OPERATION_AREA_CAMERA_ROLE, null) ?: ""),
+            "cameraId" to operationAreaCameraId,
         )
     }
 
@@ -403,18 +387,10 @@ class KioskManager(private val activity: Activity) {
                 method == "POST" && path == "/stream/profile" -> {
                     val payload = JSONObject(body.ifBlank { "{}" })
                     val profileName = payload.optString("profile")
-                    val enabled = payload.optBoolean("enabled")
-                    val profile = findStreamProfile(profileName)
-                        ?: return 400 to streamControlErrorJson("unsupported profile: $profileName")
-                    val resultJson = runStreamControlOnMainThread {
-                        if (enabled) {
-                            startStreamProfile(profile.name)
-                        } else {
-                            stopStreamProfile(profile.name)
-                        }
-                        streamControlStatusJson().put("changedProfile", profile.name).put("changedEnabled", enabled)
+                    if (findStreamProfile(profileName) == null) {
+                        return 400 to streamControlErrorJson("unsupported profile: $profileName")
                     }
-                    200 to resultJson
+                    400 to streamControlErrorJson("stream profile changes must be requested from Flutter with a cameraId")
                 }
                 else -> 404 to streamControlErrorJson("unsupported endpoint: $method $path")
             }
@@ -567,12 +543,6 @@ class KioskManager(private val activity: Activity) {
             stopOutsideEnvironmentStream()
             scheduleOutsideEnvironmentReconnect(cameraId, outsideEnvironmentStreamStatus)
         }
-    }
-
-    private fun readOutsideEnvironmentCameraId(): String {
-        return cameraBindingPreferences.getString(OUTSIDE_ENVIRONMENT_CAMERA_ROLE, null)
-            ?.takeIf { it.isNotBlank() }
-            ?: DEFAULT_OUTSIDE_ENVIRONMENT_CAMERA_ID
     }
 
     private fun stopOutsideEnvironmentStream() {
@@ -1081,9 +1051,6 @@ class KioskManager(private val activity: Activity) {
             val gopSeconds: Int,
         )
 
-        private const val OUTSIDE_ENVIRONMENT_CAMERA_ROLE = "outsideEnvironment"
-        private const val OPERATION_AREA_CAMERA_ROLE = "operationArea"
-        private const val DEFAULT_OUTSIDE_ENVIRONMENT_CAMERA_ID = "0"
         private val STREAM_PROFILES = listOf(
             StreamProfile("720p", 1280, 720, 20, 3000 * 1000, 1),
             StreamProfile("1080p", 1920, 1080, 15, 5000 * 1000, 1),
@@ -1103,13 +1070,6 @@ class KioskManager(private val activity: Activity) {
         private const val STREAM_CONTROL_TIMEOUT_MS = 15_000L
         private const val DOWNLOADS_LOG_PATH = "Download/SmartCabinetLogs/smart_cabinet_rtsp_h265.log"
         private const val OUTSIDE_ENVIRONMENT_STREAM_MODE = "dual_active_profiles"
-
-        private val CAMERA_ROLES = listOf(
-            "faceRecognition",
-            "outsideEnvironment",
-            "operationArea",
-            "certificateCapture",
-        )
     }
 
 }
