@@ -1,3 +1,5 @@
+import '../camera/index.dart';
+
 /// 自助终端模式设备能力抽象。
 ///
 /// Kiosk Mode 通常用于智能柜、收银机等固定用途设备，
@@ -27,4 +29,16 @@ abstract interface class KioskDevice {
 
   /// 停止指定清晰度的原生推流。
   Future<void> stopStreamProfile(String profile, {required String cameraId});
+
+  /// 按业务角色启动原生推流。
+  Future<void> startCameraStream(
+    CabinetCameraRole role, {
+    required List<String> profiles,
+  });
+
+  /// 按业务角色停止原生推流。
+  Future<void> stopCameraStream(
+    CabinetCameraRole role, {
+    List<String>? profiles,
+  });
 }

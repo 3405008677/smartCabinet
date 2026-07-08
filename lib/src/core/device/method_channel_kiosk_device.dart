@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../camera/index.dart';
 import 'kiosk_device.dart';
 
 /// 基于 Flutter MethodChannel 的 Kiosk 设备实现。
@@ -57,6 +58,28 @@ class MethodChannelKioskDevice implements KioskDevice {
     await _channel.invokeMethod<void>('stopStreamProfile', {
       'profile': profile,
       'cameraId': cameraId,
+    });
+  }
+
+  @override
+  Future<void> startCameraStream(
+    CabinetCameraRole role, {
+    required List<String> profiles,
+  }) async {
+    await _channel.invokeMethod<void>('startCameraStream', {
+      'role': role.name,
+      'profiles': profiles,
+    });
+  }
+
+  @override
+  Future<void> stopCameraStream(
+    CabinetCameraRole role, {
+    List<String>? profiles,
+  }) async {
+    await _channel.invokeMethod<void>('stopCameraStream', {
+      'role': role.name,
+      'profiles': profiles ?? const <String>[],
     });
   }
 }

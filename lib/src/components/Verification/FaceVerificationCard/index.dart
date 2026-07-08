@@ -92,8 +92,10 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
 
     /// 当外部直接把 [verified] 置为 true 时，同步刷新内部状态文案。
     if (widget.verified && !oldWidget.verified) {
-      _status = FaceVerificationStatus.success;
-      _message = '人脸识别通过，照片已提交后端校验';
+      setState(() {
+        _status = FaceVerificationStatus.success;
+        _message = '人脸识别通过，照片已提交后端校验';
+      });
     }
   }
 
@@ -107,6 +109,10 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
   ///
   /// 优先使用前置摄像头；若设备没有前置摄像头，则退回到列表中的第一个可用摄像头。
   Future<void> _initializeCamera() async {
+    await _disposeController();
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _status = FaceVerificationStatus.initializing;
       _message = '正在启动摄像头...';
@@ -159,6 +165,15 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
     }
   }
 
+  /// 释放当前摄像头控制器。
+  Future<void> _disposeController() async {
+    final controller = _controller;
+    _controller = null;
+    if (controller != null) {
+      await controller.dispose();
+    }
+  }
+
   /// 标记摄像头启动失败。
   ///
   /// 失败后会同步生成恢复建议，便于现场人员知道下一步如何处理。
@@ -200,6 +215,10 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
       final controller = _controller;
       if (controller != null && controller.value.isInitialized) {
         final image = await controller.takePicture();
+        if (!mounted) {
+          return;
+        }
+        await _disposeController();
         if (!mounted) {
           return;
         }

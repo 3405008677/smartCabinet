@@ -93,6 +93,26 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                 }
+                "startCameraStream" -> {
+                    val role = call.argument<String>("role")
+                    val profiles = call.argument<List<String>>("profiles") ?: emptyList()
+                    if (role.isNullOrBlank() || profiles.isEmpty()) {
+                        result.error("invalid_camera_stream", "role or profiles is empty", null)
+                    } else {
+                        kioskManager.startCameraStream(role, profiles)
+                        result.success(null)
+                    }
+                }
+                "stopCameraStream" -> {
+                    val role = call.argument<String>("role")
+                    val profiles = call.argument<List<String>>("profiles") ?: emptyList()
+                    if (role.isNullOrBlank()) {
+                        result.error("invalid_camera_stream", "role is empty", null)
+                    } else {
+                        kioskManager.stopCameraStream(role, profiles)
+                        result.success(null)
+                    }
+                }
                 "startConfiguredStreams" -> {
                     Log.i(TAG, "startConfiguredStreams ignored; streams are profile-driven now")
                     result.success(null)

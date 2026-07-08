@@ -120,6 +120,9 @@ class _StreamFailureOverlayState extends State<StreamFailureOverlay> {
     if (outsideStatus.needsUserAttention) {
       return '柜外环境推流异常：${outsideStatus.status}';
     }
+    if (operationStatus.isUnconfigured) {
+      return null;
+    }
     if (operationStatus.needsUserAttention) {
       return '操作区推流异常：${operationStatus.status}';
     }

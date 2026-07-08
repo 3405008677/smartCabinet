@@ -16,6 +16,57 @@ enum CabinetCameraRole {
   certificateCapture,
 }
 
+/// 摄像头当前使用模式。
+enum CabinetCameraUseMode { previewAndCapture, rtspStream, stillCapture }
+
+/// 原生推流状态机。
+enum CameraStreamState {
+  stopped,
+  starting,
+  streaming,
+  reconnecting,
+  failed,
+  stopping,
+  unconfigured,
+  unknown,
+}
+
+/// 摄像头角色绑定配置。
+class CabinetCameraRoleBinding {
+  /// 创建摄像头角色绑定配置。
+  const CabinetCameraRoleBinding({
+    required this.role,
+    required this.required,
+    required this.useMode,
+    this.flutterCameraId,
+    this.androidCameraId,
+  });
+
+  /// 业务角色。
+  final CabinetCameraRole role;
+
+  /// Flutter camera 插件 ID。
+  final String? flutterCameraId;
+
+  /// Android Camera2 ID。
+  final String? androidCameraId;
+
+  /// 该角色是否为启动必需。
+  final bool required;
+
+  /// 摄像头使用模式。
+  final CabinetCameraUseMode useMode;
+
+  /// 该角色是否已经配置到可用的摄像头 ID。
+  bool get isConfigured {
+    return switch (useMode) {
+      CabinetCameraUseMode.previewAndCapture ||
+      CabinetCameraUseMode.stillCapture => flutterCameraId?.isNotEmpty == true,
+      CabinetCameraUseMode.rtspStream => androidCameraId?.isNotEmpty == true,
+    };
+  }
+}
+
 /// 开发时指定的四路摄像头配置。
 ///
 /// 需要更换摄像头时只改这里，不再通过管理员控制台配置。
@@ -33,6 +84,39 @@ class CabinetCameraConfig {
 
   /// 合格证采集摄像头 ID，对应 Flutter camera 插件的 CameraDescription.name。
   static const String certificateCaptureCameraId = 'cameraId_2';
+
+  /// 开发时指定的角色绑定。
+  static const List<CabinetCameraRoleBinding> roleBindings = [
+    CabinetCameraRoleBinding(
+      role: CabinetCameraRole.faceRecognition,
+      flutterCameraId: faceRecognitionCameraId,
+      required: true,
+      useMode: CabinetCameraUseMode.previewAndCapture,
+    ),
+    CabinetCameraRoleBinding(
+      role: CabinetCameraRole.outsideEnvironment,
+      androidCameraId: outsideEnvironmentCameraId,
+      required: true,
+      useMode: CabinetCameraUseMode.rtspStream,
+    ),
+    CabinetCameraRoleBinding(
+      role: CabinetCameraRole.operationArea,
+      androidCameraId: operationAreaCameraId,
+      required: false,
+      useMode: CabinetCameraUseMode.rtspStream,
+    ),
+    CabinetCameraRoleBinding(
+      role: CabinetCameraRole.certificateCapture,
+      flutterCameraId: certificateCaptureCameraId,
+      required: false,
+      useMode: CabinetCameraUseMode.stillCapture,
+    ),
+  ];
+
+  /// 按业务角色读取绑定配置。
+  static CabinetCameraRoleBinding bindingFor(CabinetCameraRole role) {
+    return roleBindings.firstWhere((binding) => binding.role == role);
+  }
 }
 
 /// 业务可展示和可保存的摄像头设备信息。
@@ -63,6 +147,10 @@ class CameraStreamStatus {
     required this.cameraId,
     this.profile = '',
     this.streamMode = '',
+    this.role,
+    this.state = CameraStreamState.unknown,
+    this.recoverable = false,
+    this.reconnectAttempts = 0,
   });
 
   /// 当前推流状态文案。
@@ -80,10 +168,28 @@ class CameraStreamStatus {
   /// 当前推流能力模式，例如单路按需或多路并发。
   final String streamMode;
 
+  /// 当前推流所属摄像头角色。
+  final CabinetCameraRole? role;
+
+  /// 结构化推流状态。
+  final CameraStreamState state;
+
+  /// 当前异常是否可恢复。
+  final bool recoverable;
+
+  /// 已重连次数。
+  final int reconnectAttempts;
+
   /// 当前状态是否表示推流失败或正在重连。
   bool get needsUserAttention {
-    return isFailureStatus(status);
+    return state == CameraStreamState.failed ||
+        state == CameraStreamState.reconnecting ||
+        recoverable ||
+        isFailureStatus(status);
   }
+
+  /// 当前角色是否未配置。
+  bool get isUnconfigured => state == CameraStreamState.unconfigured;
 
   /// 判断状态文案是否表示推流失败或重连中。
   static bool isFailureStatus(String status) {
@@ -98,13 +204,65 @@ class CameraStreamStatus {
 
   /// 从原生通道返回的 Map 创建状态对象。
   factory CameraStreamStatus.fromMap(Map<String, Object?> map) {
+    final status = map['status']?.toString() ?? '未知';
     return CameraStreamStatus(
-      status: map['status']?.toString() ?? '未知',
+      status: status,
       url: map['url']?.toString() ?? '',
       cameraId: map['cameraId']?.toString() ?? '',
       profile: map['profile']?.toString() ?? '',
       streamMode: map['streamMode']?.toString() ?? '',
+      role: _parseRole(map['role']?.toString()),
+      state: _parseState(map['state']?.toString(), status),
+      recoverable:
+          map['recoverable'] == true ||
+          map['recoverable']?.toString().toLowerCase() == 'true',
+      reconnectAttempts:
+          int.tryParse(map['reconnectAttempts']?.toString() ?? '') ?? 0,
     );
+  }
+
+  static CabinetCameraRole? _parseRole(String? value) {
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    for (final role in CabinetCameraRole.values) {
+      if (role.name == value) {
+        return role;
+      }
+    }
+    return null;
+  }
+
+  static CameraStreamState _parseState(String? value, String status) {
+    if (value != null && value.isNotEmpty) {
+      for (final state in CameraStreamState.values) {
+        if (state.name == value) {
+          return state;
+        }
+      }
+    }
+    if (status.contains('未指定') || status.contains('未配置')) {
+      return CameraStreamState.unconfigured;
+    }
+    if (status.contains('重连') || status.toLowerCase().contains('reconnect')) {
+      return CameraStreamState.reconnecting;
+    }
+    if (isFailureStatus(status)) {
+      return CameraStreamState.failed;
+    }
+    if (status.contains('启动中') || status.contains('打开中')) {
+      return CameraStreamState.starting;
+    }
+    if (status.contains('停止')) {
+      return CameraStreamState.stopped;
+    }
+    if (status.contains('推流中') || status.contains('已开始')) {
+      return CameraStreamState.streaming;
+    }
+    if (status.contains('未启动')) {
+      return CameraStreamState.stopped;
+    }
+    return CameraStreamState.unknown;
   }
 }
 
@@ -178,6 +336,24 @@ class CabinetCameraService {
           ? const <String, Object?>{}
           : Map<String, Object?>.of(rawStatus),
     );
+  }
+
+  /// 按角色读取原生推流状态。
+  Future<CameraStreamStatus> readStreamStatus(CabinetCameraRole role) {
+    return switch (role) {
+      CabinetCameraRole.outsideEnvironment =>
+        readOutsideEnvironmentStreamStatus(),
+      CabinetCameraRole.operationArea => readOperationAreaStreamStatus(),
+      _ => Future.value(
+        CameraStreamStatus(
+          role: role,
+          state: CameraStreamState.unconfigured,
+          status: '该摄像头角色不支持原生推流',
+          url: '',
+          cameraId: '',
+        ),
+      ),
+    };
   }
 
   /// 读取操作区摄像头原生 RTSP-H265 推流状态。

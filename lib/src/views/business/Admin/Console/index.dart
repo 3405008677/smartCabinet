@@ -102,9 +102,9 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
     try {
       await ref
           .read(kioskDeviceProvider)
-          .startStreamProfile(
-            profile,
-            cameraId: CabinetCameraConfig.outsideEnvironmentCameraId,
+          .startCameraStream(
+            CabinetCameraRole.outsideEnvironment,
+            profiles: [profile],
           );
       final status = await _cameraService.readOutsideEnvironmentStreamStatus();
       if (!mounted) {
@@ -127,9 +127,9 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
     try {
       await ref
           .read(kioskDeviceProvider)
-          .stopStreamProfile(
-            profile,
-            cameraId: CabinetCameraConfig.outsideEnvironmentCameraId,
+          .stopCameraStream(
+            CabinetCameraRole.outsideEnvironment,
+            profiles: [profile],
           );
       final status = await _cameraService.readOutsideEnvironmentStreamStatus();
       if (!mounted) {
@@ -319,7 +319,12 @@ class _DeviceInfoPanel extends StatelessWidget {
       _OutsideEnvironmentStreamControls(
         status: outsideEnvironmentStreamStatus,
         action: streamProfileAction,
-        cameraConfigured: !cameraConfigLoading && cameraConfigError == null,
+        cameraConfigured:
+            !cameraConfigLoading &&
+            cameraConfigError == null &&
+            CabinetCameraConfig.bindingFor(
+              CabinetCameraRole.outsideEnvironment,
+            ).isConfigured,
         onStartProfile: onStartOutsideEnvironmentStreamProfile,
         onStopProfile: onStopOutsideEnvironmentStreamProfile,
       ),
@@ -369,6 +374,9 @@ class _DeviceInfoPanel extends StatelessWidget {
       return '开发时指定\nRTSP-H265：$streamStatus';
     }
     if (role == CabinetCameraRole.operationArea) {
+      if (!CabinetCameraConfig.bindingFor(role).isConfigured) {
+        return '未配置\nRTSP-H265：未启用';
+      }
       final streamStatus = operationAreaStreamStatus?.status ?? '未启动';
       return '开发时指定\nRTSP-H265：$streamStatus';
     }
