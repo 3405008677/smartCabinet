@@ -50,6 +50,11 @@ void main() {
     expect(selectedCamera?.name, 'cameraId_0');
   });
 
+  test('converts unified camera2 id to flutter camera plugin id', () {
+    expect(CabinetCameraConfig.toFlutterCameraId('0'), 'cameraId_0');
+    expect(CabinetCameraConfig.toFlutterCameraId('3'), 'cameraId_3');
+  });
+
   test('reads outside environment stream status from debug data', () async {
     CabinetCameraService.debugUseCameraData(
       cameras: const [],

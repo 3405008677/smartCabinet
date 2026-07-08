@@ -73,23 +73,39 @@ class CabinetCameraRoleBinding {
 class CabinetCameraConfig {
   const CabinetCameraConfig._();
 
-  /// 人脸识别摄像头 ID，对应 Flutter camera 插件的 CameraDescription.name。
-  static const String faceRecognitionCameraId = 'cameraId_0';
+  /// 人脸识别摄像头 ID，对应 Android Camera2 cameraId。
+  static const String faceRecognitionCameraId = '0';
 
   /// 柜外环境摄像头 ID，对应 Android Camera2 cameraId。
-  static const String outsideEnvironmentCameraId = '0';
+  static const String outsideEnvironmentCameraId = '1';
 
   /// 操作区域摄像头 ID，对应 Android Camera2 cameraId。
-  static const String operationAreaCameraId = '';
+  static const String operationAreaCameraId = '2';
 
-  /// 合格证采集摄像头 ID，对应 Flutter camera 插件的 CameraDescription.name。
-  static const String certificateCaptureCameraId = 'cameraId_2';
+  /// 合格证采集摄像头 ID，对应 Android Camera2 cameraId。
+  static const String certificateCaptureCameraId = '3';
+
+  /// 将统一的 Android Camera2 ID 转为 Flutter camera 插件 ID。
+  static String toFlutterCameraId(String cameraId) {
+    if (cameraId.isEmpty || cameraId.startsWith('cameraId_')) {
+      return cameraId;
+    }
+    return 'cameraId_$cameraId';
+  }
+
+  /// 人脸识别摄像头对应的 Flutter camera 插件 ID。
+  static const String _faceRecognitionFlutterCameraId =
+      'cameraId_$faceRecognitionCameraId';
+
+  /// 合格证采集摄像头对应的 Flutter camera 插件 ID。
+  static const String _certificateCaptureFlutterCameraId =
+      'cameraId_$certificateCaptureCameraId';
 
   /// 开发时指定的角色绑定。
   static const List<CabinetCameraRoleBinding> roleBindings = [
     CabinetCameraRoleBinding(
       role: CabinetCameraRole.faceRecognition,
-      flutterCameraId: faceRecognitionCameraId,
+      flutterCameraId: _faceRecognitionFlutterCameraId,
       required: true,
       useMode: CabinetCameraUseMode.previewAndCapture,
     ),
@@ -107,7 +123,7 @@ class CabinetCameraConfig {
     ),
     CabinetCameraRoleBinding(
       role: CabinetCameraRole.certificateCapture,
-      flutterCameraId: certificateCaptureCameraId,
+      flutterCameraId: _certificateCaptureFlutterCameraId,
       required: false,
       useMode: CabinetCameraUseMode.stillCapture,
     ),
@@ -384,7 +400,9 @@ class CabinetCameraService {
 
     final configuredCamera = _findById(
       cameras,
-      CabinetCameraConfig.faceRecognitionCameraId,
+      CabinetCameraConfig.toFlutterCameraId(
+        CabinetCameraConfig.faceRecognitionCameraId,
+      ),
     );
     if (configuredCamera != null) {
       return configuredCamera.description;

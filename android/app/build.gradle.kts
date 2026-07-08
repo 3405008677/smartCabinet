@@ -1,5 +1,3 @@
-import com.android.build.gradle.internal.api.BaseVariantOutputImpl
-
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -30,9 +28,11 @@ android {
         }
     }
 
-    externalNativeBuild {
-        ndkBuild {
-            path = file("src/main/jni/Android.mk")
+    if (providers.gradleProperty("buildRkMppNative").map(String::toBoolean).getOrElse(false)) {
+        externalNativeBuild {
+            ndkBuild {
+                path = file("src/main/native/Android.mk")
+            }
         }
     }
 
@@ -51,14 +51,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-        }
-    }
-
-    applicationVariants.all {
-        if (buildType.name == "release") {
-            outputs.all {
-                (this as BaseVariantOutputImpl).outputFileName = "管管智能柜.apk"
-            }
         }
     }
 }
