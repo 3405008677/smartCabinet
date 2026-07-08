@@ -1,26 +1,10 @@
 import com.android.build.gradle.internal.api.BaseVariantOutputImpl
-import java.util.Properties
 
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
-
-val localProperties = Properties().apply {
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        localPropertiesFile.inputStream().use(::load)
-    }
-}
-
-val gstAndroidRoot = localProperties.getProperty("gstAndroidRoot")
-    ?: System.getenv("GSTREAMER_ROOT_ANDROID")
-    ?: ""
-
-val includeGStreamer = providers.gradleProperty("includeGStreamer")
-    .map(String::toBoolean)
-    .getOrElse(true)
 
 android {
     namespace = "com.example.smart_cabinet"
@@ -46,23 +30,16 @@ android {
         }
     }
 
-    sourceSets {
-        getByName("main") {
-            java.srcDir("src/main/jni/src")
-            if (includeGStreamer) {
-                jniLibs.setSrcDirs(listOf("src/main/jniLibs"))
-                assets.srcDir("src/main/jni/src/main/assets")
-            } else {
-                jniLibs.setSrcDirs(emptyList<String>())
-            }
+    externalNativeBuild {
+        ndkBuild {
+            path = file("src/main/jni/Android.mk")
         }
     }
 
-    if (includeGStreamer && (gstAndroidRoot.isBlank() || !file(gstAndroidRoot).exists())) {
-        throw GradleException(
-            "GStreamer Android SDK not found. Set gstAndroidRoot in android/local.properties " +
-                "or GSTREAMER_ROOT_ANDROID to the extracted SDK path.",
-        )
+    sourceSets {
+        getByName("main") {
+            jniLibs.setSrcDirs(listOf("src/main/jniLibs"))
+        }
     }
 
     buildTypes {

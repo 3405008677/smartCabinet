@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class RkMppH265Stream(
     private val context: Context,
-    private val bridge: GStreamerBridge,
+    private val bridge: RkMppBridge,
     private val statusListener: (String) -> Unit,
 ) : H265RtspStream {
     private var cameraDevice: CameraDevice? = null
@@ -31,11 +31,11 @@ class RkMppH265Stream(
     // Kotlin RTSP publisher performs explicit ANNOUNCE/SETUP/RECORD against ZLMediaKit.
     private var rtspPublisher: RtspTcpH265Publisher? = null
     private var rtspUrl = ""
-    // Active stream width mirrored into the native GStreamer sender caps.
+    // Active stream width mirrored into the RKMPP encoder configuration.
     private var streamWidth = 0
-    // Active stream height mirrored into the native GStreamer sender caps.
+    // Active stream height mirrored into the RKMPP encoder configuration.
     private var streamHeight = 0
-    // Active stream frame rate mirrored into the native GStreamer sender caps.
+    // Active stream frame rate mirrored into the RKMPP encoder configuration.
     private var streamFps = 0
     // Tracks which RTSP sender owns the current encoded H265 stream.
     private var rtspSender: RtspSender? = null
@@ -110,7 +110,6 @@ class RkMppH265Stream(
         runCatching { imageReader?.close() }
         imageReader = null
         bridge.stopRkMppH265()
-        bridge.stopH265Rtsp()
         runCatching { rtspPublisher?.stop() }
         rtspPublisher = null
         rtspSender = null
@@ -221,24 +220,6 @@ class RkMppH265Stream(
     // Sends encoded H265 through the sender that successfully registered the stream.
     private fun sendEncodedFrame(encodedFrame: ByteArray, presentationTimeUs: Long, keyFrame: Boolean): Boolean {
         return when (rtspSender) {
-            RtspSender.GSTREAMER -> {
-                if (bridge.pushH265Frame(encodedFrame, presentationTimeUs, keyFrame)) {
-                    true
-                } else {
-                    val diagnostics = bridge.pollH265RtspDiagnostics().ifBlank { bridge.lastError() }
-                    statusListener("GStreamer RTSP 推送失败，回退 Kotlin RTSP：${diagnostics.ifBlank { "未知错误" }}")
-                    bridge.stopH265Rtsp()
-                    rtspSender = null
-                    val fallbackPublisher = RtspTcpH265Publisher(statusListener)
-                    if (!fallbackPublisher.canStart(encodedFrame)) {
-                        false
-                    } else {
-                        startKotlinPublisher(fallbackPublisher, encodedFrame)
-                        rtspPublisher?.sendFrame(encodedFrame, presentationTimeUs, keyFrame)
-                        true
-                    }
-                }
-            }
             RtspSender.KOTLIN -> {
                 rtspPublisher?.sendFrame(encodedFrame, presentationTimeUs, keyFrame)
                 true
@@ -354,8 +335,6 @@ class RkMppH265Stream(
     }
 
     private enum class RtspSender {
-        // Native GStreamer sender is kept for diagnostics, but not used as the default ZLMediaKit path.
-        GSTREAMER,
         // Kotlin publisher is the default because it explicitly performs ANNOUNCE/SETUP/RECORD.
         KOTLIN,
     }

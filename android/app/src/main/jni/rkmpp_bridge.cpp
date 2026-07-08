@@ -1,6 +1,4 @@
 #include <jni.h>
-#include <gst/gst.h>
-#include <gst/app/gstappsrc.h>
 #include <android/log.h>
 #include <dlfcn.h>
 #include <cstring>
@@ -8,26 +6,11 @@
 #include <string>
 #include <vector>
 
-#define LOG_TAG "SmartCabinetGst"
+#define LOG_TAG "SmartCabinetRkMpp"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace {
-
-// Protects native pipeline state shared by MediaCodec output and lifecycle calls.
-std::mutex stream_mutex;
-
-// Holds the active GStreamer pipeline instance.
-GstElement *pipeline = nullptr;
-
-// Holds the appsrc element that receives encoded H265 frames from Kotlin.
-GstElement *video_source = nullptr;
-
-// Holds the pipeline bus so appsrc pushes can surface async RTSP connection errors.
-GstBus *pipeline_bus = nullptr;
-
-// Tracks whether gst_init_check has completed successfully.
-bool gstreamer_initialized = false;
 
 // Minimal Rockchip MPP ABI declarations copied from public Rockchip MPP headers.
 using RK_U32 = unsigned int;
@@ -128,7 +111,7 @@ std::mutex rkmpp_mutex;
 RkMppApi rkmpp_api;
 RkMppEncoder rkmpp_encoder;
 
-// Stores the last native GStreamer failure so Kotlin can surface actionable UI status.
+// Stores the last native RKMPP failure so Kotlin can surface actionable UI status.
 std::string last_error;
 
 void set_last_error(const std::string &message) {
@@ -255,156 +238,6 @@ void release_rkmpp_encoder_locked(RkMppEncoder &encoder, const char *caller) {
 
 void stop_rkmpp_locked() {
   release_rkmpp_encoder_locked(rkmpp_encoder, "stopRkMppH265");
-}
-
-// Converts a Java string into a UTF-8 std::string.
-std::string to_string(JNIEnv *env, jstring value) {
-  if (value == nullptr) {
-    return "";
-  }
-  const char *chars = env->GetStringUTFChars(value, nullptr);
-  std::string result(chars == nullptr ? "" : chars);
-  if (chars != nullptr) {
-    env->ReleaseStringUTFChars(value, chars);
-  }
-  return result;
-}
-
-// Stops and releases the active pipeline if one exists.
-void stop_pipeline_locked() {
-  if (pipeline != nullptr) {
-    gst_element_set_state(pipeline, GST_STATE_NULL);
-    if (pipeline_bus != nullptr) {
-      gst_object_unref(pipeline_bus);
-      pipeline_bus = nullptr;
-    }
-    gst_object_unref(pipeline);
-    pipeline = nullptr;
-    video_source = nullptr;
-    LOGI("GStreamer H265 pipeline stopped");
-  }
-}
-
-bool check_pipeline_bus_locked() {
-  if (pipeline_bus == nullptr) {
-    return true;
-  }
-  GstMessage *message = gst_bus_pop_filtered(
-      pipeline_bus,
-      static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_WARNING | GST_MESSAGE_EOS));
-  if (message == nullptr) {
-    return true;
-  }
-  bool ok = true;
-  if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ERROR) {
-    GError *error = nullptr;
-    gchar *debug = nullptr;
-    gst_message_parse_error(message, &error, &debug);
-    const char *text = error != nullptr ? error->message : "unknown GStreamer error";
-    set_last_error(std::string("GStreamer pipeline error: ") + text +
-        (debug != nullptr ? std::string(", debug=") + debug : ""));
-    if (error != nullptr) g_error_free(error);
-    if (debug != nullptr) g_free(debug);
-    ok = false;
-  } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_WARNING) {
-    GError *error = nullptr;
-    gchar *debug = nullptr;
-    gst_message_parse_warning(message, &error, &debug);
-    const char *text = error != nullptr ? error->message : "unknown GStreamer warning";
-    set_last_error(std::string("GStreamer pipeline warning: ") + text +
-        (debug != nullptr ? std::string(", debug=") + debug : ""));
-    if (error != nullptr) g_error_free(error);
-    if (debug != nullptr) g_free(debug);
-  } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS) {
-    set_last_error("GStreamer pipeline reached EOS");
-    ok = false;
-  }
-  gst_message_unref(message);
-  return ok;
-}
-
-bool has_gstreamer_element_factory(const char *name) {
-  GstElementFactory *factory = gst_element_factory_find(name);
-  if (factory == nullptr) {
-    set_last_error(std::string("GStreamer element missing: ") + name);
-    return false;
-  }
-  gst_object_unref(factory);
-  return true;
-}
-
-std::string pop_pipeline_diagnostics_locked() {
-  if (pipeline_bus == nullptr) {
-    return "";
-  }
-  std::string diagnostics;
-  while (true) {
-    GstMessage *message = gst_bus_pop(pipeline_bus);
-    if (message == nullptr) {
-      break;
-    }
-    if (!diagnostics.empty()) {
-      diagnostics += "\n";
-    }
-    const char *source = GST_OBJECT_NAME(message->src);
-    if (source == nullptr) {
-      source = "unknown";
-    }
-    diagnostics += "GStreamer bus ";
-    diagnostics += GST_MESSAGE_TYPE_NAME(message);
-    diagnostics += " from ";
-    diagnostics += source;
-    if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ERROR) {
-      GError *error = nullptr;
-      gchar *debug = nullptr;
-      gst_message_parse_error(message, &error, &debug);
-      diagnostics += ": ";
-      diagnostics += error != nullptr ? error->message : "unknown error";
-      if (debug != nullptr) {
-        diagnostics += ", debug=";
-        diagnostics += debug;
-      }
-      if (error != nullptr) g_error_free(error);
-      if (debug != nullptr) g_free(debug);
-    } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_WARNING) {
-      GError *error = nullptr;
-      gchar *debug = nullptr;
-      gst_message_parse_warning(message, &error, &debug);
-      diagnostics += ": ";
-      diagnostics += error != nullptr ? error->message : "unknown warning";
-      if (debug != nullptr) {
-        diagnostics += ", debug=";
-        diagnostics += debug;
-      }
-      if (error != nullptr) g_error_free(error);
-      if (debug != nullptr) g_free(debug);
-    } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_STATE_CHANGED) {
-      GstState old_state;
-      GstState new_state;
-      GstState pending_state;
-      gst_message_parse_state_changed(message, &old_state, &new_state, &pending_state);
-      diagnostics += ": ";
-      diagnostics += gst_element_state_get_name(old_state);
-      diagnostics += " -> ";
-      diagnostics += gst_element_state_get_name(new_state);
-      diagnostics += " pending=";
-      diagnostics += gst_element_state_get_name(pending_state);
-    } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_STREAM_STATUS) {
-      GstStreamStatusType type;
-      GstElement *owner = nullptr;
-      gst_message_parse_stream_status(message, &type, &owner);
-      diagnostics += ": type=";
-      diagnostics += std::to_string(static_cast<int>(type));
-      if (owner != nullptr) {
-        diagnostics += " owner=";
-        diagnostics += GST_OBJECT_NAME(owner);
-      }
-    } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS) {
-      diagnostics += ": eos";
-    }
-    gst_message_unref(message);
-  }
-  return diagnostics;
 }
 
 void copy_yuv420_to_nv12(
@@ -601,180 +434,38 @@ bool start_rkmpp_encoder_locked(RkMppEncoder &enc, jint width, jint height, jint
 }  // namespace
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeInitialize(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeInitialize(
     JNIEnv *env,
     jobject /* thiz */) {
-  GError *error = nullptr;
-  if (!gst_init_check(nullptr, nullptr, &error)) {
-    const char *message = error != nullptr ? error->message : "unknown error";
-    set_last_error(std::string("GStreamer init failed: ") + message);
-    if (error != nullptr) {
-      g_error_free(error);
-    }
+  std::lock_guard<std::mutex> lock(rkmpp_mutex);
+  if (!load_rkmpp_locked()) {
     return JNI_FALSE;
   }
-
-  gstreamer_initialized = true;
   last_error.clear();
-  LOGI("GStreamer initialized, version=%s", gst_version_string());
   return JNI_TRUE;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeVersion(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeVersion(
     JNIEnv *env,
     jobject /* thiz */) {
-  return env->NewStringUTF(gst_version_string());
+  std::lock_guard<std::mutex> lock(rkmpp_mutex);
+  if (!load_rkmpp_locked()) {
+    return env->NewStringUTF("不可用");
+  }
+  return env->NewStringUTF("RKMPP native bridge");
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeLastError(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeLastError(
     JNIEnv *env,
     jobject /* thiz */) {
-  std::lock_guard<std::mutex> lock(stream_mutex);
+  std::lock_guard<std::mutex> lock(rkmpp_mutex);
   return env->NewStringUTF(last_error.c_str());
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartH265Rtsp(
-    JNIEnv *env,
-    jobject /* thiz */,
-    jstring url,
-    jint width,
-    jint height,
-    jint fps) {
-  std::lock_guard<std::mutex> lock(stream_mutex);
-  if (!gstreamer_initialized) {
-    if (Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeInitialize(env, nullptr) == JNI_FALSE) {
-      return JNI_FALSE;
-    }
-  }
-
-  stop_pipeline_locked();
-
-  const char *required_factories[] = {"appsrc", "h265parse", "rtspclientsink"};
-  for (const char *factory : required_factories) {
-    if (!has_gstreamer_element_factory(factory)) {
-      return JNI_FALSE;
-    }
-  }
-
-  const std::string target_url = to_string(env, url);
-  const std::string caps = "video/x-h265,stream-format=byte-stream,alignment=au,width=" +
-      std::to_string(width) + ",height=" + std::to_string(height) + ",framerate=" +
-      std::to_string(fps) + "/1";
-  const std::string description =
-      "rtspclientsink name=rtsp_sink protocols=tcp location=\"" + target_url +
-      "\" appsrc name=video_source is-live=true do-timestamp=false format=time stream-type=stream caps=\"" +
-      caps +
-      "\" ! queue leaky=downstream max-size-buffers=30 ! h265parse config-interval=-1 ! "
-      "rtsp_sink.sink_0";
-
-  GError *error = nullptr;
-  pipeline = gst_parse_launch(description.c_str(), &error);
-  if (error != nullptr) {
-    const char *message = error != nullptr ? error->message : "unknown error";
-    set_last_error(std::string("GStreamer pipeline create failed: ") + message);
-    if (error != nullptr) {
-      g_error_free(error);
-    }
-    stop_pipeline_locked();
-    return JNI_FALSE;
-  }
-  if (pipeline == nullptr) {
-    set_last_error("GStreamer pipeline create failed: unknown error");
-    return JNI_FALSE;
-  }
-
-  video_source = gst_bin_get_by_name(GST_BIN(pipeline), "video_source");
-  if (video_source == nullptr) {
-    set_last_error("GStreamer appsrc element not found");
-    stop_pipeline_locked();
-    return JNI_FALSE;
-  }
-  pipeline_bus = gst_element_get_bus(pipeline);
-
-  GstStateChangeReturn result = gst_element_set_state(pipeline, GST_STATE_PLAYING);
-  if (result == GST_STATE_CHANGE_FAILURE) {
-    set_last_error("GStreamer pipeline failed to enter PLAYING state");
-    stop_pipeline_locked();
-    return JNI_FALSE;
-  }
-  if (!check_pipeline_bus_locked()) {
-    stop_pipeline_locked();
-    return JNI_FALSE;
-  }
-
-  last_error.clear();
-  LOGI("GStreamer H265 RTSP pipeline started, url=%s", target_url.c_str());
-  return JNI_TRUE;
-}
-
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativePushH265Frame(
-    JNIEnv *env,
-    jobject /* thiz */,
-    jbyteArray data,
-    jlong pts_us,
-    jboolean /* key_frame */) {
-  std::lock_guard<std::mutex> lock(stream_mutex);
-  if (video_source == nullptr || data == nullptr) {
-    return JNI_FALSE;
-  }
-
-  const jsize size = env->GetArrayLength(data);
-  if (size <= 0) {
-    return JNI_TRUE;
-  }
-
-  GstBuffer *buffer = gst_buffer_new_allocate(nullptr, static_cast<gsize>(size), nullptr);
-  if (buffer == nullptr) {
-    return JNI_FALSE;
-  }
-
-  GstMapInfo map;
-  if (!gst_buffer_map(buffer, &map, GST_MAP_WRITE)) {
-    gst_buffer_unref(buffer);
-    return JNI_FALSE;
-  }
-  env->GetByteArrayRegion(data, 0, size, reinterpret_cast<jbyte *>(map.data));
-  gst_buffer_unmap(buffer, &map);
-
-  GST_BUFFER_PTS(buffer) = static_cast<GstClockTime>(pts_us) * GST_USECOND;
-  GST_BUFFER_DTS(buffer) = GST_BUFFER_PTS(buffer);
-  GST_BUFFER_DURATION(buffer) = GST_CLOCK_TIME_NONE;
-
-  if (!check_pipeline_bus_locked()) {
-    gst_buffer_unref(buffer);
-    return JNI_FALSE;
-  }
-  GstFlowReturn flow = gst_app_src_push_buffer(GST_APP_SRC(video_source), buffer);
-  if (flow != GST_FLOW_OK) {
-    set_last_error("GStreamer appsrc push failed flow=" + std::to_string(static_cast<int>(flow)));
-    return JNI_FALSE;
-  }
-  return check_pipeline_bus_locked() ? JNI_TRUE : JNI_FALSE;
-}
-
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativePollH265RtspDiagnostics(
-    JNIEnv *env,
-    jobject /* thiz */) {
-  std::lock_guard<std::mutex> lock(stream_mutex);
-  const std::string diagnostics = pop_pipeline_diagnostics_locked();
-  return env->NewStringUTF(diagnostics.c_str());
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStopH265Rtsp(
-    JNIEnv * /* env */,
-    jobject /* thiz */) {
-  std::lock_guard<std::mutex> lock(stream_mutex);
-  stop_pipeline_locked();
-}
-
-extern "C" JNIEXPORT jstring JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeRkMppStatus(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeRkMppStatus(
     JNIEnv *env,
     jobject /* thiz */) {
   std::lock_guard<std::mutex> lock(rkmpp_mutex);
@@ -789,7 +480,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeRkMppStatus(
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartRkMppH265(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeStartRkMppH265(
     JNIEnv * /* env */,
     jobject /* thiz */,
     jint width,
@@ -807,7 +498,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStartRkMppH265(
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeCreateRkMppH265Encoder(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeCreateRkMppH265Encoder(
     JNIEnv * /* env */,
     jobject /* thiz */,
     jint width,
@@ -828,7 +519,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeCreateRkMppH265Encod
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265Frame(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeEncodeRkMppH265Frame(
     JNIEnv *env,
     jobject /* thiz */,
     jbyteArray nv12,
@@ -856,7 +547,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265Frame
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265ImageWithHandle(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeEncodeRkMppH265ImageWithHandle(
     JNIEnv *env,
     jobject /* thiz */,
     jlong handle,
@@ -912,7 +603,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265Image
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265Image(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeEncodeRkMppH265Image(
     JNIEnv *env,
     jobject /* thiz */,
     jobject y_buffer,
@@ -968,7 +659,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeEncodeRkMppH265Image
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeConvertYuv420ToNv12(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeConvertYuv420ToNv12(
     JNIEnv *env,
     jobject /* thiz */,
     jobject y_buffer,
@@ -1007,7 +698,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeConvertYuv420ToNv12(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStopRkMppH265(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeStopRkMppH265(
     JNIEnv * /* env */,
     jobject /* thiz */) {
   std::lock_guard<std::mutex> lock(rkmpp_mutex);
@@ -1017,7 +708,7 @@ Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeStopRkMppH265(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_smart_1cabinet_kiosk_GStreamerBridge_nativeDestroyRkMppH265Encoder(
+Java_com_example_smart_1cabinet_kiosk_RkMppBridge_nativeDestroyRkMppH265Encoder(
     JNIEnv * /* env */,
     jobject /* thiz */,
     jlong handle) {

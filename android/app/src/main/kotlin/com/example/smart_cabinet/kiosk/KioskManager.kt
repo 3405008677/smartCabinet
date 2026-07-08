@@ -39,7 +39,7 @@ class KioskManager(private val activity: Activity) {
 
     private var operationAreaStream: H265RtspStream? = null
 
-    private val gStreamerBridge by lazy { GStreamerBridge() }
+    private val rkMppBridge by lazy { RkMppBridge() }
 
     private var outsideEnvironmentStreamStatus: String = "未启动"
 
@@ -368,13 +368,14 @@ class KioskManager(private val activity: Activity) {
         )
     }
 
-    fun readGStreamerStatus(): Map<String, String> {
+    fun readRkMppStatus(): Map<String, String> {
         return runCatching {
-            val initialized = gStreamerBridge.initialize(activity.applicationContext)
+            val initialized = rkMppBridge.initialize(activity.applicationContext)
             linkedMapOf(
                 "available" to initialized.toString(),
-                "version" to gStreamerBridge.version(),
-                "library" to "libgstreamer_android.so, libsmartcabinet_gstreamer.so",
+                "version" to rkMppBridge.version(),
+                "status" to rkMppBridge.rkMppStatus(),
+                "library" to "libsmartcabinet_rkmpp.so",
             )
         }.getOrElse { error ->
             linkedMapOf(
@@ -595,7 +596,7 @@ class KioskManager(private val activity: Activity) {
                 appendOutsideEnvironmentLog("profile=${request.profile} build=$H265_BUILD_MARK encoder=rkmpp protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=${request.url} size=${request.width}x${request.height} fps=${request.fps} bitrate=${request.bitrate} gop=${request.iframeInterval}s")
             }
             appendOutsideEnvironmentLog("starting H265 RTSP streams, cameraId=$cameraId, profiles=${profiles.joinToString(",") { it.name }}")
-            val stream = DualMediaCodecH265Stream(activity.applicationContext, gStreamerBridge) { status ->
+            val stream = DualMediaCodecH265Stream(activity.applicationContext, rkMppBridge) { status ->
                 outsideEnvironmentStreamStatus = "${profiles.joinToString(",") { it.name }} $status"
                 Log.i(TAG, "outside environment H265 status: $status")
                 appendOutsideEnvironmentLog("status=$status")
@@ -605,7 +606,7 @@ class KioskManager(private val activity: Activity) {
             if (!started) {
                 val reason = outsideEnvironmentStreamStatus
                 outsideEnvironmentStreamStatus = "H265 推流启动失败：$reason"
-                Log.e(TAG, "outside environment GStreamer RTSP H265 stream start returned false: $reason")
+                Log.e(TAG, "outside environment RKMPP RTSP H265 stream start returned false: $reason")
                 appendOutsideEnvironmentLog("start returned false: $reason")
                 scheduleOutsideEnvironmentReconnect(cameraId, reason)
                 return
@@ -617,7 +618,7 @@ class KioskManager(private val activity: Activity) {
             appendOutsideEnvironmentLog("stream object started")
         } catch (error: Throwable) {
             outsideEnvironmentStreamStatus = "${enabledOutsideEnvironmentProfiles.joinToString(",")} 推流启动失败：${error.message ?: error::class.java.simpleName}"
-            Log.e(TAG, "outside environment GStreamer RTSP H265 stream start failed", error)
+            Log.e(TAG, "outside environment RKMPP RTSP H265 stream start failed", error)
             appendOutsideEnvironmentLog("start failed", error)
             stopOutsideEnvironmentStream()
             scheduleOutsideEnvironmentReconnect(cameraId, outsideEnvironmentStreamStatus)
@@ -636,7 +637,7 @@ class KioskManager(private val activity: Activity) {
     private fun scheduleOutsideEnvironmentReconnect(cameraId: String, reason: String) {
         if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
             outsideEnvironmentStreamStatus = "推流重连失败，已达到最大次数：$reason"
-            Log.e(TAG, "outside environment GStreamer RTSP H265 stream reconnect failed, max attempts reached")
+            Log.e(TAG, "outside environment RKMPP RTSP H265 stream reconnect failed, max attempts reached")
             appendOutsideEnvironmentLog("reconnect failed, max attempts reached, reason=$reason")
             return
         }
@@ -645,7 +646,7 @@ class KioskManager(private val activity: Activity) {
         streamHandler.removeCallbacks(reconnectRunnable)
         streamHandler.postDelayed(reconnectRunnable, RECONNECT_DELAY_MS)
         outsideEnvironmentStreamStatus = "推流断开：$reason，${RECONNECT_DELAY_MS / 1000} 秒后重连第 $reconnectAttempts 次"
-        Log.w(TAG, "outside environment GStreamer RTSP H265 stream reconnect scheduled, cameraId=$cameraId, attempt=$reconnectAttempts, reason=$reason")
+        Log.w(TAG, "outside environment RKMPP RTSP H265 stream reconnect scheduled, cameraId=$cameraId, attempt=$reconnectAttempts, reason=$reason")
         appendOutsideEnvironmentLog("reconnect scheduled, cameraId=$cameraId, attempt=$reconnectAttempts, reason=$reason")
     }
 
@@ -906,7 +907,7 @@ class KioskManager(private val activity: Activity) {
             Log.i(TAG, "starting operation area RTSP H265 stream, cameraId=$cameraId, url=$url, videoConfig=$videoConfig")
             appendOutsideEnvironmentLog("role=operationArea build=$H265_BUILD_MARK encoder=${selectH265EncoderName()} protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=$url size=${streamWidth}x$streamHeight fps=$streamFps bitrate=$streamBitrate gop=${streamGopSeconds}s")
             appendOutsideEnvironmentLog("role=operationArea starting H265 RTSP stream, cameraId=$cameraId, url=$url")
-            val stream = createH265Stream(GStreamerBridge()) { status ->
+            val stream = createH265Stream(RkMppBridge()) { status ->
                 operationAreaStreamStatus = status
                 Log.i(TAG, "operation area H265 status: $status")
                 appendOutsideEnvironmentLog("role=operationArea status=$status")
@@ -978,11 +979,11 @@ class KioskManager(private val activity: Activity) {
         }
     }
 
-    private fun createH265Stream(bridge: GStreamerBridge, statusListener: (String) -> Unit): H265RtspStream {
+    private fun createH265Stream(bridge: RkMppBridge, statusListener: (String) -> Unit): H265RtspStream {
         return if (shouldUseRkMppH265()) {
             RkMppH265Stream(activity.applicationContext, bridge, statusListener)
         } else {
-            MediaCodecH265Stream(activity.applicationContext, bridge, statusListener)
+            MediaCodecH265Stream(activity.applicationContext, statusListener)
         }
     }
 

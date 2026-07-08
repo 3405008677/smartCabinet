@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class DualMediaCodecH265Stream(
     private val context: Context,
-    private val bridge: GStreamerBridge,
+    private val bridge: RkMppBridge,
     private val statusListener: (String) -> Unit,
 ) {
     data class StreamRequest(

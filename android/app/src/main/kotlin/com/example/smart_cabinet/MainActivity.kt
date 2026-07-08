@@ -59,7 +59,7 @@ class MainActivity : FlutterActivity() {
                 "readOperationAreaStreamStatus" -> result.success(
                     kioskManager.readOperationAreaStreamStatus(),
                 )
-                "readGStreamerStatus" -> result.success(kioskManager.readGStreamerStatus())
+                "readRkMppStatus" -> result.success(kioskManager.readRkMppStatus())
                 "recordErrorLog" -> {
                     kioskManager.recordErrorLog(
                         source = call.argument<String>("source") ?: "flutter",

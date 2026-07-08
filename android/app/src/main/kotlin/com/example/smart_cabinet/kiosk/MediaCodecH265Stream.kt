@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class MediaCodecH265Stream(
     private val context: Context,
-    private val bridge: GStreamerBridge,
     private val statusListener: (String) -> Unit,
 ) : H265RtspStream {
     private var cameraDevice: CameraDevice? = null
@@ -32,7 +31,6 @@ class MediaCodecH265Stream(
     private var encoderInputSurface: Surface? = null
     private var workerThread: HandlerThread? = null
     private var workerHandler: Handler? = null
-    private var diagnosticsRunnable: Runnable? = null
     private var drainThread: Thread? = null
     private var rtspPublisher: RtspTcpH265Publisher? = null
     private var rtspUrl = ""
@@ -73,7 +71,6 @@ class MediaCodecH265Stream(
             streaming.set(true)
             openCamera(cameraId)
             startDrainThread()
-            startDiagnosticsPolling()
             pushedFrameCount = 0
             pushedByteCount = 0L
             waitingParameterSetCount = 0
@@ -91,8 +88,6 @@ class MediaCodecH265Stream(
             return
         }
         streaming.set(false)
-        diagnosticsRunnable?.let { runnable -> workerHandler?.removeCallbacks(runnable) }
-        diagnosticsRunnable = null
         currentCameraId = null
         runCatching { captureSession?.close() }
         captureSession = null
@@ -231,24 +226,6 @@ class MediaCodecH265Stream(
         }
     }
 
-    private fun startDiagnosticsPolling() {
-        val handler = workerHandler ?: return
-        diagnosticsRunnable = object : Runnable {
-            override fun run() {
-                if (!streaming.get()) {
-                    return
-                }
-                val diagnostics = bridge.pollH265RtspDiagnostics()
-                if (diagnostics.isNotBlank()) {
-                    diagnostics.lineSequence()
-                        .filter { it.isNotBlank() }
-                        .forEach { line -> statusListener("RTSP诊断：$line") }
-                }
-                handler.postDelayed(this, DIAGNOSTICS_INTERVAL_MS)
-            }
-        }.also { runnable -> handler.postDelayed(runnable, DIAGNOSTICS_INTERVAL_MS) }
-    }
-
     private fun drainOutputBuffer(codec: MediaCodec, outputIndex: Int, bufferInfo: MediaCodec.BufferInfo) {
         val outputBuffer = codec.getOutputBuffer(outputIndex)
         if (outputBuffer == null || bufferInfo.size <= 0) {
@@ -363,6 +340,5 @@ class MediaCodecH265Stream(
     companion object {
         private const val TAG = "SmartCabinetMediaCodec"
         private const val ENCODER_TIMEOUT_US = 10000L
-        private const val DIAGNOSTICS_INTERVAL_MS = 1000L
     }
 }
