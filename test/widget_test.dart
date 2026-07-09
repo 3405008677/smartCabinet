@@ -788,7 +788,7 @@ void main() {
     expect(find.text('3. Auto Detect'), findsOneWidget);
   });
 
-  testWidgets('admin console shows fixed camera roles without config dialog', (
+  testWidgets('admin console opens preview for a connected camera card', (
     WidgetTester tester,
   ) async {
     await _pumpSmartCabinetApp(tester);
@@ -805,16 +805,80 @@ void main() {
     await tester.tap(certificateCamera);
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('开发时指定'), findsWidgets);
+    expect(find.text('连接成功'), findsWidgets);
+    expect(find.text('开发时指定'), findsNothing);
     expect(find.text('配置 合格证采集摄像头'), findsNothing);
     expect(find.text('物理摄像头'), findsNothing);
     expect(
       find.byKey(const ValueKey('admin_camera_preview_panel')),
-      findsNothing,
+      findsOneWidget,
     );
+    expect(find.text('合格证采集摄像头预览'), findsOneWidget);
   });
 
-  testWidgets('admin stream profile controls expose single active mode', (
+  testWidgets('admin console shows camera connection failure when binding is missing', (
+    WidgetTester tester,
+  ) async {
+    CabinetCameraService.debugUseCameraData(cameras: const [
+      CameraDescription(
+        name: 'cameraId_0',
+        lensDirection: CameraLensDirection.front,
+        sensorOrientation: 90,
+      ),
+    ]);
+
+    await _pumpSmartCabinetApp(tester);
+    await _openAdminConsole(tester);
+    await tester.drag(
+      find.byKey(const ValueKey('admin_device_info_grid')),
+      const Offset(0, -260),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('连接成功'), findsWidgets);
+    expect(find.text('连接失败'), findsWidgets);
+    expect(find.textContaining('开发时指定'), findsNothing);
+  });
+
+  testWidgets('admin console accepts native camera2 ids as connected cameras', (
+    WidgetTester tester,
+  ) async {
+    CabinetCameraService.debugUseCameraData(cameras: const [
+      CameraDescription(
+        name: '0',
+        lensDirection: CameraLensDirection.external,
+        sensorOrientation: 0,
+      ),
+      CameraDescription(
+        name: '1',
+        lensDirection: CameraLensDirection.external,
+        sensorOrientation: 0,
+      ),
+      CameraDescription(
+        name: '2',
+        lensDirection: CameraLensDirection.external,
+        sensorOrientation: 0,
+      ),
+      CameraDescription(
+        name: '3',
+        lensDirection: CameraLensDirection.external,
+        sensorOrientation: 0,
+      ),
+    ]);
+
+    await _pumpSmartCabinetApp(tester);
+    await _openAdminConsole(tester);
+    await tester.drag(
+      find.byKey(const ValueKey('admin_device_info_grid')),
+      const Offset(0, -260),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('连接成功'), findsWidgets);
+    expect(find.text('连接失败'), findsNothing);
+  });
+
+  testWidgets('admin stream status is read only and MQTT controlled', (
     WidgetTester tester,
   ) async {
     CabinetCameraService.debugUseCameraData(
@@ -822,7 +886,7 @@ void main() {
       outsideEnvironmentStreamStatus: const CameraStreamStatus(
         status: '720p/1080p 双路推流中',
         url:
-            'rtsp://183.56.183.39:8888/app/device-001_720p,rtsp://183.56.183.39:8888/app/device-001_1080p',
+            'rtsp://183.56.183.39:8888/app/device-001/720p,rtsp://183.56.183.39:8888/app/device-001/1080p',
         cameraId: 'cameraId_1',
         profile: '720p,1080p',
         streamMode: 'dual_active_profiles',
@@ -831,20 +895,13 @@ void main() {
 
     await _pumpSmartCabinetApp(tester);
     await _openAdminConsole(tester);
-    await _expectAdminDeviceGridText(tester, '柜外环境推流按需加载');
+    await _expectAdminDeviceGridText(tester, '柜外环境推流由MQTT控制');
 
-    expect(find.text('双路按需，同时推送720p和1080p'), findsOneWidget);
+    expect(find.text('MQTT指令已触发双路推流'), findsOneWidget);
+    expect(find.text('管理员控制台仅查看状态，不提供推流启动入口'), findsOneWidget);
     expect(find.text('360p'), findsNothing);
-    expect(find.text('720p运行中'), findsOneWidget);
-    expect(find.text('1080p运行中'), findsOneWidget);
-
-    final activeProfileButton = tester.widget<FilledButton>(
-      find.ancestor(
-        of: find.text('720p运行中'),
-        matching: find.byType(FilledButton),
-      ),
-    );
-    expect(activeProfileButton.onPressed, isNotNull);
+    expect(find.text('720p运行中'), findsNothing);
+    expect(find.text('1080p运行中'), findsNothing);
   });
 }
 

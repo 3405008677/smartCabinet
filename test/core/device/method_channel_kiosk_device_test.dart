@@ -14,46 +14,6 @@ void main() {
         .setMockMethodCallHandler(kioskChannel, null);
   });
 
-  test('starts the requested stream profile on demand', () async {
-    final calls = <MethodCall>[];
-    const device = MethodChannelKioskDevice();
-
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(kioskChannel, (call) async {
-          calls.add(call);
-          return null;
-        });
-
-    await device.startStreamProfile('720p', cameraId: '0');
-
-    expect(calls, hasLength(1));
-    expect(calls.single.method, 'startStreamProfile');
-    expect(calls.single.arguments, <String, Object?>{
-      'profile': '720p',
-      'cameraId': '0',
-    });
-  });
-
-  test('stops the requested stream profile on demand', () async {
-    final calls = <MethodCall>[];
-    const device = MethodChannelKioskDevice();
-
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(kioskChannel, (call) async {
-          calls.add(call);
-          return null;
-        });
-
-    await device.stopStreamProfile('1080p', cameraId: '0');
-
-    expect(calls, hasLength(1));
-    expect(calls.single.method, 'stopStreamProfile');
-    expect(calls.single.arguments, <String, Object?>{
-      'profile': '1080p',
-      'cameraId': '0',
-    });
-  });
-
   test('starts camera stream by role', () async {
     final calls = <MethodCall>[];
     const device = MethodChannelKioskDevice();

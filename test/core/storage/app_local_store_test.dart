@@ -27,10 +27,7 @@ void main() {
       'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
       'uploadEnabled': true,
     });
-    expect(state.video, <String, Object?>{
-      'streamUrl': '',
-      'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
-    });
+    expect(state.video, <String, Object?>{'streamUrl': ''});
     expect(await store.snapshot(), <String, Object?>{
       'authToken': '',
       'languageCode': 'zh-CN',
@@ -41,10 +38,7 @@ void main() {
         'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
         'uploadEnabled': true,
       },
-      'video': <String, Object?>{
-        'streamUrl': '',
-        'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
-      },
+      'video': <String, Object?>{'streamUrl': ''},
     });
   });
 
@@ -80,7 +74,6 @@ void main() {
       },
       'video': <String, Object?>{
         'streamUrl': '${AppConfig.streamBaseUrl}/a1b2c3d4e5f67890',
-        'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
       },
     });
   });
@@ -101,7 +94,6 @@ void main() {
     expect(state.authToken, '');
     expect(state.video, <String, Object?>{
       'streamUrl': '',
-      'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
       'activeProfile': '720p',
     });
   });

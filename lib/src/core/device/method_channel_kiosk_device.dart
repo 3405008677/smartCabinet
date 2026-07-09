@@ -40,28 +40,6 @@ class MethodChannelKioskDevice implements KioskDevice {
   }
 
   @override
-  Future<void> startStreamProfile(
-    String profile, {
-    required String cameraId,
-  }) async {
-    await _channel.invokeMethod<void>('startStreamProfile', {
-      'profile': profile,
-      'cameraId': cameraId,
-    });
-  }
-
-  @override
-  Future<void> stopStreamProfile(
-    String profile, {
-    required String cameraId,
-  }) async {
-    await _channel.invokeMethod<void>('stopStreamProfile', {
-      'profile': profile,
-      'cameraId': cameraId,
-    });
-  }
-
-  @override
   Future<void> startCameraStream(
     CabinetCameraRole role, {
     required List<String> profiles,

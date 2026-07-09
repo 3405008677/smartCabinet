@@ -118,7 +118,7 @@ void main() {
     final status = CameraStreamStatus.fromMap(const <String, Object?>{
       'status': '720p/1080p 双路推流中',
       'url':
-          '${AppConfig.streamBaseUrl}/device-001_720p,${AppConfig.streamBaseUrl}/device-001_1080p',
+          '${AppConfig.streamBaseUrl}/device-001/720p,${AppConfig.streamBaseUrl}/device-001/1080p',
       'cameraId': 'cameraId_1',
       'profile': '720p,1080p',
       'streamMode': 'dual_active_profiles',
@@ -127,7 +127,7 @@ void main() {
     expect(status.status, '720p/1080p 双路推流中');
     expect(
       status.url,
-      '${AppConfig.streamBaseUrl}/device-001_720p,${AppConfig.streamBaseUrl}/device-001_1080p',
+      '${AppConfig.streamBaseUrl}/device-001/720p,${AppConfig.streamBaseUrl}/device-001/1080p',
     );
     expect(status.cameraId, 'cameraId_1');
     expect(status.profile, '720p,1080p');

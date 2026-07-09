@@ -1,3 +1,4 @@
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,7 +6,6 @@ import '../../../../app/localization/app_localizations.dart';
 import '../../../../components/Layout/TerminalShell/index.dart';
 import '../../../../core/camera/index.dart';
 import '../../../../core/device/hardware_status_service.dart';
-import '../../../../core/device/kiosk_device_provider.dart';
 import '../../../../core/storage/app_local_store_provider.dart';
 import '../../../../models/admin_model.dart';
 
@@ -38,11 +38,11 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
   /// 操作区摄像头原生 RTSP-H265 推流状态。
   CameraStreamStatus? _operationAreaStreamStatus;
 
+  /// 当前系统枚举到的摄像头列表。
+  List<CabinetCameraDevice> _availableCameras = const [];
+
   /// 摄像头绑定服务。
   final CabinetCameraService _cameraService = const CabinetCameraService();
-
-  /// 当前正在执行的推流控制动作。
-  String? _streamProfileAction;
 
   @override
   void initState() {
@@ -69,6 +69,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
   /// 加载摄像头推流状态。
   Future<void> _loadCameraConfig() async {
     try {
+      final availableCameras = await _cameraService.loadAvailableCameras();
       final outsideEnvironmentStreamStatus = await _cameraService
           .readOutsideEnvironmentStreamStatus();
       final operationAreaStreamStatus = await _cameraService
@@ -77,6 +78,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
         return;
       }
       setState(() {
+        _availableCameras = availableCameras;
         _outsideEnvironmentStreamStatus = outsideEnvironmentStreamStatus;
         _operationAreaStreamStatus = operationAreaStreamStatus;
         _cameraConfigLoading = false;
@@ -93,54 +95,15 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
     }
   }
 
-  /// 按清晰度启动柜外环境推流。
-  Future<void> _startOutsideEnvironmentStreamProfile(String profile) async {
-    if (_streamProfileAction != null) {
-      return;
-    }
-    setState(() => _streamProfileAction = 'start:$profile');
-    try {
-      await ref
-          .read(kioskDeviceProvider)
-          .startCameraStream(
-            CabinetCameraRole.outsideEnvironment,
-            profiles: [profile],
-          );
-      final status = await _cameraService.readOutsideEnvironmentStreamStatus();
-      if (!mounted) {
-        return;
-      }
-      setState(() => _outsideEnvironmentStreamStatus = status);
-    } finally {
-      if (mounted) {
-        setState(() => _streamProfileAction = null);
-      }
-    }
-  }
-
-  /// 停止柜外环境当前清晰度推流。
-  Future<void> _stopOutsideEnvironmentStreamProfile(String profile) async {
-    if (_streamProfileAction != null) {
-      return;
-    }
-    setState(() => _streamProfileAction = 'stop:$profile');
-    try {
-      await ref
-          .read(kioskDeviceProvider)
-          .stopCameraStream(
-            CabinetCameraRole.outsideEnvironment,
-            profiles: [profile],
-          );
-      final status = await _cameraService.readOutsideEnvironmentStreamStatus();
-      if (!mounted) {
-        return;
-      }
-      setState(() => _outsideEnvironmentStreamStatus = status);
-    } finally {
-      if (mounted) {
-        setState(() => _streamProfileAction = null);
-      }
-    }
+  /// 打开指定摄像头的实时预览弹窗。
+  Future<void> _openCameraPreview(
+    CabinetCameraRole role,
+    CabinetCameraDevice camera,
+  ) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => _AdminCameraPreviewDialog(role: role, camera: camera),
+    );
   }
 
   @override
@@ -172,13 +135,10 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
                 status: _deviceStatus,
                 cameraConfigLoading: _cameraConfigLoading,
                 cameraConfigError: _cameraConfigError,
+                availableCameras: _availableCameras,
                 outsideEnvironmentStreamStatus: _outsideEnvironmentStreamStatus,
                 operationAreaStreamStatus: _operationAreaStreamStatus,
-                streamProfileAction: _streamProfileAction,
-                onStartOutsideEnvironmentStreamProfile:
-                    _startOutsideEnvironmentStreamProfile,
-                onStopOutsideEnvironmentStreamProfile:
-                    _stopOutsideEnvironmentStreamProfile,
+                onOpenCameraPreview: _openCameraPreview,
               ),
             ),
             const SizedBox(width: 24),
@@ -230,11 +190,10 @@ class _DeviceInfoPanel extends StatelessWidget {
     required this.status,
     required this.cameraConfigLoading,
     required this.cameraConfigError,
+    required this.availableCameras,
     required this.outsideEnvironmentStreamStatus,
     required this.operationAreaStreamStatus,
-    required this.streamProfileAction,
-    required this.onStartOutsideEnvironmentStreamProfile,
-    required this.onStopOutsideEnvironmentStreamProfile,
+    required this.onOpenCameraPreview,
   });
 
   /// 当前柜体设备状态。
@@ -246,20 +205,18 @@ class _DeviceInfoPanel extends StatelessWidget {
   /// 摄像头配置加载错误。
   final String? cameraConfigError;
 
+  /// 当前系统枚举到的摄像头列表。
+  final List<CabinetCameraDevice> availableCameras;
+
   /// 柜外环境摄像头原生推流状态。
   final CameraStreamStatus? outsideEnvironmentStreamStatus;
 
   /// 操作区摄像头原生 RTSP-H265 推流状态。
   final CameraStreamStatus? operationAreaStreamStatus;
 
-  /// 当前正在执行的推流控制动作。
-  final String? streamProfileAction;
-
-  /// 按清晰度启动柜外环境推流。
-  final ValueChanged<String> onStartOutsideEnvironmentStreamProfile;
-
-  /// 停止柜外环境指定清晰度推流。
-  final ValueChanged<String> onStopOutsideEnvironmentStreamProfile;
+  /// 打开摄像头预览弹窗。
+  final void Function(CabinetCameraRole role, CabinetCameraDevice camera)
+  onOpenCameraPreview;
 
   @override
   Widget build(BuildContext context) {
@@ -286,12 +243,18 @@ class _DeviceInfoPanel extends StatelessWidget {
         Icons.settings_ethernet_rounded,
       ),
       ...CabinetCameraRole.values.map(
-        (role) => _DeviceInfoItem(
-          role.label(context),
-          _cameraStatusText(context, role),
-          Icons.video_camera_front_outlined,
-          key: ValueKey('admin_camera_role_${role.name}'),
-        ),
+        (role) {
+          final camera = _connectedCameraForRole(role);
+          return _DeviceInfoItem(
+            role.label(context),
+            _cameraStatusText(context, role),
+            Icons.video_camera_front_outlined,
+            key: ValueKey('admin_camera_role_${role.name}'),
+            onTap: camera == null
+                ? null
+                : () => onOpenCameraPreview(role, camera),
+          );
+        },
       ),
       _DeviceInfoItem(
         l10n.t('adminDeviceNfc', 'NFC'),
@@ -318,15 +281,6 @@ class _DeviceInfoPanel extends StatelessWidget {
       for (final item in items) _DeviceStatusTile(item),
       _OutsideEnvironmentStreamControls(
         status: outsideEnvironmentStreamStatus,
-        action: streamProfileAction,
-        cameraConfigured:
-            !cameraConfigLoading &&
-            cameraConfigError == null &&
-            CabinetCameraConfig.bindingFor(
-              CabinetCameraRole.outsideEnvironment,
-            ).isConfigured,
-        onStartProfile: onStartOutsideEnvironmentStreamProfile,
-        onStopProfile: onStopOutsideEnvironmentStreamProfile,
       ),
     ];
 
@@ -371,23 +325,58 @@ class _DeviceInfoPanel extends StatelessWidget {
     }
     if (role == CabinetCameraRole.outsideEnvironment) {
       final streamStatus = outsideEnvironmentStreamStatus?.status ?? '未启动';
-      return '开发时指定\nRTSP-H265：$streamStatus';
+      return '${_cameraConnectionText(role)}\nRTSP-H265：$streamStatus';
     }
     if (role == CabinetCameraRole.operationArea) {
       if (!CabinetCameraConfig.bindingFor(role).isConfigured) {
         return '未配置\nRTSP-H265：未启用';
       }
       final streamStatus = operationAreaStreamStatus?.status ?? '未启动';
-      return '开发时指定\nRTSP-H265：$streamStatus';
+      return '${_cameraConnectionText(role)}\nRTSP-H265：$streamStatus';
     }
-    return l10n.t('adminCameraFixedInCode', '开发时指定');
+    return _cameraConnectionText(role);
+  }
+
+  /// 判断开发绑定的摄像头当前是否能被系统枚举到。
+  String _cameraConnectionText(CabinetCameraRole role) {
+    return _connectedCameraForRole(role) == null ? '连接失败' : '连接成功';
+  }
+
+  /// 查找当前角色已经连接的摄像头。
+  CabinetCameraDevice? _connectedCameraForRole(CabinetCameraRole role) {
+    final binding = CabinetCameraConfig.bindingFor(role);
+    final boundCameraIds = switch (binding.useMode) {
+      CabinetCameraUseMode.previewAndCapture ||
+      CabinetCameraUseMode.stillCapture => _cameraIdAliases(
+        binding.flutterCameraId,
+      ),
+      CabinetCameraUseMode.rtspStream => _cameraIdAliases(binding.androidCameraId),
+    };
+    for (final camera in availableCameras) {
+      if (boundCameraIds.contains(camera.id)) {
+        return camera;
+      }
+    }
+    return null;
+  }
+
+  /// 兼容 Android Camera2 原生 ID 和 Flutter camera 插件包装 ID。
+  Set<String> _cameraIdAliases(String? cameraId) {
+    final id = cameraId ?? '';
+    if (id.isEmpty) {
+      return const {};
+    }
+    if (id.startsWith('cameraId_')) {
+      return {id, id.replaceFirst('cameraId_', '')};
+    }
+    return {id, CabinetCameraConfig.toFlutterCameraId(id)};
   }
 }
 
 /// 单项设备状态。
 class _DeviceInfoItem {
   /// 创建设备状态项。
-  const _DeviceInfoItem(this.label, this.value, this.icon, {this.key});
+  const _DeviceInfoItem(this.label, this.value, this.icon, {this.key, this.onTap});
 
   /// 状态标签。
   final String label;
@@ -400,6 +389,9 @@ class _DeviceInfoItem {
 
   /// 状态卡片 key。
   final Key? key;
+
+  /// 点击状态卡片时触发。
+  final VoidCallback? onTap;
 }
 
 /// 设备状态卡片。
@@ -412,7 +404,7 @@ class _DeviceStatusTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       key: item.key,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -466,6 +458,172 @@ class _DeviceStatusTile extends StatelessWidget {
         ],
       ),
     );
+    if (item.onTap == null) {
+      return card;
+    }
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: item.onTap,
+        child: card,
+      ),
+    );
+  }
+}
+
+/// 管理员控制台摄像头预览弹窗。
+class _AdminCameraPreviewDialog extends StatelessWidget {
+  /// 创建管理员控制台摄像头预览弹窗。
+  const _AdminCameraPreviewDialog({required this.role, required this.camera});
+
+  /// 当前预览的摄像头角色。
+  final CabinetCameraRole role;
+
+  /// 当前预览的摄像头设备。
+  final CabinetCameraDevice camera;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(28),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: _AdminCameraPreviewPanel(role: role, camera: camera),
+    );
+  }
+}
+
+/// 管理员控制台摄像头预览面板。
+class _AdminCameraPreviewPanel extends StatefulWidget {
+  /// 创建管理员控制台摄像头预览面板。
+  const _AdminCameraPreviewPanel({required this.role, required this.camera});
+
+  /// 当前预览的摄像头角色。
+  final CabinetCameraRole role;
+
+  /// 当前预览的摄像头设备。
+  final CabinetCameraDevice camera;
+
+  @override
+  State<_AdminCameraPreviewPanel> createState() => _AdminCameraPreviewPanelState();
+}
+
+class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel> {
+  /// 当前预览控制器。
+  CameraController? _controller;
+
+  /// 当前预览状态文案。
+  String _message = '正在启动预览...';
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePreview();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  /// 初始化摄像头实时预览。
+  Future<void> _initializePreview() async {
+    try {
+      final controller = CameraController(
+        widget.camera.description,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _controller = controller;
+        _message = '预览已启动';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _message = '预览启动失败：$error');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return Container(
+      key: const ValueKey('admin_camera_preview_panel'),
+      width: 620,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${widget.role.label(context)}预览',
+                  style: const TextStyle(
+                    color: Color(0xFF17213D),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              IconButton(
+                key: const ValueKey('admin_camera_preview_close'),
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: DecoratedBox(
+                decoration: const BoxDecoration(color: Color(0xFF10182E)),
+                child: controller != null && controller.value.isInitialized
+                    ? CameraPreview(controller)
+                    : Center(
+                        child: Text(
+                          _message,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '摄像头ID：${widget.camera.id} · $_message',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF6877A2),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -474,39 +632,17 @@ class _OutsideEnvironmentStreamControls extends StatelessWidget {
   /// 创建柜外环境按需推流控制区。
   const _OutsideEnvironmentStreamControls({
     required this.status,
-    required this.action,
-    required this.cameraConfigured,
-    required this.onStartProfile,
-    required this.onStopProfile,
   });
 
   /// 当前柜外环境推流状态。
   final CameraStreamStatus? status;
 
-  /// 当前正在执行的推流动作。
-  final String? action;
-
-  /// 柜外环境摄像头是否已配置。
-  final bool cameraConfigured;
-
-  /// 启动指定清晰度推流。
-  final ValueChanged<String> onStartProfile;
-
-  /// 停止指定清晰度推流。
-  final ValueChanged<String> onStopProfile;
-
   @override
   Widget build(BuildContext context) {
     final activeProfile = status?.profile ?? '';
-    final activeProfiles = activeProfile
-        .split(',')
-        .map((profile) => profile.trim())
-        .where((profile) => profile.isNotEmpty)
-        .toSet();
     final statusText = status?.status ?? '未启动';
     final dualMode = status?.streamMode == 'dual_active_profiles';
-    final modeText = dualMode ? '双路按需，同时推送720p和1080p' : '独立按需，720p和1080p可分别开关';
-    final profiles = const ['720p', '1080p'];
+    final modeText = dualMode ? 'MQTT指令已触发双路推流' : '仅允许MQTT指令触发推流';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -519,7 +655,7 @@ class _OutsideEnvironmentStreamControls extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '柜外环境推流按需加载',
+            '柜外环境推流由MQTT控制',
             style: TextStyle(
               color: Color(0xFF17213D),
               fontSize: 11,
@@ -548,81 +684,19 @@ class _OutsideEnvironmentStreamControls extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          Wrap(
-            spacing: 5,
-            runSpacing: 4,
-            children: [
-              for (final profile in profiles)
-                _StreamProfileMiniButton(
-                  key: ValueKey('admin_stream_start_$profile'),
-                  onPressed: !cameraConfigured || action != null
-                      ? null
-                      : activeProfiles.contains(profile)
-                      ? () => onStopProfile(profile)
-                      : () => onStartProfile(profile),
-                  label: action == 'start:$profile'
-                      ? '启动中'
-                      : action == 'stop:$profile'
-                      ? '停止中'
-                      : activeProfiles.contains(profile)
-                      ? '$profile运行中'
-                      : profile,
-                ),
-              _StreamProfileMiniButton(
-                key: const ValueKey('admin_stream_stop_active'),
-                onPressed: activeProfiles.length != 1 || action != null
-                    ? null
-                    : () => onStopProfile(activeProfiles.first),
-                label:
-                    activeProfiles.length == 1 &&
-                        action == 'stop:${activeProfiles.first}'
-                    ? '停止中'
-                    : '停止',
-                outlined: true,
-              ),
-            ],
+          const Text(
+            '管理员控制台仅查看状态，不提供推流启动入口',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Color(0xFF9B6B87),
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
     );
-  }
-}
-
-/// 推流清晰度小按钮。
-class _StreamProfileMiniButton extends StatelessWidget {
-  /// 创建推流清晰度小按钮。
-  const _StreamProfileMiniButton({
-    required this.label,
-    required this.onPressed,
-    this.outlined = false,
-    super.key,
-  });
-
-  /// 按钮文案。
-  final String label;
-
-  /// 点击动作。
-  final VoidCallback? onPressed;
-
-  /// 是否使用描边样式。
-  final bool outlined;
-
-  @override
-  Widget build(BuildContext context) {
-    final child = Text(label, style: const TextStyle(fontSize: 10));
-    final style = ButtonStyle(
-      visualDensity: VisualDensity.compact,
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      minimumSize: const WidgetStatePropertyAll(Size(42, 28)),
-      padding: const WidgetStatePropertyAll(
-        EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      ),
-    );
-
-    if (outlined) {
-      return OutlinedButton(onPressed: onPressed, style: style, child: child);
-    }
-    return FilledButton.tonal(onPressed: onPressed, style: style, child: child);
   }
 }
 

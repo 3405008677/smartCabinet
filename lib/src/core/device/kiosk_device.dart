@@ -24,12 +24,6 @@ abstract interface class KioskDevice {
   /// 当需要用户手动授权或排查设备配置时可以调用。
   Future<void> openSystemSettings();
 
-  /// 按指定清晰度和摄像头启动原生推流。
-  Future<void> startStreamProfile(String profile, {required String cameraId});
-
-  /// 停止指定清晰度的原生推流。
-  Future<void> stopStreamProfile(String profile, {required String cameraId});
-
   /// 按业务角色启动原生推流。
   Future<void> startCameraStream(
     CabinetCameraRole role, {

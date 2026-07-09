@@ -17,10 +17,7 @@ final class AppLocalState {
       'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
       'uploadEnabled': true,
     },
-    this.video = const <String, Object?>{
-      'streamUrl': '',
-      'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
-    },
+    this.video = const <String, Object?>{'streamUrl': ''},
   });
 
   /// 管理员或接口登录态 token。
@@ -90,10 +87,7 @@ final class AppLocalState {
         'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
         'uploadEnabled': true,
       }, json['logging']),
-      video: _mergeObjectMap(const <String, Object?>{
-        'streamUrl': '',
-        'streamSwitches': <String, Object?>{'720p': false, '1080p': false},
-      }, json['video']),
+      video: _mergeObjectMap(const <String, Object?>{'streamUrl': ''}, json['video']),
     );
   }
 }

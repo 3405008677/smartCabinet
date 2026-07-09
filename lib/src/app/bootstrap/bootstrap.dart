@@ -61,6 +61,7 @@ Future<void> bootstrap() async {
           tasks: [
             CacheLocalStoreStartupTask(providerContainer),
             const LoadCamerasStartupTask(),
+            const ConnectMqttStartupTask(),
           ],
         ).start();
       } on StartupFailedException catch (error, stackTrace) {

@@ -18,19 +18,11 @@ class MainActivity : FlutterActivity() {
             kioskManager.hideSystemBars()
         }
         runKioskAction("start stream control server") { kioskManager.startStreamControlServer() }
-        runKioskAction("apply configured stream switches") { kioskManager.applyConfiguredStreamSwitches() }
-        runKioskAction("handle debug stream trigger") { handleDebugStreamTrigger() }
     }
 
     override fun onDestroy() {
         runKioskAction("stop stream control server") { kioskManager.stopStreamControlServer() }
         super.onDestroy()
-    }
-
-    override fun onNewIntent(intent: android.content.Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        runKioskAction("handle debug stream trigger") { handleDebugStreamTrigger() }
     }
 
     override fun onResume() {
@@ -73,26 +65,6 @@ class MainActivity : FlutterActivity() {
                     kioskManager.openSystemSettings()
                     result.success(null)
                 }
-                "startStreamProfile" -> {
-                    val profile = call.argument<String>("profile")
-                    val cameraId = call.argument<String>("cameraId")
-                    if (profile.isNullOrBlank() || cameraId.isNullOrBlank()) {
-                        result.error("invalid_stream_profile", "profile or cameraId is empty", null)
-                    } else {
-                        kioskManager.startStreamProfile(profile, cameraId)
-                        result.success(null)
-                    }
-                }
-                "stopStreamProfile" -> {
-                    val profile = call.argument<String>("profile")
-                    val cameraId = call.argument<String>("cameraId")
-                    if (profile.isNullOrBlank() || cameraId.isNullOrBlank()) {
-                        result.error("invalid_stream_profile", "profile or cameraId is empty", null)
-                    } else {
-                        kioskManager.stopStreamProfile(profile, cameraId)
-                        result.success(null)
-                    }
-                }
                 "startCameraStream" -> {
                     val role = call.argument<String>("role")
                     val profiles = call.argument<List<String>>("profiles") ?: emptyList()
@@ -112,10 +84,6 @@ class MainActivity : FlutterActivity() {
                         kioskManager.stopCameraStream(role, profiles)
                         result.success(null)
                     }
-                }
-                "startConfiguredStreams" -> {
-                    Log.i(TAG, "startConfiguredStreams ignored; streams are profile-driven now")
-                    result.success(null)
                 }
                 else -> result.notImplemented()
             }
@@ -141,19 +109,8 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    private fun handleDebugStreamTrigger() {
-        if (intent?.getBooleanExtra(DEBUG_START_DUAL_STREAM_EXTRA, false) == true) {
-            Log.i(TAG, "debug dual stream trigger received")
-            val cameraId = intent?.getStringExtra(DEBUG_STREAM_CAMERA_ID_EXTRA) ?: "0"
-            kioskManager.startStreamProfile("720p", cameraId)
-            kioskManager.startStreamProfile("1080p", cameraId)
-        }
-    }
-
     companion object {
         private const val TAG = "SmartCabinetMain"
         private const val KIOSK_CHANNEL = "smart_cabinet/kiosk"
-        private const val DEBUG_START_DUAL_STREAM_EXTRA = "debugStartDualStream"
-        private const val DEBUG_STREAM_CAMERA_ID_EXTRA = "debugStreamCameraId"
     }
 }

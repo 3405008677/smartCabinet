@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/camera/index.dart';
+import '../../core/mqtt/mqtt_service.dart';
 import '../../core/storage/app_local_store_provider.dart';
 import '../../core/storage/local_store_bootstrap_service.dart';
 import 'startup_task.dart';
@@ -111,5 +112,31 @@ class LoadCamerasStartupTask implements StartupTask {
 
     return (_cameraService ?? const CabinetCameraService())
         .loadAvailableCameras(forceReload: forceReload);
+  }
+}
+
+/// 启动阶段连接 MQTT 并订阅命令主题。
+class ConnectMqttStartupTask implements StartupTask {
+  /// 创建 MQTT 启动任务。
+  const ConnectMqttStartupTask({this.mqttService});
+
+  /// MQTT 连接服务。
+  final SmartCabinetMqttConnector? mqttService;
+
+  @override
+  String get name => '连接 MQTT';
+
+  @override
+  int get order => 30;
+
+  @override
+  bool get required => false;
+
+  @override
+  Duration get timeout => const Duration(seconds: 8);
+
+  @override
+  Future<void> run() {
+    return (mqttService ?? const SmartCabinetMqttService()).connectAndSubscribe();
   }
 }

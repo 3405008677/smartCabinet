@@ -26,6 +26,8 @@ class RtspTcpH265Publisher(
     private var senderRunning = false
     private var senderThread: Thread? = null
     private var droppedFrameCount = 0
+    private var framesSinceLastFlush = 0
+    private var lastFlushAtMs = 0L
 
     fun canStart(codecConfig: ByteArray?): Boolean {
         return codecConfig?.let(::extractParameterSets)?.isComplete == true
@@ -42,7 +44,10 @@ class RtspTcpH265Publisher(
         val uri = URI(url)
         val host = uri.host ?: error("RTSP host is empty")
         val port = if (uri.port > 0) uri.port else 554
-        socket = Socket(host, port).apply { tcpNoDelay = true }
+        socket = Socket(host, port).apply {
+            tcpNoDelay = true
+            sendBufferSize = SOCKET_SEND_BUFFER_SIZE
+        }
         input = BufferedInputStream(socket!!.getInputStream())
         output = BufferedOutputStream(socket!!.getOutputStream())
         statusListener("RTSP直推连接成功：$host:$port")
@@ -109,6 +114,8 @@ class RtspTcpH265Publisher(
         firstPresentationTimeUs = -1L
         parameterSets = null
         droppedFrameCount = 0
+        framesSinceLastFlush = 0
+        lastFlushAtMs = 0L
     }
 
     private fun startSenderThread() {
@@ -144,9 +151,19 @@ class RtspTcpH265Publisher(
             val isLastNal = index == nals.lastIndex
             packetizeNal(nal, timestamp, frame.marker && isLastNal)
         }
-        output?.flush()
+        flushOutputIfNeeded()
         if (droppedFrameCount > 0 && droppedFrameCount % DROP_REPORT_INTERVAL == 0) {
             statusListener("RTSP异步发送丢弃旧帧：dropped=$droppedFrameCount queued=${pendingFrames.size}")
+        }
+    }
+
+    private fun flushOutputIfNeeded() {
+        framesSinceLastFlush += 1
+        val nowMs = System.currentTimeMillis()
+        if (lastFlushAtMs <= 0L || framesSinceLastFlush >= FLUSH_FRAME_INTERVAL || nowMs - lastFlushAtMs >= FLUSH_TIME_INTERVAL_MS) {
+            output?.flush()
+            framesSinceLastFlush = 0
+            lastFlushAtMs = nowMs
         }
     }
 
@@ -342,7 +359,10 @@ class RtspTcpH265Publisher(
 
     companion object {
         private const val MAX_RTP_PAYLOAD = 1200
-        private const val MAX_PENDING_FRAMES = 3
+        private const val MAX_PENDING_FRAMES = 16
         private const val DROP_REPORT_INTERVAL = 30
+        private const val SOCKET_SEND_BUFFER_SIZE = 1024 * 1024
+        private const val FLUSH_FRAME_INTERVAL = 3
+        private const val FLUSH_TIME_INTERVAL_MS = 100L
     }
 }

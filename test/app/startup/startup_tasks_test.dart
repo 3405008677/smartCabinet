@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_cabinet/src/app/startup/startup_tasks.dart';
 import 'package:smart_cabinet/src/core/camera/index.dart';
+import 'package:smart_cabinet/src/core/mqtt/mqtt_service.dart';
 
 void main() {
   tearDown(CabinetCameraService.debugReset);
@@ -71,4 +72,21 @@ void main() {
       await const LoadCamerasStartupTask(requireAtLeastOneCamera: false).run();
     },
   );
+
+  test('mqtt startup task connects and subscribes command topic', () async {
+    final service = _FakeMqttService();
+
+    await ConnectMqttStartupTask(mqttService: service).run();
+
+    expect(service.connected, isTrue);
+  });
+}
+
+class _FakeMqttService implements SmartCabinetMqttConnector {
+  bool connected = false;
+
+  @override
+  Future<void> connectAndSubscribe() async {
+    connected = true;
+  }
 }
