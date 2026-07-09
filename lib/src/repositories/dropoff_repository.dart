@@ -1,4 +1,4 @@
-import '../api/src/Dropoff/index.dart';
+import '../api/Storage/DropoffFileVerification/index.dart';
 import '../dto/dropoff_response_dto.dart';
 import '../models/dropoff_model.dart';
 
@@ -11,19 +11,14 @@ abstract interface class IDropoffRepository {
 /// 放件数据仓库。
 class DropoffRepository implements IDropoffRepository {
   /// 创建放件数据仓库。
-  const DropoffRepository({this.api = dropoffApi});
-
-  /// 放件接口实现。
-  ///
-  /// Repository 通过该接口获取放件原始响应，再转换为页面模型。
-  final DropoffApi api;
+  const DropoffRepository();
 
   /// 获取放件展示数据。
   ///
   /// 页面层只接触 [DropoffModel]，便于后续替换数据源而不影响 UI 代码。
   @override
   Future<DropoffModel> fetchDropoffData() async {
-    final dto = await api.fetchData();
+    final dto = await dropoffFileVerificationAPI();
     return _mapDropoffDtoToModel(dto);
   }
 

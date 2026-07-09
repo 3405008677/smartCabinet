@@ -1,4 +1,4 @@
-import '../api/src/FlightInspection/index.dart';
+import '../api/FlightInspection/Task/index.dart';
 import '../dto/flight_inspection_response_dto.dart';
 import '../models/flight_inspection_model.dart';
 
@@ -11,19 +11,14 @@ abstract interface class IFlightInspectionRepository {
 /// 飞检数据仓库。
 class FlightInspectionRepository implements IFlightInspectionRepository {
   /// 创建飞检数据仓库。
-  const FlightInspectionRepository({this.api = flightInspectionApi});
-
-  /// 飞检接口实现。
-  ///
-  /// Repository 依赖它获取后台下发的飞检任务原始数据。
-  final FlightInspectionApi api;
+  const FlightInspectionRepository();
 
   /// 获取飞检展示数据。
   ///
   /// 页面层只读取 [FlightInspectionModel]，不会直接接触 DTO 或动态结构。
   @override
   Future<FlightInspectionModel> fetchFlightInspectionData() async {
-    final dto = await api.fetchData();
+    final dto = await flightInspectionTaskAPI();
     return _mapFlightInspectionDtoToModel(dto);
   }
 

@@ -1,4 +1,4 @@
-import '../api/src/Home/index.dart';
+import '../api/Home/Dashboard/index.dart';
 import '../dto/home_response_dto.dart';
 import '../models/home_model.dart';
 
@@ -11,19 +11,14 @@ abstract interface class IHomeRepository {
 /// 首页数据仓库。
 class HomeRepository implements IHomeRepository {
   /// 创建首页数据仓库。
-  const HomeRepository({this.api = homeApi});
-
-  /// 首页接口实现。
-  ///
-  /// Repository 通过它读取首页原始数据，再映射为页面直接可用的模型。
-  final HomeApi api;
+  const HomeRepository();
 
   /// 获取首页展示数据。
   ///
   /// 页面只接收 [HomeModel]，因此接口结构变化会被限制在 Repository 内部。
   @override
   Future<HomeModel> fetchHomeData() async {
-    final dto = await api.fetchData();
+    final dto = await homeDashboardAPI();
     return _mapHomeDtoToModel(dto);
   }
 

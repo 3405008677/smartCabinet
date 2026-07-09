@@ -1,4 +1,4 @@
-import '../api/src/Pickup/index.dart';
+import '../api/Storage/PickupVerification/index.dart';
 import '../dto/pickup_response_dto.dart';
 import '../models/pickup_model.dart';
 
@@ -11,13 +11,7 @@ abstract interface class IPickupRepository {
 /// 取件数据仓库。
 class PickupRepository implements IPickupRepository {
   /// 创建取件数据仓库。
-  const PickupRepository({this.api = pickupApi});
-
-  /// 取件接口实现。
-  ///
-  /// Repository 不直接关心数据来自假数据还是真实网络，
-  /// 只依赖接口层返回的 DTO，再统一映射为页面模型。
-  final PickupApi api;
+  const PickupRepository();
 
   /// 获取取件展示数据。
   ///
@@ -25,7 +19,7 @@ class PickupRepository implements IPickupRepository {
   /// 这样后续接口字段变化时不会把影响扩散到页面代码。
   @override
   Future<PickupModel> fetchPickupData() async {
-    final dto = await api.fetchData();
+    final dto = await pickupVerificationAPI();
     return _mapPickupDtoToModel(dto);
   }
 
