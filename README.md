@@ -447,29 +447,25 @@ lib/src/core/device/hardware_recovery_advice.dart
 
 ## 10. 硬件接入边界
 
-当前硬件相关代码以抽象和模拟为主。
-
-文件：
+当前已落地的终端硬件代码集中在 `core/device`：
 
 ```text
-lib/src/core/device/cabinet_device.dart
+lib/src/core/device/device_info_service.dart
+lib/src/core/device/hardware_status_service.dart
 lib/src/core/device/kiosk_device.dart
-lib/src/core/device/scanner_device.dart
 lib/src/core/device/method_channel_kiosk_device.dart
-lib/src/core/device/kiosk_device_provider.dart
 lib/src/core/device/hardware_recovery_advice.dart
 ```
 
-接入建议：
+接入约定：
 
-- 柜控板能力放在 `CabinetDevice` 或其扩展接口中。
-- 终端锁定、Kiosk、系统设置能力放在 `KioskDevice`。
-- 扫码器能力放在 `ScannerDevice`。
-- Android 原生能力通过 MethodChannel 接入。
+- 终端锁定、Kiosk 和系统设置能力通过 `KioskDevice` 暴露。
+- Android 原生能力通过 `MethodChannelKioskDevice` 接入。
 - 页面不要直接调用 MethodChannel。
-- 硬件失败统一转成可展示的业务状态和恢复建议。
+- 硬件失败统一转换成可展示的业务状态和 `HardwareRecoveryAdvice`。
+- 柜控板或扫码器尚未接入；开始真实对接时再创建带有具体操作契约的接口，不保留没有实现和调用方的空接口。
 
-后续真实柜控板建议至少抽象以下能力：
+真实柜控板至少需要覆盖：
 
 - 查询柜控板是否在线。
 - 查询柜门状态。
@@ -614,9 +610,9 @@ flutter test
 
 建议步骤：
 
-- 扩展 `CabinetDevice` 抽象。
-- 通过 MethodChannel 或原生插件实现 Android 通讯。
-- Repository 或业务控制层调用设备抽象。
+- 在 `core/device` 创建描述真实柜控操作的接口和数据模型。
+- 通过 MethodChannel 或厂商 Flutter 插件实现 Android 通讯。
+- Repository 或业务 Controller 依赖接口，不直接依赖平台实现。
 - 页面只展示状态和操作入口。
 - 柜控板异常转成 `HardwareRecoveryAdvice` 或业务错误状态。
 
