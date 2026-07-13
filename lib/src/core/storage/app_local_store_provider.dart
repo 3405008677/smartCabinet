@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'app_local_store.dart';
-import 'shared_preferences_key_value_storage.dart';
+import 'package:smart_cabinet/src/core/storage/app_local_store.dart';
+import 'package:smart_cabinet/src/core/storage/shared_preferences_key_value_storage.dart';
 
 /// 应用本地 Store Provider。
 ///

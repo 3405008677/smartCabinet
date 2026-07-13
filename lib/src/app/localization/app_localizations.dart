@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import 'values/admin_localizations.dart';
-import 'values/dropoff_localizations.dart';
-import 'values/foundation_localizations.dart';
-import 'values/home_localizations.dart';
-import 'values/inspection_localizations.dart';
-import 'values/pickup_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/admin_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/dropoff_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/foundation_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/home_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/inspection_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/pickup_localizations.dart';
 
 /// 应用支持的界面语言。
 enum AppLanguage {

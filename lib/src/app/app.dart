@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'localization/app_localizations.dart';
-import 'router/app_router.dart';
-import 'stream_failure_overlay.dart';
-import 'startup/startup_media.dart';
-import 'theme/app_theme.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+import 'package:smart_cabinet/src/app/routing/app_router.dart';
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
+import 'package:smart_cabinet/src/app/overlays/stream_failure_overlay.dart';
+import 'package:smart_cabinet/src/app/startup/startup_media.dart';
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 
 /// 应用主导航器，用于展示全局弹窗。
 final appNavigatorKey = GlobalKey<NavigatorState>();

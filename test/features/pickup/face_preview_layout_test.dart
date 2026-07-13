@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_cabinet/src/views/business/Storage/PickupVerification/index.dart';
+import 'package:smart_cabinet/src/features/pickup/presentation/pages/pickup_verification_page.dart';
 
 void main() {
   test('face preview display aspect ratio reverses camera preview size', () {

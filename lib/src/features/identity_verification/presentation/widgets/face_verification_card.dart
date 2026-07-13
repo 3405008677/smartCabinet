@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
-import '../../../app/localization/app_localizations.dart';
-import '../../../core/camera/index.dart';
-import '../../../core/device/hardware_recovery_advice.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
+import 'package:smart_cabinet/src/core/device/hardware_recovery_advice.dart';
 
 /// 人脸识别流程状态。
 enum FaceVerificationStatus { initializing, ready, verifying, success, failure }

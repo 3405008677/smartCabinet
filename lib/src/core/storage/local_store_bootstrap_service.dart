@@ -1,6 +1,6 @@
-import '../config/index.dart';
-import '../device/device_info_service.dart';
-import 'app_local_store.dart';
+import 'package:smart_cabinet/src/core/config/app_config.dart';
+import 'package:smart_cabinet/src/core/device/device_info_service.dart';
+import 'package:smart_cabinet/src/core/storage/app_local_store.dart';
 
 /// 读取设备信息的函数签名。
 typedef FetchDeviceInfo = Future<List<DeviceInfoItem>> Function();

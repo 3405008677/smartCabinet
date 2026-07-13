@@ -1,4 +1,9 @@
-part of '../index.dart';
+import 'package:flutter/material.dart';
+
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
+import 'package:smart_cabinet/src/features/admin/data/repositories/admin_repository_impl.dart';
 
 // 首页管理员登录模块。
 //
@@ -6,7 +11,7 @@ part of '../index.dart';
 // 登录成功后还会进入管理员三项身份校验页，不会直接打开控制台。
 
 /// 打开管理员登录弹窗。
-void _showAdminLoginDialog(BuildContext context) {
+void showAdminLoginDialog(BuildContext context) {
   showDialog<void>(
     context: context,
     builder: (context) => const _AdminLoginDialog(),

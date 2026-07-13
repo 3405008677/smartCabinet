@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import 'crash_log_store.dart';
+import 'package:smart_cabinet/src/core/logging/crash_log_store.dart';
 
 /// 应用日志工具。
 ///

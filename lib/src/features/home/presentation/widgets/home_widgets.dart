@@ -1,4 +1,4 @@
-part of '../index.dart';
+import 'package:flutter/material.dart';
 
 // Home 页面内部共享视觉组件。
 //
@@ -8,9 +8,10 @@ part of '../index.dart';
 /// 首页卡片基础容器。
 ///
 /// 统一首页各业务卡片的白底、圆角、边框、阴影和顶部强调条样式。
-class _DashboardCard extends StatelessWidget {
-  const _DashboardCard({
+class HomeDashboardCard extends StatelessWidget {
+  const HomeDashboardCard({
     required this.width,
+    super.key,
     required this.child,
     this.padding = const EdgeInsets.all(20),
     this.borderColor,
@@ -64,8 +65,8 @@ class _DashboardCard extends StatelessWidget {
 }
 
 /// 当前柜体卡片中的原生柜体预览。
-class _CabinetModelViewer extends StatelessWidget {
-  const _CabinetModelViewer();
+class HomeCabinetModelViewer extends StatelessWidget {
+  const HomeCabinetModelViewer({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -270,8 +271,8 @@ class _CabinetPreviewPainter extends CustomPainter {
 }
 
 /// 背景点阵绘制器。
-class _DotGridPainter extends CustomPainter {
-  const _DotGridPainter();
+class HomeDotGridPainter extends CustomPainter {
+  const HomeDotGridPainter();
 
   @override
   void paint(Canvas canvas, Size size) {

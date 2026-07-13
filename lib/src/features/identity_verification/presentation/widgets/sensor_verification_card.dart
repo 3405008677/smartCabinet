@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/localization/app_localizations.dart';
-import '../../../core/device/hardware_recovery_advice.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+import 'package:smart_cabinet/src/core/device/hardware_recovery_advice.dart';
 
 /// 指纹和 NFC 等简单传感器认证卡片。
 class SensorVerificationCard extends StatelessWidget {

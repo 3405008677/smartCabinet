@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/localization/app_localizations.dart';
-import '../../../../app/router/app_router.dart';
-import '../../../../components/Layout/TerminalShell/index.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
+import 'package:smart_cabinet/src/app/shell/app_shell.dart';
 
 /// 存取件。
 ///

@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../../app/localization/app_localizations.dart';
-import '../../../../app/router/app_router.dart';
-import '../../../../components/Layout/TerminalShell/index.dart';
-import '../../../../models/dropoff_model.dart';
-import '../../../../repositories/dropoff_repository.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
+import 'package:smart_cabinet/src/app/shell/app_shell.dart';
+import 'package:smart_cabinet/src/features/dropoff/domain/entities/dropoff.dart';
+import 'package:smart_cabinet/src/features/dropoff/data/repositories/dropoff_repository_impl.dart';
 
 /// 文件图像采集阶段。
 enum _CaptureStep { idle, frontNormalDone, frontUvDone, backNormalDone }
@@ -24,7 +25,7 @@ class DropoffFileVerificationPage extends StatefulWidget {
 class _DropoffFileVerificationPageState
     extends State<DropoffFileVerificationPage> {
   /// 放件展示数据。
-  DropoffModel _dropoffData = DropoffModel.fallback();
+  DropoffData _dropoffData = DropoffData.fallback();
 
   /// FRC 是否已经识别文件。
   bool _frcVerified = false;

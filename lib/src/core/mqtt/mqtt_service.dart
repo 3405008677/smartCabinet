@@ -4,10 +4,10 @@ import 'dart:convert';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 
-import '../camera/index.dart';
-import '../device/kiosk_device.dart';
-import '../device/method_channel_kiosk_device.dart';
-import '../logging/app_logger.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
+import 'package:smart_cabinet/src/core/device/kiosk_device.dart';
+import 'package:smart_cabinet/src/core/device/method_channel_kiosk_device.dart';
+import 'package:smart_cabinet/src/core/logging/app_logger.dart';
 
 /// 智能柜 MQTT 连接配置。
 class SmartCabinetMqttOptions {
@@ -229,11 +229,12 @@ class MqttClientGateway implements SmartCabinetMqttGateway {
     client.onDisconnected = () => AppLogger.business('MQTT disconnected');
     client.onAutoReconnect = () => AppLogger.business('MQTT reconnecting');
     client.onAutoReconnected = () => AppLogger.business('MQTT reconnected');
-    client.onSubscribed = (topic) => AppLogger.business('MQTT subscribed: $topic');
+    client.onSubscribed = (topic) =>
+        AppLogger.business('MQTT subscribed: $topic');
     client.connectionMessage = options.clean
         ? (MqttConnectMessage()
-              ..withClientIdentifier(options.clientId)
-              ..startClean())
+            ..withClientIdentifier(options.clientId)
+            ..startClean())
         : (MqttConnectMessage()..withClientIdentifier(options.clientId));
 
     final status = await client.connect();
@@ -251,7 +252,10 @@ class MqttClientGateway implements SmartCabinetMqttGateway {
           mqttMessage.payload.message,
         );
         _messagesController.add(
-          SmartCabinetMqttMessage(topic: receivedMessage.topic, payload: payload),
+          SmartCabinetMqttMessage(
+            topic: receivedMessage.topic,
+            payload: payload,
+          ),
         );
       }
     });
@@ -261,7 +265,8 @@ class MqttClientGateway implements SmartCabinetMqttGateway {
   @override
   void subscribe(String topic) {
     final client = _client;
-    if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) {
+    if (client == null ||
+        client.connectionStatus?.state != MqttConnectionState.connected) {
       throw StateError('MQTT 尚未连接，无法订阅：$topic');
     }
     client.subscribe(topic, MqttQos.atMostOnce);

@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_cabinet/src/core/camera/index.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 import 'package:smart_cabinet/src/core/device/method_channel_kiosk_device.dart';
 
 /// MethodChannel Kiosk 设备实现测试。

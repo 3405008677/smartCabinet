@@ -1,4 +1,10 @@
-part of '../index.dart';
+import 'package:flutter/material.dart';
+
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
+import 'package:smart_cabinet/src/features/home/domain/entities/home.dart';
+import 'package:smart_cabinet/src/features/home/presentation/widgets/home_widgets.dart';
 
 // 首页可见仪表盘区域。
 //
@@ -8,14 +14,15 @@ part of '../index.dart';
 /// 首页内容区整体布局。
 ///
 /// 负责组织顶部柜体信息与 banner、主体功能卡片以及底部状态栏。
-class _DashboardBody extends StatelessWidget {
-  const _DashboardBody({
+class HomeDashboard extends StatelessWidget {
+  const HomeDashboard({
     required this.homeData,
+    super.key,
     required this.onCabinetModelTap,
   });
 
   /// 首页展示数据。
-  final HomeModel homeData;
+  final HomeData homeData;
 
   /// 点击左上角柜体模型时执行的隐藏入口动作。
   final VoidCallback onCabinetModelTap;
@@ -75,7 +82,7 @@ class _CabinetOverviewCard extends StatelessWidget {
   });
 
   /// 首页展示数据。
-  final HomeModel homeData;
+  final HomeData homeData;
 
   /// 点击柜体模型时执行的隐藏入口动作。
   final VoidCallback onCabinetModelTap;
@@ -85,7 +92,7 @@ class _CabinetOverviewCard extends StatelessWidget {
     // 当前语言下的首页文案入口。
     final l10n = context.l10n;
 
-    return _DashboardCard(
+    return HomeDashboardCard(
       width: 292,
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
       child: Row(
@@ -97,7 +104,7 @@ class _CabinetOverviewCard extends StatelessWidget {
               key: const ValueKey('cabinet_model_tap_target'),
               behavior: HitTestBehavior.opaque,
               onTap: onCabinetModelTap,
-              child: const _CabinetModelViewer(),
+              child: const HomeCabinetModelViewer(),
             ),
           ),
           const SizedBox(width: 18),
@@ -190,7 +197,7 @@ class _FinishedBannerCard extends StatelessWidget {
   const _FinishedBannerCard({required this.homeData});
 
   /// 首页展示数据。
-  final HomeModel homeData;
+  final HomeData homeData;
 
   @override
   Widget build(BuildContext context) {
@@ -394,14 +401,14 @@ class _StorageStatsCard extends StatelessWidget {
   const _StorageStatsCard({required this.homeData});
 
   /// 首页展示数据。
-  final HomeModel homeData;
+  final HomeData homeData;
 
   @override
   Widget build(BuildContext context) {
     final stats = homeData.stats;
     final l10n = context.l10n;
 
-    return _DashboardCard(
+    return HomeDashboardCard(
       width: 292,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
       child: Column(
@@ -588,7 +595,7 @@ class _AccessEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
 
-    return _DashboardCard(
+    return HomeDashboardCard(
       width: double.infinity,
       padding: EdgeInsets.zero,
       borderColor: const Color(0xFF2F64F6),
@@ -698,7 +705,7 @@ class _InspectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
 
-    return _DashboardCard(
+    return HomeDashboardCard(
       width: 132,
       padding: EdgeInsets.zero,
       borderColor: const Color(0xFF0891B2),

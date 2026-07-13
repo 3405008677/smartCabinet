@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../app/localization/app_localizations.dart';
-import '../../../repositories/home_repository.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+import 'package:smart_cabinet/src/features/home/data/repositories/home_repository_impl.dart';
 
 /// 智能柜终端的全局页面外壳。
 ///

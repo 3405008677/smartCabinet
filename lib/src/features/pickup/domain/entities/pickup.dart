@@ -1,7 +1,7 @@
 /// 取件展示模型。
-class PickupModel {
+class PickupData {
   /// 创建取件展示模型。
-  const PickupModel({
+  const PickupData({
     required this.personName,
     required this.personTitle,
     required this.employeeCode,
@@ -20,8 +20,8 @@ class PickupModel {
   });
 
   /// 页面首帧兜底展示数据。
-  factory PickupModel.fallback() {
-    return PickupModel.fromMap(const {
+  factory PickupData.fallback() {
+    return PickupData.fromMap(const {
       'personName': '张晓明',
       'personTitle': '涉密文件取件人',
       'employeeCode': 'EMP-2026-0612',
@@ -89,8 +89,8 @@ class PickupModel {
   ///
   /// 这里假设字段已经在 DTO 或上游接口层完成基本校验，
   /// 因此直接按预期字段取值并转换为强类型属性。
-  factory PickupModel.fromMap(Map<String, Object> map) {
-    return PickupModel(
+  factory PickupData.fromMap(Map<String, Object> map) {
+    return PickupData(
       personName: map['personName'] as String,
       personTitle: map['personTitle'] as String,
       employeeCode: map['employeeCode'] as String,

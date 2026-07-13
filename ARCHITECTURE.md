@@ -1,118 +1,70 @@
-# 智能柜 Flutter 项目架构
+# Smart Cabinet Flutter 架构
 
-## 1. 项目定位
+## 统一标准
 
-本项目是面向 Android 智能柜终端屏幕的 Flutter 企业级基础框架。首期只提供工程骨架和基础设施边界，不实现具体业务模块，不接入硬件驱动。
-
-## 2. 架构主线
-
-项目采用 `Riverpod + Clean Architecture`。
-
-整体分为四个主层级：
-
-- `app`：应用装配层，负责启动、ProviderScope、路由、主题、国际化和全局异常入口。
-- `core`：基础设施层，负责网络、日志、存储、异常、配置、常量、工具和设备抽象。
-- `shared`：共享层，负责跨模块复用的扩展、模型和通用组件。
-- `features`：业务功能层，作为后续业务模块入口。
-
-## 3. 目录结构
+`smartCabinet` 与 `smartCabinet-Phone` 使用同一套 Feature-first 架构、snake_case 命名、Riverpod 依赖入口和 Flutter 原生路由封装。两个项目只在业务 Feature 和终端基础能力上不同。
 
 ```text
 lib/
   main.dart
   src/
-    app/
-      app.dart
-      bootstrap/
-      localization/
-      router/
-      theme/
-    core/
-      config/
-      constants/
-      device/
-      errors/
-      logging/
-      network/
-      storage/
-      utils/
-    shared/
-      extensions/
-      models/
-      widgets/
+    app/                 # 应用装配、启动、路由、主题、国际化、应用外壳
+    core/                # 网络、存储、日志、异常、配置及平台能力
+    shared/              # 跨 Feature 复用的纯 UI、模型和扩展
     features/
-assets/
-  fonts/
-  icons/
-  i18n/
-  images/
-test/
-  app/
-  core/
-  features/
-  shared/
+      <feature>/
+        data/            # DataSource、DTO、Repository 实现
+        domain/          # Entity、Repository 接口、UseCase
+        presentation/    # Controller、Page、Widget
 ```
 
-## 4. 文件存放规则
+## 当前业务模块
 
-- `app/` 只放应用装配代码，不放业务规则。
-- `core/` 只放跨业务基础设施，不引用具体 `features`。
-- `shared/` 只放可复用 UI、扩展方法和通用对象，不写业务流程。
-- `features/` 首期不预置业务模块，后续新增业务模块时必须按 `data/domain/presentation` 分层。
-- `assets/images/` 放图片资源。
-- `assets/icons/` 放图标资源。
-- `assets/fonts/` 放字体资源。
-- `assets/i18n/` 放国际化资源。
-- `test/` 与 `lib/` 分层保持一致，方便后续补测试。
+- `home`：终端首页和仪表盘。
+- `storage`：存取件流程入口。
+- `pickup`：取件认证、柜门信息和开柜流程。
+- `dropoff`：放件认证、确认、开柜和完成流程。
+- `flight_inspection`：飞检认证与任务流程。
+- `admin`：管理员认证与控制台。
+- `identity_verification`：跨业务复用的身份认证能力。
 
-## 5. 后续业务模块规范
-
-新增业务模块必须放在 `lib/src/features/<feature_name>/` 下，并使用以下结构：
+## 依赖方向
 
 ```text
-features/<feature_name>/
-  data/
-    datasources/
-    dto/
-    repositories/
-  domain/
-    entities/
-    repositories/
-    usecases/
-  presentation/
-    controllers/
-    pages/
-    widgets/
+app          -> features + core + shared
+presentation -> 同模块的 domain/data + shared + core
+data         -> domain + core
+domain       -> Dart 基础能力
+core         -X-> features
 ```
 
-模块依赖方向必须遵循：
+`domain` 不依赖 Flutter UI、具体网络客户端或本地存储实现。业务页面不得直接解析 DTO。一个业务模块不得直接引用另一个模块的 `data`；跨 Feature 协作通过路由参数、领域对象、可复用能力的公开 Widget 或应用装配完成。
 
-```text
-presentation -> domain -> data -> core
+当前采用轻量分层：简单页面可以调用同模块的 Repository 实现；当状态需要跨页面共享、需要替换实现或测试注入时，再提升为 Domain 接口和 Riverpod Provider，避免为小功能制造空壳代码。
+
+## Riverpod 规则
+
+Riverpod 承担需要共享或替换的依赖注入和状态管理。应用级 Provider 可放在 `app/app_dependencies.dart`，仅一个 Feature 使用的 Provider 放在该 Feature 附近；Widget 私有瞬时状态继续使用 `StatefulWidget`。
+
+## 命名规则
+
+- 文件和目录使用小写 `snake_case`。
+- 禁止使用无业务含义的 `index.dart`。
+- 页面使用 `_page.dart`，共享控件使用 `_card.dart`、`_dialog.dart`、`_tile.dart` 等职责后缀。
+- DTO 使用 `_dto.dart`，Repository 实现使用 `_repository_impl.dart`。
+- Repository 接口不添加 `I` 前缀。
+- 页面之间使用普通 `import`，不使用 `part/part of` 共享私有实现。
+
+## 智能柜专属基础设施
+
+`core/camera`、`core/device`、`core/mqtt` 和 `core/monitoring` 是柜机端专属能力。Phone 项目不创建这些空目录，但遵循相同的 `core` 边界。
+
+## 测试
+
+`test/` 按 `app/core/shared/features` 映射源码。提交前执行：
+
+```powershell
+dart format lib test
+flutter analyze
+flutter test
 ```
-
-`domain` 不依赖 Flutter UI、网络库、存储库等具体实现。`presentation` 不直接调用 `data` 层。跨模块通信优先通过领域抽象、路由参数或应用级事件完成。
-
-## 6. 基础设施边界
-
-- `core/config`：应用配置入口，首期不做 dev/test/prod 切换。
-- `core/errors`：统一异常和失败对象。
-- `core/logging`：统一调试日志、业务日志和错误日志入口。
-- `core/network`：网络客户端和网络结果抽象。
-- `core/storage`：本地键值存储抽象。
-- `core/device`：智能柜设备能力抽象，首期不实现扫码、开柜、打印、摄像头等驱动。
-- `core/utils`：与业务无关的通用工具对象。
-
-## 7. Provider 规则
-
-Riverpod 用于依赖注入和状态管理。Provider 应尽量放在所属模块或基础设施附近，禁止将所有 Provider 堆到一个全局文件中。
-
-## 8. 当前非目标
-
-- 不实现登录、首页、柜格、订单、存件、取件、维护等业务模块。
-- 不接入扫码器、开柜控制板、打印机、摄像头、语音、OTA 等硬件或运维能力。
-- 不配置 dev/test/prod 多环境。
-- 不配置 Android flavor。
-- 不写具体测试用例。
-- 不配置覆盖率和 CI。
-- 不拆分多 package 架构。

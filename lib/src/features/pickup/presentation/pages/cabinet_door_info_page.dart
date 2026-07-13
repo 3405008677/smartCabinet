@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/localization/app_localizations.dart';
-import '../../../../app/router/app_router.dart';
-import '../../../../components/Layout/TerminalShell/index.dart';
-import '../../../../models/pickup_model.dart';
-import '../../../../repositories/pickup_repository.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
+import 'package:smart_cabinet/src/app/shell/app_shell.dart';
+import 'package:smart_cabinet/src/features/pickup/domain/entities/pickup.dart';
+import 'package:smart_cabinet/src/features/pickup/data/repositories/pickup_repository_impl.dart';
 
 /// 柜门信息页面。
 ///
@@ -20,7 +21,7 @@ class CabinetDoorInfoPage extends StatefulWidget {
 
 class _CabinetDoorInfoPageState extends State<CabinetDoorInfoPage> {
   /// 取件展示数据。
-  PickupModel _pickupData = PickupModel.fallback();
+  PickupData _pickupData = PickupData.fallback();
 
   @override
   void initState() {
@@ -72,7 +73,7 @@ class _PersonInfoPanel extends StatelessWidget {
   const _PersonInfoPanel({required this.pickupData});
 
   /// 取件展示数据。
-  final PickupModel pickupData;
+  final PickupData pickupData;
 
   @override
   Widget build(BuildContext context) {
@@ -249,7 +250,7 @@ class _DoorInfoPanel extends StatelessWidget {
   const _DoorInfoPanel({required this.pickupData, required this.onOpenDoor});
 
   /// 取件展示数据。
-  final PickupModel pickupData;
+  final PickupData pickupData;
 
   final VoidCallback onOpenDoor;
 

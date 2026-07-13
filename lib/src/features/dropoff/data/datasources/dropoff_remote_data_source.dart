@@ -1,5 +1,5 @@
-import '../../index.dart';
-import '../../../dto/dropoff_response_dto.dart';
+import 'package:smart_cabinet/src/core/network/api_client.dart';
+import 'package:smart_cabinet/src/features/dropoff/data/dtos/dropoff_response_dto.dart';
 
 /// 放件数据 URL。
 const String dropoffFileVerificationUrl = '/api/dropoff';

@@ -1,7 +1,7 @@
 /// 放件展示模型。
-class DropoffModel {
+class DropoffData {
   /// 创建放件展示模型。
-  const DropoffModel({
+  const DropoffData({
     required this.personName,
     required this.employeeCode,
     required this.department,
@@ -16,8 +16,8 @@ class DropoffModel {
   });
 
   /// 页面首帧兜底展示数据。
-  factory DropoffModel.fallback() {
-    return DropoffModel.fromMap(const {
+  factory DropoffData.fallback() {
+    return DropoffData.fromMap(const {
       'personName': '张晓明',
       'employeeCode': 'EMP-2026-0612',
       'department': '法务合规部',
@@ -66,8 +66,8 @@ class DropoffModel {
   final String successSummary;
 
   /// 从接口返回的 Map 结构创建放件展示模型。
-  factory DropoffModel.fromMap(Map<String, Object> map) {
-    return DropoffModel(
+  factory DropoffData.fromMap(Map<String, Object> map) {
+    return DropoffData(
       personName: map['personName'] as String,
       employeeCode: map['employeeCode'] as String,
       department: map['department'] as String,

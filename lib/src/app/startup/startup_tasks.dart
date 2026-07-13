@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/camera/index.dart';
-import '../../core/mqtt/mqtt_service.dart';
-import '../../core/storage/app_local_store_provider.dart';
-import '../../core/storage/local_store_bootstrap_service.dart';
-import 'startup_task.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
+import 'package:smart_cabinet/src/core/mqtt/mqtt_service.dart';
+import 'package:smart_cabinet/src/core/storage/app_local_store_provider.dart';
+import 'package:smart_cabinet/src/core/storage/local_store_bootstrap_service.dart';
+import 'package:smart_cabinet/src/app/startup/startup_task.dart';
 
 /// 摄像头加载函数。
 typedef CameraLoader =
@@ -137,6 +137,7 @@ class ConnectMqttStartupTask implements StartupTask {
 
   @override
   Future<void> run() {
-    return (mqttService ?? const SmartCabinetMqttService()).connectAndSubscribe();
+    return (mqttService ?? const SmartCabinetMqttService())
+        .connectAndSubscribe();
   }
 }

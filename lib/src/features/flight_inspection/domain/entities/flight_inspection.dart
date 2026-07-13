@@ -1,7 +1,7 @@
 /// 飞检任务模型。
-class FlightInspectionTaskModel {
+class FlightInspectionTask {
   /// 创建飞检任务模型。
-  const FlightInspectionTaskModel({
+  const FlightInspectionTask({
     required this.doorNo,
     required this.fileCode,
     required this.secretLevel,
@@ -21,8 +21,8 @@ class FlightInspectionTaskModel {
   final String department;
 
   /// 从接口返回的 Map 结构创建单个飞检任务模型。
-  factory FlightInspectionTaskModel.fromMap(Map<String, Object> map) {
-    return FlightInspectionTaskModel(
+  factory FlightInspectionTask.fromMap(Map<String, Object> map) {
+    return FlightInspectionTask(
       doorNo: map['doorNo'] as String,
       fileCode: map['fileCode'] as String,
       secretLevel: map['secretLevel'] as String,
@@ -44,9 +44,9 @@ class FlightInspectionTaskModel {
 }
 
 /// 飞检展示模型。
-class FlightInspectionModel {
+class FlightInspectionData {
   /// 创建飞检展示模型。
-  const FlightInspectionModel({
+  const FlightInspectionData({
     required this.inspectorName,
     required this.employeeCode,
     required this.permissionLevel,
@@ -55,8 +55,8 @@ class FlightInspectionModel {
   });
 
   /// 页面首帧兜底展示数据。
-  factory FlightInspectionModel.fallback() {
-    return FlightInspectionModel.fromMap(const {
+  factory FlightInspectionData.fallback() {
+    return FlightInspectionData.fromMap(const {
       'inspectorName': '李晨',
       'employeeCode': 'INS-2026-014',
       'permissionLevel': 'L3',
@@ -78,23 +78,22 @@ class FlightInspectionModel {
   final String batchNo;
 
   /// 当前批次下发的全部柜门飞检任务。
-  final List<FlightInspectionTaskModel> tasks;
+  final List<FlightInspectionTask> tasks;
 
   /// 从接口返回的 Map 结构创建飞检展示模型。
   ///
-  /// [tasks] 字段会进一步映射为强类型的 [FlightInspectionTaskModel] 列表，
+  /// [tasks] 字段会进一步映射为强类型的 [FlightInspectionTask] 列表，
   /// 便于页面层安全读取，而不直接操作动态类型集合。
-  factory FlightInspectionModel.fromMap(Map<String, Object> map) {
+  factory FlightInspectionData.fromMap(Map<String, Object> map) {
     final rawTasks = map['tasks'] as List<dynamic>;
-    return FlightInspectionModel(
+    return FlightInspectionData(
       inspectorName: map['inspectorName'] as String,
       employeeCode: map['employeeCode'] as String,
       permissionLevel: map['permissionLevel'] as String,
       batchNo: map['batchNo'] as String,
       tasks: rawTasks
           .map(
-            (task) =>
-                FlightInspectionTaskModel.fromMap(task as Map<String, Object>),
+            (task) => FlightInspectionTask.fromMap(task as Map<String, Object>),
           )
           .toList(),
     );

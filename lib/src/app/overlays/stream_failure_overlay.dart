@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../components/Feedback/Message/index.dart';
-import '../core/camera/index.dart';
+import 'package:smart_cabinet/src/shared/widgets/app_message.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 
 /// 全局推流失败提示层。
 class StreamFailureOverlay extends StatefulWidget {

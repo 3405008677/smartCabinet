@@ -1,7 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_cabinet/src/app/startup/startup_tasks.dart';
-import 'package:smart_cabinet/src/core/camera/index.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 import 'package:smart_cabinet/src/core/mqtt/mqtt_service.dart';
 
 void main() {

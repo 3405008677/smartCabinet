@@ -1,6 +1,6 @@
-import '../core/network/fake_http_client.dart';
-import '../core/network/http_client.dart';
-import '../core/network/network_result.dart';
+import 'package:smart_cabinet/src/core/network/fake_http_client.dart';
+import 'package:smart_cabinet/src/core/network/http_client.dart';
+import 'package:smart_cabinet/src/core/network/network_result.dart';
 
 /// 全局 API 异常。
 class ApiException implements Exception {

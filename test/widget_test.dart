@@ -8,9 +8,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/app/app.dart';
-import 'package:smart_cabinet/src/app/router/app_router.dart';
+
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
 import 'package:smart_cabinet/src/app/startup/startup_media.dart';
-import 'package:smart_cabinet/src/core/camera/index.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 
 const MethodChannel _kioskChannel = MethodChannel('smart_cabinet/kiosk');
 
@@ -816,55 +817,60 @@ void main() {
     expect(find.text('合格证采集摄像头预览'), findsOneWidget);
   });
 
-  testWidgets('admin console shows camera connection failure when binding is missing', (
-    WidgetTester tester,
-  ) async {
-    CabinetCameraService.debugUseCameraData(cameras: const [
-      CameraDescription(
-        name: 'cameraId_0',
-        lensDirection: CameraLensDirection.front,
-        sensorOrientation: 90,
-      ),
-    ]);
+  testWidgets(
+    'admin console shows camera connection failure when binding is missing',
+    (WidgetTester tester) async {
+      CabinetCameraService.debugUseCameraData(
+        cameras: const [
+          CameraDescription(
+            name: 'cameraId_0',
+            lensDirection: CameraLensDirection.front,
+            sensorOrientation: 90,
+          ),
+        ],
+      );
 
-    await _pumpSmartCabinetApp(tester);
-    await _openAdminConsole(tester);
-    await tester.drag(
-      find.byKey(const ValueKey('admin_device_info_grid')),
-      const Offset(0, -260),
-    );
-    await tester.pumpAndSettle();
+      await _pumpSmartCabinetApp(tester);
+      await _openAdminConsole(tester);
+      await tester.drag(
+        find.byKey(const ValueKey('admin_device_info_grid')),
+        const Offset(0, -260),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('连接成功'), findsWidgets);
-    expect(find.text('连接失败'), findsWidgets);
-    expect(find.textContaining('开发时指定'), findsNothing);
-  });
+      expect(find.text('连接成功'), findsWidgets);
+      expect(find.text('连接失败'), findsWidgets);
+      expect(find.textContaining('开发时指定'), findsNothing);
+    },
+  );
 
   testWidgets('admin console accepts native camera2 ids as connected cameras', (
     WidgetTester tester,
   ) async {
-    CabinetCameraService.debugUseCameraData(cameras: const [
-      CameraDescription(
-        name: '0',
-        lensDirection: CameraLensDirection.external,
-        sensorOrientation: 0,
-      ),
-      CameraDescription(
-        name: '1',
-        lensDirection: CameraLensDirection.external,
-        sensorOrientation: 0,
-      ),
-      CameraDescription(
-        name: '2',
-        lensDirection: CameraLensDirection.external,
-        sensorOrientation: 0,
-      ),
-      CameraDescription(
-        name: '3',
-        lensDirection: CameraLensDirection.external,
-        sensorOrientation: 0,
-      ),
-    ]);
+    CabinetCameraService.debugUseCameraData(
+      cameras: const [
+        CameraDescription(
+          name: '0',
+          lensDirection: CameraLensDirection.external,
+          sensorOrientation: 0,
+        ),
+        CameraDescription(
+          name: '1',
+          lensDirection: CameraLensDirection.external,
+          sensorOrientation: 0,
+        ),
+        CameraDescription(
+          name: '2',
+          lensDirection: CameraLensDirection.external,
+          sensorOrientation: 0,
+        ),
+        CameraDescription(
+          name: '3',
+          lensDirection: CameraLensDirection.external,
+          sensorOrientation: 0,
+        ),
+      ],
+    );
 
     await _pumpSmartCabinetApp(tester);
     await _openAdminConsole(tester);

@@ -1,7 +1,7 @@
 /// 首页统计数据模型。
-class HomeStatsModel {
+class HomeStats {
   /// 创建首页统计数据模型。
-  const HomeStatsModel({
+  const HomeStats({
     required this.documentCount,
     required this.occupiedSlots,
     required this.pendingPickup,
@@ -33,8 +33,8 @@ class HomeStatsModel {
   final double occupancyRateValue;
 
   /// 从接口数据创建模型。
-  factory HomeStatsModel.fromMap(Map<String, Object> map) {
-    return HomeStatsModel(
+  factory HomeStats.fromMap(Map<String, Object> map) {
+    return HomeStats(
       documentCount: map['documentCount'] as String,
       occupiedSlots: map['occupiedSlots'] as String,
       pendingPickup: map['pendingPickup'] as String,
@@ -60,9 +60,9 @@ class HomeStatsModel {
 }
 
 /// 首页底部状态摘要模型。
-class HomeFooterModel {
+class HomeFooter {
   /// 创建首页底部状态摘要模型。
-  const HomeFooterModel({
+  const HomeFooter({
     required this.statusSummary,
     required this.doorStatus,
     required this.slotSummary,
@@ -78,8 +78,8 @@ class HomeFooterModel {
   final String slotSummary;
 
   /// 从接口数据创建模型。
-  factory HomeFooterModel.fromMap(Map<String, Object> map) {
-    return HomeFooterModel(
+  factory HomeFooter.fromMap(Map<String, Object> map) {
+    return HomeFooter(
       statusSummary: map['statusSummary'] as String,
       doorStatus: map['doorStatus'] as String,
       slotSummary: map['slotSummary'] as String,
@@ -97,9 +97,9 @@ class HomeFooterModel {
 }
 
 /// 首页展示模型。
-class HomeModel {
+class HomeData {
   /// 创建首页展示模型。
-  const HomeModel({
+  const HomeData({
     required this.cabinetCode,
     required this.region,
     required this.status,
@@ -109,8 +109,8 @@ class HomeModel {
   });
 
   /// 页面首帧兜底展示数据。
-  factory HomeModel.fallback() {
-    return HomeModel.fromMap(const {
+  factory HomeData.fallback() {
+    return HomeData.fromMap(const {
       'cabinetCode': 'CAB-A01',
       'region': 'A · B 区',
       'status': '在线运行',
@@ -145,20 +145,20 @@ class HomeModel {
   final String headline;
 
   /// 首页统计数据。
-  final HomeStatsModel stats;
+  final HomeStats stats;
 
   /// 首页底部摘要。
-  final HomeFooterModel footer;
+  final HomeFooter footer;
 
   /// 从接口数据创建模型。
-  factory HomeModel.fromMap(Map<String, Object> map) {
-    return HomeModel(
+  factory HomeData.fromMap(Map<String, Object> map) {
+    return HomeData(
       cabinetCode: map['cabinetCode'] as String,
       region: map['region'] as String,
       status: map['status'] as String,
       headline: map['headline'] as String,
-      stats: HomeStatsModel.fromMap(map['stats'] as Map<String, Object>),
-      footer: HomeFooterModel.fromMap(map['footer'] as Map<String, Object>),
+      stats: HomeStats.fromMap(map['stats'] as Map<String, Object>),
+      footer: HomeFooter.fromMap(map['footer'] as Map<String, Object>),
     );
   }
 

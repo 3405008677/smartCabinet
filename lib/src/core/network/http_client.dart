@@ -1,4 +1,4 @@
-import 'network_result.dart';
+import 'package:smart_cabinet/src/core/network/network_result.dart';
 
 /// HTTP 客户端抽象。
 ///

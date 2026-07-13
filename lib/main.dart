@@ -1,4 +1,4 @@
-import 'src/app/bootstrap/bootstrap.dart';
+import 'package:smart_cabinet/src/app/bootstrap/bootstrap.dart';
 
 /// Flutter 应用的入口函数。
 ///

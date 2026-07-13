@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/localization/app_localizations.dart';
-import '../../../../app/router/app_router.dart';
-import '../../../../components/Layout/TerminalShell/index.dart';
-import '../../../../components/Verification/FaceVerificationCard/index.dart';
-import '../../../../components/Verification/ProgressFooter/index.dart';
-import '../../../../components/Verification/SensorVerificationCard/index.dart';
-import '../../../../components/Verification/StepCard/index.dart';
-import '../../VerificationState/index.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
+import 'package:smart_cabinet/src/app/shell/app_shell.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/face_verification_card.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/verification_progress_footer.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/sensor_verification_card.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/verification_step_card.dart';
+import 'package:smart_cabinet/src/features/identity_verification/domain/entities/verification_state.dart';
 
 /// 取件身份验证页面。
 ///

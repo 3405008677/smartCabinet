@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'key_value_storage.dart';
+import 'package:smart_cabinet/src/core/storage/key_value_storage.dart';
 
 /// 应用本地状态对象。
 ///
@@ -87,7 +87,9 @@ final class AppLocalState {
         'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
         'uploadEnabled': true,
       }, json['logging']),
-      video: _mergeObjectMap(const <String, Object?>{'streamUrl': ''}, json['video']),
+      video: _mergeObjectMap(const <String, Object?>{
+        'streamUrl': '',
+      }, json['video']),
     );
   }
 }

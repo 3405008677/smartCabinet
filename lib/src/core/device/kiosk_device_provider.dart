@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'kiosk_device.dart';
-import 'method_channel_kiosk_device.dart';
+import 'package:smart_cabinet/src/core/device/kiosk_device.dart';
+import 'package:smart_cabinet/src/core/device/method_channel_kiosk_device.dart';
 
 /// Kiosk 设备能力的 Riverpod Provider。
 ///

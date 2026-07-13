@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/localization/app_localizations.dart';
-import '../../../../components/Layout/TerminalShell/index.dart';
-import '../../../../repositories/flight_inspection_repository.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+import 'package:smart_cabinet/src/app/shell/app_shell.dart';
+import 'package:smart_cabinet/src/features/flight_inspection/data/repositories/flight_inspection_repository_impl.dart';
 
 /// 飞检柜门任务状态。
 enum _InspectionTaskStatus { waiting, inspecting, completed }

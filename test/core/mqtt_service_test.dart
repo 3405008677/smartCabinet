@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_cabinet/src/core/camera/index.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 import 'package:smart_cabinet/src/core/device/kiosk_device.dart';
 import 'package:smart_cabinet/src/core/mqtt/mqtt_service.dart';
 
@@ -50,7 +50,10 @@ void main() {
 ''');
 
     expect(device.startedStreams, hasLength(1));
-    expect(device.startedStreams.single.role, CabinetCameraRole.outsideEnvironment);
+    expect(
+      device.startedStreams.single.role,
+      CabinetCameraRole.outsideEnvironment,
+    );
     expect(device.startedStreams.single.profiles, ['720p']);
   });
 
@@ -67,7 +70,10 @@ void main() {
 ''');
 
     expect(device.startedStreams, hasLength(1));
-    expect(device.startedStreams.single.role, CabinetCameraRole.outsideEnvironment);
+    expect(
+      device.startedStreams.single.role,
+      CabinetCameraRole.outsideEnvironment,
+    );
     expect(device.startedStreams.single.profiles, ['1080p']);
   });
 
@@ -75,8 +81,12 @@ void main() {
     final device = _FakeKioskDevice();
     final handler = SmartCabinetMqttCommandHandler(kioskDevice: device);
 
-    await handler.handleMessage('{"type":"door","payload":{"videoType":"720p"}}');
-    await handler.handleMessage('{"type":"video","payload":{"videoType":"360p"}}');
+    await handler.handleMessage(
+      '{"type":"door","payload":{"videoType":"720p"}}',
+    );
+    await handler.handleMessage(
+      '{"type":"video","payload":{"videoType":"360p"}}',
+    );
 
     expect(device.startedStreams, isEmpty);
   });
@@ -103,7 +113,8 @@ class _FakeMqttGateway implements SmartCabinetMqttGateway {
 }
 
 class _FakeKioskDevice implements KioskDevice {
-  final List<({CabinetCameraRole role, List<String> profiles})> startedStreams = [];
+  final List<({CabinetCameraRole role, List<String> profiles})> startedStreams =
+      [];
 
   @override
   Future<bool> enterKioskMode() async => true;
@@ -133,5 +144,4 @@ class _FakeKioskDevice implements KioskDevice {
     CabinetCameraRole role, {
     List<String>? profiles,
   }) async {}
-
 }

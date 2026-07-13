@@ -1,6 +1,6 @@
-import 'network_result.dart';
-import 'http_client.dart';
-import '../../mock_data/mock_api_data.dart';
+import 'package:smart_cabinet/src/core/network/network_result.dart';
+import 'package:smart_cabinet/src/core/network/http_client.dart';
+import 'package:smart_cabinet/src/core/network/mock_api_data.dart';
 
 /// 基于内存假数据的 HTTP 客户端。
 class FakeHttpClient implements HttpClient {

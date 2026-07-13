@@ -1,4 +1,4 @@
-import '../../index.dart';
+import 'package:smart_cabinet/src/core/network/api_client.dart';
 
 /// 管理员登录 URL。
 const String adminLoginUrl = '/api/admin/login';

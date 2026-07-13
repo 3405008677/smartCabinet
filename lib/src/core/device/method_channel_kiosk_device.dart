@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
-import '../camera/index.dart';
-import 'kiosk_device.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
+import 'package:smart_cabinet/src/core/device/kiosk_device.dart';
 
 /// 基于 Flutter MethodChannel 的 Kiosk 设备实现。
 ///

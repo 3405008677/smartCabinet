@@ -1,4 +1,4 @@
-import '../app_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 const dropoffLocalizations = {
   'dropoffFlowTag': {

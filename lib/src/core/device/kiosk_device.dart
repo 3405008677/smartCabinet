@@ -1,4 +1,4 @@
-import '../camera/index.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 
 /// 自助终端模式设备能力抽象。
 ///

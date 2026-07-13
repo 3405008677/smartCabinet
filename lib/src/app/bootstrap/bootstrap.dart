@@ -4,13 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/logging/app_logger.dart';
-import '../../core/monitoring/runtime_health_monitor.dart';
-import '../app.dart';
-import '../startup/startup_failure_app.dart';
-import '../startup/startup_manager.dart';
-import '../startup/startup_task.dart';
-import '../startup/startup_tasks.dart';
+import 'package:smart_cabinet/src/core/logging/app_logger.dart';
+import 'package:smart_cabinet/src/core/monitoring/runtime_health_monitor.dart';
+import 'package:smart_cabinet/src/app/app.dart';
+import 'package:smart_cabinet/src/app/startup/startup_failure_app.dart';
+import 'package:smart_cabinet/src/app/startup/startup_manager.dart';
+import 'package:smart_cabinet/src/app/startup/startup_task.dart';
+import 'package:smart_cabinet/src/app/startup/startup_tasks.dart';
 
 /// 应用启动引导函数。
 ///

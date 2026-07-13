@@ -1,5 +1,5 @@
-import '../../index.dart';
-import '../../../dto/pickup_response_dto.dart';
+import 'package:smart_cabinet/src/core/network/api_client.dart';
+import 'package:smart_cabinet/src/features/pickup/data/dtos/pickup_response_dto.dart';
 
 /// 取件数据 URL。
 const String pickupVerificationUrl = '/api/pickup';

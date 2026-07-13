@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/localization/app_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 /// 底部验证进度条。
 ///

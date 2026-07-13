@@ -1,4 +1,4 @@
-import '../../index.dart';
+import 'package:smart_cabinet/src/core/network/api_client.dart';
 
 /// 设备状态 URL。
 const String adminDeviceStatusUrl = '/api/admin/device-status';

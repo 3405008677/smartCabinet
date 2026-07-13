@@ -29,7 +29,7 @@
 - 四语言切换。
 - 共享人脸、指纹、NFC 认证组件。
 - 共享认证进度条和步骤卡片。
-- API、DTO、Model、Repository 分层。
+- Data Source、DTO、Domain Entity、Repository 分层。
 - 模拟后端数据。
 - Flutter 层崩溃日志和运行健康监测。
 - 摄像头、指纹、NFC、柜控板异常恢复建议。
@@ -122,8 +122,8 @@ flutter test
 
 相关文件：
 
-- `lib/src/app/router/smart_cabinet_home_page.dart`
-- `lib/src/app/router/foundation_home_page.dart`
+- `lib/src/features/home/presentation/pages/home_page.dart`
+- `lib/src/features/storage/presentation/pages/storage_home_page.dart`
 
 ### 5.2 取件流程
 
@@ -151,10 +151,10 @@ flutter test
 
 相关文件：
 
-- `lib/src/features/pickup/page/pickup_verification_page.dart`
-- `lib/src/features/pickup/page/verification_loading_page.dart`
-- `lib/src/features/pickup/page/cabinet_door_info_page.dart`
-- `lib/src/features/pickup/page/open_cabinet_door_page.dart`
+- `lib/src/features/pickup/presentation/pages/pickup_verification_page.dart`
+- `lib/src/features/pickup/presentation/pages/verification_loading_page.dart`
+- `lib/src/features/pickup/presentation/pages/cabinet_door_info_page.dart`
+- `lib/src/features/pickup/presentation/pages/open_cabinet_door_page.dart`
 
 ### 5.3 放件流程
 
@@ -181,11 +181,11 @@ flutter test
 
 相关文件：
 
-- `lib/src/features/dropoff/page/dropoff_person_verification_page.dart`
-- `lib/src/features/dropoff/page/dropoff_file_verification_page.dart`
-- `lib/src/features/dropoff/page/dropoff_confirm_opening_page.dart`
-- `lib/src/features/dropoff/page/dropoff_open_cabinet_page.dart`
-- `lib/src/features/dropoff/page/dropoff_success_page.dart`
+- `lib/src/features/dropoff/presentation/pages/dropoff_person_verification_page.dart`
+- `lib/src/features/dropoff/presentation/pages/dropoff_file_verification_page.dart`
+- `lib/src/features/dropoff/presentation/pages/dropoff_confirm_opening_page.dart`
+- `lib/src/features/dropoff/presentation/pages/dropoff_open_cabinet_page.dart`
+- `lib/src/features/dropoff/presentation/pages/dropoff_success_page.dart`
 
 ### 5.4 飞检流程
 
@@ -207,8 +207,8 @@ flutter test
 
 相关文件：
 
-- `lib/src/features/flight_inspection/page/flight_inspection_verification_page.dart`
-- `lib/src/features/flight_inspection/page/flight_inspection_task_page.dart`
+- `lib/src/features/flight_inspection/presentation/pages/flight_inspection_verification_page.dart`
+- `lib/src/features/flight_inspection/presentation/pages/flight_inspection_task_page.dart`
 
 ### 5.5 管理员入口
 
@@ -222,99 +222,78 @@ flutter test
 
 相关文件：
 
-- `lib/src/app/router/smart_cabinet_home_page.dart`
+- `lib/src/features/home/presentation/pages/home_page.dart`
 - `test/widget_test.dart`
 
 ## 6. 架构说明
 
-当前代码主要分为以下层级：
+两个 Flutter 项目统一采用轻量 Feature-first 架构：
 
 ```text
 lib/
   main.dart
   src/
-    api/
-    app/
-    core/
-    dto/
-    features/
-    mock_data/
-    models/
-    repositories/
-    shared/
+    app/                 # 应用组装：启动、路由、主题、国际化和应用外壳
+    core/                # 与具体业务无关的基础能力
+    features/            # 按业务模块组织
+      <feature>/
+        data/            # 数据源、DTO 和仓库实现
+        domain/          # 业务实体、仓库接口和业务规则
+        presentation/    # 页面、业务组件和 Controller/Provider
+    shared/              # 跨业务复用的 UI 组件
 ```
+
+目录按实际需要创建，不要求小功能补齐空的 `data/domain/presentation`。
 
 ### 6.1 app
 
-`app` 是应用装配层，负责启动、路由、主题、多语言和全局入口。
-
-核心文件：
+`app` 是应用组装层，负责启动、路由、主题、多语言和全局入口。
 
 - `lib/src/app/app.dart`：根组件和 `MaterialApp` 装配。
-- `lib/src/app/bootstrap/bootstrap.dart`：Flutter 初始化、异常捕获、健康监测启动。
-- `lib/src/app/router/app_router.dart`：路由集中注册。
+- `lib/src/app/bootstrap/bootstrap.dart`：Flutter 初始化、异常捕获和健康监测启动。
+- `lib/src/app/routing/app_routes.dart`：路由名称。
+- `lib/src/app/routing/app_router.dart`：路由与页面映射。
+- `lib/src/app/shell/app_shell.dart`：柜机页面外壳。
 - `lib/src/app/theme/app_theme.dart`：主题配置。
 - `lib/src/app/localization/app_localizations.dart`：多语言入口。
 
 ### 6.2 core
 
-`core` 是跨业务基础设施层，不应该依赖具体业务页面。
+`core` 是跨业务基础设施层，不依赖具体业务模块。
 
-目录说明：
-
-- `config`：应用配置。
-- `constants`：全局常量。
-- `device`：智能柜设备和硬件抽象。
+- `camera`、`device`、`mqtt`：智能柜专属硬件和通讯能力。
+- `config`、`constants`：应用配置与常量。
 - `errors`：异常和失败对象。
-- `logging`：日志和崩溃日志。
-- `monitoring`：运行健康监测。
-- `network`：网络客户端和结果抽象。
+- `logging`、`monitoring`：日志、崩溃记录和运行健康监测。
+- `network`：网络客户端、结果抽象和当前模拟数据。
 - `storage`：本地存储抽象。
 - `utils`：通用工具。
 
-### 6.3 api / dto / models / repositories
+### 6.3 features
 
-当前项目将数据访问拆成四层：
+`features` 按业务模块聚合数据访问、业务模型和界面，当前包括 `home`、`pickup`、`dropoff`、`flight_inspection`、`admin`、`identity_verification` 和 `storage`。
 
-```text
-api -> dto -> repository -> model -> page
-```
-
-职责说明：
-
-- `api`：模拟接口返回，后续替换真实 HTTP 调用。
-- `dto`：接口响应结构，贴近后端字段。
-- `repositories`：隔离页面和接口，负责 DTO 到 Model 映射。
-- `models`：页面和业务流程使用的数据模型。
-
-这样做的好处是后端字段变化时，优先修改 DTO 和 Repository，不让页面到处跟着改。
-
-### 6.4 features
-
-`features` 存放业务页面。当前采用更直接的 `page` 目录：
+标准数据流为：
 
 ```text
-features/
-  pickup/page/
-  dropoff/page/
-  flight_inspection/page/
+presentation -> domain repository -> data repository -> data source
 ```
 
-当前页面数量还可控，因此没有强行拆成复杂的 `data/domain/presentation`。如果后续业务明显变复杂，可以再按模块内部进行分层。
+- `data/datasources`：调用 HTTP、本地数据或设备接口。
+- `data/dtos`：贴近接口字段的响应对象。
+- `data/repositories`：实现仓库接口并完成 DTO 到实体的映射。
+- `domain/entities`：页面和业务流程使用的实体。
+- `domain/repositories`：数据访问契约。
+- `presentation/pages`：业务页面。
+- `presentation/widgets`：仅当前业务使用的组件。
 
-### 6.5 shared
+后端字段变化时，优先修改 Data 层；页面通过 Domain 层保持稳定。
 
-`shared` 存放跨业务复用组件和对象。
+### 6.4 shared
 
-核心共享组件：
+`shared` 只放跨多个业务模块复用的 UI。身份认证是一项独立业务能力，相关实体和组件位于 `features/identity_verification`，而不是继续堆进全局共享目录。
 
-- `FaceVerificationCard`：人脸识别卡片。
-- `SensorVerificationCard`：指纹/NFC 等传感器认证卡片。
-- `VerificationProgressFooter`：认证进度条。
-- `VerificationStepCard`：统一步骤卡壳。
-- `TerminalShell`：终端页面壳层。
-
-取件、放件、飞检的身份认证 UI 都应优先复用这些组件，避免三套流程出现样式和逻辑分叉。
+完整的依赖方向、Riverpod 和命名规则见 `ARCHITECTURE.md`。
 
 ## 7. 多语言说明
 
@@ -501,26 +480,25 @@ lib/src/core/device/hardware_recovery_advice.dart
 
 ## 11. 数据流说明
 
-当前页面获取数据的大致路径：
+页面获取数据的标准路径：
 
 ```text
-Page -> Repository -> API -> FakeHttpClient -> mock_data
+Page / Controller
+  -> Domain Repository 接口
+  -> Data Repository 实现
+  -> Remote Data Source
+  -> HttpClient / FakeHttpClient
 ```
 
-返回后映射路径：
+接口返回后的映射路径：
 
 ```text
-mock_data -> DTO -> Model -> Page
+JSON -> DTO -> Domain Entity -> Page
 ```
 
-示例：
+例如，首页由 `HomeRepositoryImpl` 实现 `HomeRepository`，通过 `HomeRemoteDataSource` 获取数据，并向页面返回 `HomeData`。取件、放件、飞检和管理员模块遵循相同规则。
 
-- 首页：`HomeRepository` 调用 `HomeApi`，返回 `HomeModel`。
-- 取件：`PickupRepository` 调用 `PickupApi`，返回 `PickupModel`。
-- 放件：`DropoffRepository` 调用 `DropoffApi`，返回 `DropoffModel`。
-- 飞检：`FlightInspectionRepository` 调用 `FlightInspectionApi`，返回 `FlightInspectionModel`。
-
-替换真实接口时，优先改 `api` 和 `dto`，尽量不改页面。
+接入真实接口时，优先替换对应模块 `data/datasources` 的实现，并在 DTO 和仓库实现中消化字段差异，尽量不修改页面。
 
 ## 12. 测试说明
 
@@ -574,7 +552,7 @@ flutter test test/widget_test.dart --plain-name "dropoff flow completes with sim
 
 ### 13.1 修改前
 
-- 先确认要改的是页面、共享组件、Repository、API 还是基础设施。
+- 先确认要改的是 Presentation、Domain、Data、Shared 还是 Core。
 - 涉及行为变化时先补测试。
 - 不要在页面里直接写模拟数据。
 - 不要在多个业务页面复制同一套认证组件。
@@ -582,7 +560,7 @@ flutter test test/widget_test.dart --plain-name "dropoff flow completes with sim
 ### 13.2 修改中
 
 - 页面只依赖 Repository 或共享组件。
-- Repository 负责 DTO 到 Model 的映射。
+- Repository 实现负责 DTO 到 Domain Entity 的映射。
 - 共享组件保持业务无关，具体流程由页面控制。
 - 多语言文案使用 `l10n.t('key', '中文兜底')`。
 - 硬件异常使用 `HardwareRecoveryAdvice` 统一描述。
@@ -605,31 +583,31 @@ flutter test
 
 建议步骤：
 
-- 在对应 `features/<module>/page/` 下新增页面。
-- 在 `app_router.dart` 注册路由。
+- 在对应 `features/<module>/presentation/pages/` 下新增页面。
+- 在 `app/routing/app_routes.dart` 声明路由名称，并在 `app_router.dart` 映射页面。
 - 页面文案接入多语言。
-- 如果页面需要数据，先通过 Repository 获取。
-- 补 Widget 测试覆盖入口和关键文案。
+- 页面需要数据时，依赖 Domain Repository，由 Data 层提供实现。
+- 补 Widget 测试覆盖入口和关键交互。
 
 ### 14.2 新增一个接口字段
 
 建议步骤：
 
-- 修改 `mock_data` 中的模拟数据。
-- 修改对应 DTO。
-- 修改对应 Model。
-- 在 Repository 中完成字段映射。
-- 页面读取 Model 字段。
+- 修改 `core/network/mock_api_data.dart` 中的模拟数据（仍使用模拟接口时）。
+- 修改对应 Feature 的 DTO。
+- 修改 Domain Entity。
+- 在 Repository 实现中完成字段映射。
+- 页面读取 Entity 字段。
 - 补对应测试。
 
 ### 14.3 接入真实后端接口
 
 建议步骤：
 
-- 保留 Repository 对页面的返回模型不变。
-- 替换 `api` 层内部实现。
-- DTO 贴合真实接口结构。
-- 处理超时、失败、空数据、字段缺失。
+- 保持 Domain Repository 对 Presentation 层的契约稳定。
+- 替换对应 Feature 的 `data/datasources` 实现。
+- DTO 贴合真实接口结构，Repository 实现负责转换成 Domain Entity。
+- 处理超时、失败、空数据和字段缺失。
 - 增加失败兜底 UI 或重试入口。
 
 ### 14.4 接入真实柜控板
@@ -661,7 +639,7 @@ flutter test
 - 多语言切换后是否仍可读。
 - 小屏幕是否溢出。
 - 认证组件样式是否与其他流程一致。
-- API 模拟数据是否集中在 `mock_data` 或 `api` 层。
+- 模拟数据是否集中在 `core/network/mock_api_data.dart`，数据访问是否位于对应 Feature 的 Data 层。
 - 是否新增或更新测试。
 - `flutter analyze` 是否通过。
 - `flutter test` 是否通过。

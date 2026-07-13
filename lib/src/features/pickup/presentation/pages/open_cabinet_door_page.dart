@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../../app/localization/app_localizations.dart';
-import '../../../../app/router/app_router.dart';
-import '../../../../components/Layout/TerminalShell/index.dart';
-import '../../../../models/pickup_model.dart';
-import '../../../../repositories/pickup_repository.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
+import 'package:smart_cabinet/src/app/shell/app_shell.dart';
+import 'package:smart_cabinet/src/features/pickup/domain/entities/pickup.dart';
+import 'package:smart_cabinet/src/features/pickup/data/repositories/pickup_repository_impl.dart';
 
 /// 打开柜门/取件成功页面。
 ///
@@ -23,7 +24,7 @@ class _OpenCabinetDoorPageState extends State<OpenCabinetDoorPage> {
   static const int _initialSeconds = 18;
 
   /// 取件展示数据。
-  PickupModel _pickupData = PickupModel.fallback();
+  PickupData _pickupData = PickupData.fallback();
 
   Timer? _timer;
   int _seconds = _initialSeconds;

@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../../app/localization/app_localizations.dart';
-import '../../../../app/router/app_router.dart';
-import '../../../../components/Layout/TerminalShell/index.dart';
-import '../../../../models/dropoff_model.dart';
-import '../../../../repositories/dropoff_repository.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
+import 'package:smart_cabinet/src/app/shell/app_shell.dart';
+import 'package:smart_cabinet/src/features/dropoff/domain/entities/dropoff.dart';
+import 'package:smart_cabinet/src/features/dropoff/data/repositories/dropoff_repository_impl.dart';
 
 /// 放件信息确认倒计时页。
 class DropoffConfirmOpeningPage extends StatefulWidget {
@@ -20,7 +21,7 @@ class DropoffConfirmOpeningPage extends StatefulWidget {
 
 class _DropoffConfirmOpeningPageState extends State<DropoffConfirmOpeningPage> {
   /// 放件展示数据。
-  DropoffModel _dropoffData = DropoffModel.fallback();
+  DropoffData _dropoffData = DropoffData.fallback();
 
   /// 自动开柜前剩余秒数。
   int _seconds = 2;

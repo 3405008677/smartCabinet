@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import '../../core/logging/app_logger.dart';
-import 'startup_task.dart';
+import 'package:smart_cabinet/src/core/logging/app_logger.dart';
+import 'package:smart_cabinet/src/app/startup/startup_task.dart';
 
 /// 应用启动任务管理器。
 ///

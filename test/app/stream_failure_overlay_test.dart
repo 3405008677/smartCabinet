@@ -1,8 +1,8 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_cabinet/src/app/stream_failure_overlay.dart';
-import 'package:smart_cabinet/src/core/camera/index.dart';
+import 'package:smart_cabinet/src/app/overlays/stream_failure_overlay.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 
 /// 全局推流异常提示测试。
 void main() {

@@ -1,4 +1,10 @@
-part of '../index.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+import 'package:smart_cabinet/src/core/device/device_info_service.dart';
+import 'package:smart_cabinet/src/core/storage/app_local_store_provider.dart';
+import 'package:smart_cabinet/src/features/admin/presentation/widgets/admin_login_dialog.dart';
 
 // 首页隐藏设置模块。
 //
@@ -6,7 +12,7 @@ part of '../index.dart';
 // 设备信息弹窗，避免这些低频配置逻辑挤在 Home 页面主文件中。
 
 /// 打开首页隐藏设置弹窗。
-void _showSettingsDialog(BuildContext context) {
+void showSettingsDialog(BuildContext context) {
   showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -135,7 +141,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                     _AdminModeSettingRow(
                       onTap: () {
                         Navigator.of(context).pop();
-                        _showAdminLoginDialog(context);
+                        showAdminLoginDialog(context);
                       },
                     ),
                     const SizedBox(height: 14),

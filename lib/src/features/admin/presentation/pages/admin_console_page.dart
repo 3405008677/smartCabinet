@@ -2,12 +2,12 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../app/localization/app_localizations.dart';
-import '../../../../components/Layout/TerminalShell/index.dart';
-import '../../../../core/camera/index.dart';
-import '../../../../core/device/hardware_status_service.dart';
-import '../../../../core/storage/app_local_store_provider.dart';
-import '../../../../models/admin_model.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+import 'package:smart_cabinet/src/app/shell/app_shell.dart';
+import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
+import 'package:smart_cabinet/src/core/device/hardware_status_service.dart';
+import 'package:smart_cabinet/src/core/storage/app_local_store_provider.dart';
+import 'package:smart_cabinet/src/features/admin/domain/entities/admin.dart';
 
 /// 管理员控制台页。
 class AdminConsolePage extends ConsumerStatefulWidget {
@@ -20,7 +20,7 @@ class AdminConsolePage extends ConsumerStatefulWidget {
 
 class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
   /// 当前柜体设备状态。
-  AdminDeviceStatusModel _deviceStatus = AdminDeviceStatusModel.fallback();
+  AdminDeviceStatus _deviceStatus = AdminDeviceStatus.fallback();
 
   /// 终端硬件状态服务。
   final HardwareStatusService _hardwareStatusService =
@@ -56,7 +56,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
     final store = await ref.read(appLocalStoreProvider.future);
     final localState = await store.state();
     final hardwareStatus = await _hardwareStatusService.fetchHardwareStatus();
-    final deviceStatus = AdminDeviceStatusModel.fromLocalState(
+    final deviceStatus = AdminDeviceStatus.fromLocalState(
       deviceInfo: localState.deviceInfo,
       hardwareStatus: hardwareStatus,
     );
@@ -102,7 +102,8 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
   ) {
     return showDialog<void>(
       context: context,
-      builder: (context) => _AdminCameraPreviewDialog(role: role, camera: camera),
+      builder: (context) =>
+          _AdminCameraPreviewDialog(role: role, camera: camera),
     );
   }
 
@@ -197,7 +198,7 @@ class _DeviceInfoPanel extends StatelessWidget {
   });
 
   /// 当前柜体设备状态。
-  final AdminDeviceStatusModel status;
+  final AdminDeviceStatus status;
 
   /// 摄像头配置是否正在加载。
   final bool cameraConfigLoading;
@@ -242,20 +243,18 @@ class _DeviceInfoPanel extends StatelessWidget {
         status.rj45Status,
         Icons.settings_ethernet_rounded,
       ),
-      ...CabinetCameraRole.values.map(
-        (role) {
-          final camera = _connectedCameraForRole(role);
-          return _DeviceInfoItem(
-            role.label(context),
-            _cameraStatusText(context, role),
-            Icons.video_camera_front_outlined,
-            key: ValueKey('admin_camera_role_${role.name}'),
-            onTap: camera == null
-                ? null
-                : () => onOpenCameraPreview(role, camera),
-          );
-        },
-      ),
+      ...CabinetCameraRole.values.map((role) {
+        final camera = _connectedCameraForRole(role);
+        return _DeviceInfoItem(
+          role.label(context),
+          _cameraStatusText(context, role),
+          Icons.video_camera_front_outlined,
+          key: ValueKey('admin_camera_role_${role.name}'),
+          onTap: camera == null
+              ? null
+              : () => onOpenCameraPreview(role, camera),
+        );
+      }),
       _DeviceInfoItem(
         l10n.t('adminDeviceNfc', 'NFC'),
         status.nfcStatus,
@@ -279,9 +278,7 @@ class _DeviceInfoPanel extends StatelessWidget {
     ];
     final gridChildren = <Widget>[
       for (final item in items) _DeviceStatusTile(item),
-      _OutsideEnvironmentStreamControls(
-        status: outsideEnvironmentStreamStatus,
-      ),
+      _OutsideEnvironmentStreamControls(status: outsideEnvironmentStreamStatus),
     ];
 
     return _ConsoleCard(
@@ -350,7 +347,9 @@ class _DeviceInfoPanel extends StatelessWidget {
       CabinetCameraUseMode.stillCapture => _cameraIdAliases(
         binding.flutterCameraId,
       ),
-      CabinetCameraUseMode.rtspStream => _cameraIdAliases(binding.androidCameraId),
+      CabinetCameraUseMode.rtspStream => _cameraIdAliases(
+        binding.androidCameraId,
+      ),
     };
     for (final camera in availableCameras) {
       if (boundCameraIds.contains(camera.id)) {
@@ -376,7 +375,13 @@ class _DeviceInfoPanel extends StatelessWidget {
 /// 单项设备状态。
 class _DeviceInfoItem {
   /// 创建设备状态项。
-  const _DeviceInfoItem(this.label, this.value, this.icon, {this.key, this.onTap});
+  const _DeviceInfoItem(
+    this.label,
+    this.value,
+    this.icon, {
+    this.key,
+    this.onTap,
+  });
 
   /// 状态标签。
   final String label;
@@ -505,7 +510,8 @@ class _AdminCameraPreviewPanel extends StatefulWidget {
   final CabinetCameraDevice camera;
 
   @override
-  State<_AdminCameraPreviewPanel> createState() => _AdminCameraPreviewPanelState();
+  State<_AdminCameraPreviewPanel> createState() =>
+      _AdminCameraPreviewPanelState();
 }
 
 class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel> {
@@ -630,9 +636,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel> {
 /// 柜外环境按需推流控制区。
 class _OutsideEnvironmentStreamControls extends StatelessWidget {
   /// 创建柜外环境按需推流控制区。
-  const _OutsideEnvironmentStreamControls({
-    required this.status,
-  });
+  const _OutsideEnvironmentStreamControls({required this.status});
 
   /// 当前柜外环境推流状态。
   final CameraStreamStatus? status;

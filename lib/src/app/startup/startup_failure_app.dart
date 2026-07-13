@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../bootstrap/bootstrap.dart';
-import 'startup_task.dart';
+import 'package:smart_cabinet/src/app/bootstrap/bootstrap.dart';
+import 'package:smart_cabinet/src/app/startup/startup_task.dart';
 
 /// 启动失败时展示的兜底应用。
 ///

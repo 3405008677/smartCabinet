@@ -1,5 +1,5 @@
-import '../../index.dart';
-import '../../../dto/flight_inspection_response_dto.dart';
+import 'package:smart_cabinet/src/core/network/api_client.dart';
+import 'package:smart_cabinet/src/features/flight_inspection/data/dtos/flight_inspection_response_dto.dart';
 
 /// 飞检任务 URL。
 const String flightInspectionTaskUrl = '/api/flight-inspection';

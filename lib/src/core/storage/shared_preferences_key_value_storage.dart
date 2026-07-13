@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'key_value_storage.dart';
+import 'package:smart_cabinet/src/core/storage/key_value_storage.dart';
 
 /// 基于 SharedPreferences 的键值存储实现。
 ///

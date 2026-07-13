@@ -1,9 +1,9 @@
-import '../core/device/hardware_status_service.dart';
+import 'package:smart_cabinet/src/core/device/hardware_status_service.dart';
 
 /// 管理员登录结果模型。
-class AdminLoginModel {
+class AdminLoginResult {
   /// 创建管理员登录结果。
-  const AdminLoginModel({
+  const AdminLoginResult({
     required this.authorized,
     required this.adminName,
     required this.permissionLevel,
@@ -23,8 +23,8 @@ class AdminLoginModel {
   final String message;
 
   /// 从接口数据创建登录结果模型。
-  factory AdminLoginModel.fromMap(Map<String, Object> map) {
-    return AdminLoginModel(
+  factory AdminLoginResult.fromMap(Map<String, Object> map) {
+    return AdminLoginResult(
       authorized: map['authorized'] as bool,
       adminName: map['adminName'] as String,
       permissionLevel: map['permissionLevel'] as String,
@@ -34,9 +34,9 @@ class AdminLoginModel {
 }
 
 /// 管理员控制台设备状态模型。
-class AdminDeviceStatusModel {
+class AdminDeviceStatus {
   /// 创建设备状态模型。
-  const AdminDeviceStatusModel({
+  const AdminDeviceStatus({
     required this.cabinetCode,
     required this.region,
     required this.wifiName,
@@ -48,8 +48,8 @@ class AdminDeviceStatusModel {
   });
 
   /// 页面首帧兜底展示数据。
-  factory AdminDeviceStatusModel.fallback() {
-    return const AdminDeviceStatusModel(
+  factory AdminDeviceStatus.fallback() {
+    return const AdminDeviceStatus(
       cabinetCode: 'CAB-A01',
       region: 'A · B 区',
       wifiName: 'SmartCabinet-5G',
@@ -86,8 +86,8 @@ class AdminDeviceStatusModel {
   final String scannerStatus;
 
   /// 从接口数据创建设备状态模型。
-  factory AdminDeviceStatusModel.fromMap(Map<String, Object> map) {
-    return AdminDeviceStatusModel(
+  factory AdminDeviceStatus.fromMap(Map<String, Object> map) {
+    return AdminDeviceStatus(
       cabinetCode: map['cabinetCode'] as String,
       region: map['region'] as String,
       wifiName: map['wifiName'] as String,
@@ -100,7 +100,7 @@ class AdminDeviceStatusModel {
   }
 
   /// 从本地 Store 和真实硬件状态创建管理员控制台设备状态。
-  factory AdminDeviceStatusModel.fromLocalState({
+  factory AdminDeviceStatus.fromLocalState({
     required Map<String, Object?> deviceInfo,
     required DeviceHardwareStatus hardwareStatus,
   }) {
@@ -111,7 +111,7 @@ class AdminDeviceStatusModel {
               : hardwareStatus.wifiName)
         : '未连接';
 
-    return AdminDeviceStatusModel(
+    return AdminDeviceStatus(
       cabinetCode: cabinetCode.isEmpty ? '未知设备' : cabinetCode,
       region: '未配置',
       wifiName: wifiName,
