@@ -6,7 +6,7 @@ import 'package:smart_cabinet/src/app/startup/startup_task.dart';
 /// 启动失败时展示的兜底应用。
 ///
 /// 关键启动任务失败时不进入主业务界面，避免设备在不稳定状态下继续运行。
-class StartupFailureApp extends StatelessWidget {
+class StartupFailureApp extends StatefulWidget {
   /// 创建启动失败兜底应用。
   const StartupFailureApp({required this.result, super.key});
 
@@ -14,8 +14,29 @@ class StartupFailureApp extends StatelessWidget {
   final StartupResult result;
 
   @override
+  State<StartupFailureApp> createState() => _StartupFailureAppState();
+}
+
+class _StartupFailureAppState extends State<StartupFailureApp> {
+  bool _retrying = false;
+
+  Future<void> _retry() async {
+    if (_retrying) {
+      return;
+    }
+    setState(() => _retrying = true);
+    try {
+      await retryBootstrap();
+    } finally {
+      if (mounted) {
+        setState(() => _retrying = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final failure = result.firstRequiredFailure;
+    final failure = widget.result.firstRequiredFailure;
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -58,11 +79,18 @@ class StartupFailureApp extends StatelessWidget {
                         const SizedBox(height: 24),
                         if (failure != null) _FailureSummary(failure: failure),
                         const SizedBox(height: 24),
-                        _TaskResultList(results: result.taskResults),
+                        _TaskResultList(results: widget.result.taskResults),
                         const SizedBox(height: 28),
                         FilledButton.icon(
-                          onPressed: bootstrap,
-                          icon: const Icon(Icons.refresh_rounded),
+                          onPressed: _retrying ? null : _retry,
+                          icon: _retrying
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh_rounded),
                           label: const Text('重新启动检测'),
                         ),
                       ],

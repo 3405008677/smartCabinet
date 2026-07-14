@@ -17,6 +17,7 @@ import android.util.Log
 import android.view.Surface
 import androidx.core.app.ActivityCompat
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 class RkMppH265Stream(
     private val context: Context,
@@ -46,6 +47,7 @@ class RkMppH265Stream(
     private var waitingParameterSetCount = 0
     private var lastAcceptedImageTimestampNs = 0L
     private val stopping = AtomicBoolean(false)
+    private val streamGeneration = AtomicLong(0L)
     override var currentCameraId: String? = null
         private set
 
@@ -60,6 +62,7 @@ class RkMppH265Stream(
         }
 
         return runCatching {
+            val generation = streamGeneration.incrementAndGet()
             stopping.set(false)
             currentCameraId = cameraId
             rtspUrl = url
@@ -68,6 +71,7 @@ class RkMppH265Stream(
             streamFps = fps
             statusListener("正在初始化 RKMPP 依赖库")
             if (!bridge.initialize(context)) {
+                currentCameraId = null
                 statusListener("RKMPP 依赖库初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
                 return false
             }
@@ -80,14 +84,14 @@ class RkMppH265Stream(
             }
 
             startWorkerThread()
-            prepareImageReader(width, height)
-            openCamera(cameraId)
+            prepareImageReader(width, height, generation)
+            streaming.set(true)
+            openCamera(cameraId, generation)
             encodedFrameCount = 0
             pushedFrameCount = 0
             pushedByteCount = 0L
             waitingParameterSetCount = 0
             lastAcceptedImageTimestampNs = 0L
-            streaming.set(true)
             true
         }.getOrElse { error ->
             Log.e(TAG, "RKMPP H265 stream start failed", error)
@@ -101,12 +105,14 @@ class RkMppH265Stream(
         if (!stopping.compareAndSet(false, true) && !streaming.get()) {
             return
         }
+        streamGeneration.incrementAndGet()
         streaming.set(false)
         currentCameraId = null
         runCatching { captureSession?.close() }
         captureSession = null
         runCatching { cameraDevice?.close() }
         cameraDevice = null
+        runCatching { imageReader?.setOnImageAvailableListener(null, null) }
         runCatching { imageReader?.close() }
         imageReader = null
         bridge.stopRkMppH265()
@@ -140,6 +146,7 @@ class RkMppH265Stream(
         if (!streaming.getAndSet(false)) {
             return
         }
+        streamGeneration.incrementAndGet()
         statusListener(status)
         if (error != null) {
             Log.e(TAG, status, error)
@@ -154,12 +161,15 @@ class RkMppH265Stream(
         }
     }
 
-    private fun prepareImageReader(width: Int, height: Int) {
+    private fun prepareImageReader(width: Int, height: Int, generation: Long) {
         imageReader = ImageReader.newInstance(width, height, ImageFormat.YUV_420_888, 2).also { reader ->
             reader.setOnImageAvailableListener({ availableReader ->
                 runCatching {
                     val image = availableReader.acquireLatestImage() ?: return@setOnImageAvailableListener
                     image.use { currentImage ->
+                        if (!isGenerationActive(generation)) {
+                            return@use
+                        }
                         if (!streaming.get()) {
                             return@use
                         }
@@ -167,115 +177,174 @@ class RkMppH265Stream(
                             return@use
                         }
                         val encoded = currentImage.encodeWithNative(currentImage.timestamp / 1000)
+                        if (!isGenerationActive(generation)) {
+                            return@use
+                        }
                         if (encoded == null || encoded.isEmpty()) {
                             statusListener("RKMPP H265 转换编码失败：${bridge.lastError().ifBlank { "无输出帧" }}")
                             return@use
                         }
                         encodedFrameCount += 1
-                        if (!ensureRtspPublisherStarted(encoded)) {
-                            waitingParameterSetCount += 1
-                            if (waitingParameterSetCount <= 3 || waitingParameterSetCount % 30 == 0) {
-                                statusListener("RKMPP H265 等待 VPS/SPS/PPS：frames=$waitingParameterSetCount bytes=${encoded.size}")
+                        if (!ensureRtspPublisherStarted(encoded, generation)) {
+                            if (isGenerationActive(generation)) {
+                                waitingParameterSetCount += 1
+                                if (shouldReportProgress(waitingParameterSetCount)) {
+                                    statusListener("RKMPP H265 等待 VPS/SPS/PPS：frames=$waitingParameterSetCount bytes=${encoded.size}")
+                                }
                             }
                             return@use
                         }
-                        if (!sendEncodedFrame(encoded, currentImage.timestamp / 1000, encodedFrameCount == 1)) {
+                        if (!sendEncodedFrame(encoded, currentImage.timestamp / 1000, generation)) {
                             statusListener("RKMPP H265 推流失败：${bridge.lastError().ifBlank { "发送链路不可用" }}")
                             return@use
                         }
                         pushedFrameCount += 1
                         pushedByteCount += encoded.size.toLong()
-                        if (pushedFrameCount <= 3 || pushedFrameCount % 30 == 0) {
+                        if (shouldReportProgress(pushedFrameCount)) {
                             statusListener(
                                 "RKMPP H265 推流中：encoded=$encodedFrameCount pushed=$pushedFrameCount bytes=$pushedByteCount last=${encoded.size}",
                             )
                         }
                     }
                 }.onFailure { error ->
-                    stopAfterRuntimeFailure(
-                        "RKMPP H265 推流失败：${error.message ?: error::class.java.simpleName}",
-                        error,
-                    )
+                    if (isGenerationActive(generation)) {
+                        stopAfterRuntimeFailure(
+                            "RKMPP H265 推流失败：${error.message ?: error::class.java.simpleName}",
+                            error,
+                        )
+                    }
                 }
             }, workerHandler)
         }
     }
 
-    private fun ensureRtspPublisherStarted(codecConfig: ByteArray): Boolean {
+    private fun ensureRtspPublisherStarted(codecConfig: ByteArray, generation: Long): Boolean {
+        if (!isGenerationActive(generation)) {
+            return false
+        }
         if (rtspSender != null) {
             return true
         }
         if (rtspUrl.isBlank()) {
             return false
         }
-        val fallbackPublisher = RtspTcpH265Publisher(statusListener)
-        if (!fallbackPublisher.canStart(codecConfig)) {
+        val nextPublisher = RtspTcpH265Publisher { status ->
+            if (isGenerationActive(generation)) {
+                statusListener(status)
+            }
+        }
+        if (!nextPublisher.canStart(codecConfig)) {
             return false
         }
-        startKotlinPublisher(fallbackPublisher, codecConfig)
+        nextPublisher.start(rtspUrl, codecConfig)
+        if (!isGenerationActive(generation)) {
+            nextPublisher.stop()
+            return false
+        }
+        rtspPublisher = nextPublisher
+        rtspSender = RtspSender.KOTLIN
+        if (!isGenerationActive(generation)) {
+            if (rtspPublisher === nextPublisher) {
+                rtspPublisher = null
+                rtspSender = null
+            }
+            nextPublisher.stop()
+            return false
+        }
+        waitingParameterSetCount = 0
         statusListener("RKMPP H265 使用 Kotlin RTSP ANNOUNCE/RECORD 发送")
         return true
     }
 
     // Sends encoded H265 through the sender that successfully registered the stream.
-    private fun sendEncodedFrame(encodedFrame: ByteArray, presentationTimeUs: Long, keyFrame: Boolean): Boolean {
-        return when (rtspSender) {
-            RtspSender.KOTLIN -> {
-                rtspPublisher?.sendFrame(encodedFrame, presentationTimeUs, keyFrame)
-                true
-            }
-            null -> false
+    private fun sendEncodedFrame(encodedFrame: ByteArray, presentationTimeUs: Long, generation: Long): Boolean {
+        val publisher = rtspPublisher ?: return false
+        if (!isGenerationActive(generation) || rtspSender != RtspSender.KOTLIN) {
+            return false
         }
+        publisher.sendFrame(encodedFrame, presentationTimeUs)
+        return true
     }
 
-    // Starts the existing Kotlin RTSP sender as a resilience fallback.
-    private fun startKotlinPublisher(publisher: RtspTcpH265Publisher, codecConfig: ByteArray) {
-        publisher.start(rtspUrl, codecConfig)
-        rtspPublisher = publisher
-        rtspSender = RtspSender.KOTLIN
-        waitingParameterSetCount = 0
-    }
-
-    private fun openCamera(cameraId: String) {
+    private fun openCamera(cameraId: String, generation: Long) {
         val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val targetSurface = imageReader?.surface ?: error("image reader surface is not ready")
         cameraManager.openCamera(
             cameraId,
             object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
+                    if (!isGenerationActive(generation)) {
+                        camera.close()
+                        return
+                    }
                     runCatching {
                         cameraDevice = camera
-                        createCaptureSession(camera, targetSurface)
+                        if (!isGenerationActive(generation)) {
+                            if (cameraDevice === camera) {
+                                cameraDevice = null
+                            }
+                            camera.close()
+                            return
+                        }
+                        createCaptureSession(camera, targetSurface, generation)
                     }.onFailure { error ->
-                        stopAfterRuntimeFailure(
-                            "RKMPP H265 摄像头启动失败：${error.message ?: error::class.java.simpleName}",
-                            error,
-                        )
+                        camera.close()
+                        if (isGenerationActive(generation)) {
+                            stopAfterRuntimeFailure(
+                                "RKMPP H265 摄像头启动失败：${error.message ?: error::class.java.simpleName}",
+                                error,
+                            )
+                        }
                     }
                 }
 
                 override fun onDisconnected(camera: CameraDevice) {
-                    cameraDevice = camera
+                    camera.close()
+                    if (!isGenerationActive(generation)) {
+                        return
+                    }
+                    if (cameraDevice === camera) {
+                        cameraDevice = null
+                    }
                     stopAfterRuntimeFailure("RKMPP H265 摄像头断开")
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
-                    cameraDevice = camera
+                    camera.close()
+                    if (!isGenerationActive(generation)) {
+                        return
+                    }
+                    if (cameraDevice === camera) {
+                        cameraDevice = null
+                    }
                     stopAfterRuntimeFailure("RKMPP H265 摄像头错误：$error")
                 }
             },
             workerHandler,
         )
-        statusListener("RKMPP H265 摄像头打开中")
+        if (isGenerationActive(generation)) {
+            statusListener("RKMPP H265 摄像头打开中")
+        }
     }
 
-    private fun createCaptureSession(camera: CameraDevice, targetSurface: Surface) {
+    private fun createCaptureSession(camera: CameraDevice, targetSurface: Surface, generation: Long) {
         camera.createCaptureSession(
             listOf(targetSurface),
             object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(session: CameraCaptureSession) {
+                    if (!isGenerationActive(generation)) {
+                        session.close()
+                        return
+                    }
                     runCatching {
                         captureSession = session
+                        if (!isGenerationActive(generation)) {
+                            if (captureSession === session) {
+                                captureSession = null
+                            }
+                            session.close()
+                            return
+                        }
                         val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(targetSurface)
                             set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
@@ -284,14 +353,21 @@ class RkMppH265Stream(
                         session.setRepeatingRequest(request.build(), null, workerHandler)
                         statusListener("RKMPP H265 推流启动中")
                     }.onFailure { error ->
-                        stopAfterRuntimeFailure(
-                            "RKMPP H265 摄像头会话启动失败：${error.message ?: error::class.java.simpleName}",
-                            error,
-                        )
+                        session.close()
+                        if (isGenerationActive(generation)) {
+                            stopAfterRuntimeFailure(
+                                "RKMPP H265 摄像头会话启动失败：${error.message ?: error::class.java.simpleName}",
+                                error,
+                            )
+                        }
                     }
                 }
 
                 override fun onConfigureFailed(session: CameraCaptureSession) {
+                    session.close()
+                    if (!isGenerationActive(generation)) {
+                        return
+                    }
                     stopAfterRuntimeFailure("RKMPP H265 摄像头会话配置失败")
                 }
             },
@@ -328,6 +404,14 @@ class RkMppH265Stream(
             vPixelStride = vPlane.pixelStride,
             presentationTimeUs = presentationTimeUs,
         )
+    }
+
+    private fun isGenerationActive(generation: Long): Boolean {
+        return streaming.get() && streamGeneration.get() == generation
+    }
+
+    private fun shouldReportProgress(frameCount: Int): Boolean {
+        return frameCount <= 3 || frameCount % 300 == 0
     }
 
     companion object {

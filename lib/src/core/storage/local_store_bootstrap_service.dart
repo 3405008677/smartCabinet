@@ -33,15 +33,24 @@ class LocalStoreBootstrapService {
       deviceInfo[item.label] = item.value;
     }
 
-    await _store.update(
-      (state) => state.copyWith(
+    const placeholderReportUrl = 'http://192.168.1.100:3000/api/logs/error';
+    await _store.update((state) {
+      final logging = <String, Object?>{
+        'errorReportUrl': placeholderReportUrl,
+        'uploadEnabled': false,
+        ...state.logging,
+      };
+      if (logging['errorReportUrl'] == placeholderReportUrl) {
+        // The placeholder backend is not deployed; keep uploads opt-in.
+        logging['uploadEnabled'] = false;
+      }
+      final configuredStreamUrl = state.video['streamUrl']?.toString().trim();
+
+      return state.copyWith(
         deviceInfo: deviceInfo,
-        logging: <String, Object?>{
-          'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
-          'uploadEnabled': true,
-          ...state.logging,
-        },
+        logging: logging,
         video: <String, Object?>{
+          ...state.video,
           'streamUrl': buildStreamUrl(deviceInfo['唯一设备ID']?.toString()),
           'streamProfiles': [
             for (final profile in AppConfig.streamProfiles)
@@ -54,9 +63,11 @@ class LocalStoreBootstrapService {
                 'gopSeconds': profile.gopSeconds,
               },
           ],
+          if (configuredStreamUrl != null && configuredStreamUrl.isNotEmpty)
+            'streamUrl': configuredStreamUrl,
         },
-      ),
-    );
+      );
+    });
   }
 
   /// 根据唯一设备 ID 构建推流地址。

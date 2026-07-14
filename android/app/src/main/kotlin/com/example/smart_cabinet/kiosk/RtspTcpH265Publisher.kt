@@ -3,6 +3,8 @@ package com.example.smart_cabinet.kiosk
 import android.util.Base64
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
+import java.net.InetSocketAddress
 import java.net.URI
 import java.net.Socket
 import java.util.ArrayDeque
@@ -14,6 +16,7 @@ class RtspTcpH265Publisher(
     private var socket: Socket? = null
     private var input: BufferedInputStream? = null
     private var output: BufferedOutputStream? = null
+    private val transportLock = Any()
     private var cSeq = 1
     private var session = ""
     private var sequenceNumber = Random.nextInt(0, 0xffff)
@@ -28,13 +31,15 @@ class RtspTcpH265Publisher(
     private var droppedFrameCount = 0
     private var framesSinceLastFlush = 0
     private var lastFlushAtMs = 0L
+    private var lastQueueReportAtMs = 0L
+    private var lastReportedDroppedFrameCount = 0
 
     fun canStart(codecConfig: ByteArray?): Boolean {
         return codecConfig?.let(::extractParameterSets)?.isComplete == true
     }
 
     fun start(url: String, codecConfig: ByteArray?) {
-        if (socket?.isConnected == true) {
+        if (socket?.let { current -> current.isConnected && !current.isClosed } == true) {
             return
         }
         val currentParameterSets = codecConfig?.let(::extractParameterSets)
@@ -44,51 +49,79 @@ class RtspTcpH265Publisher(
         val uri = URI(url)
         val host = uri.host ?: error("RTSP host is empty")
         val port = if (uri.port > 0) uri.port else 554
-        socket = Socket(host, port).apply {
+        val nextSocket = Socket().apply {
             tcpNoDelay = true
+            keepAlive = true
             sendBufferSize = SOCKET_SEND_BUFFER_SIZE
+            soTimeout = SOCKET_READ_TIMEOUT_MS
         }
-        input = BufferedInputStream(socket!!.getInputStream())
-        output = BufferedOutputStream(socket!!.getOutputStream())
-        statusListener("RTSP直推连接成功：$host:$port")
-        request("OPTIONS", url)
-        request(
-            method = "ANNOUNCE",
-            url = url,
-            headers = linkedMapOf("Content-Type" to "application/sdp"),
-            body = buildSdp(currentParameterSets),
-        )
-        val setup = request(
-            method = "SETUP",
-            url = "$url/trackID=0",
-            headers = linkedMapOf("Transport" to "RTP/AVP/TCP;unicast;interleaved=0-1"),
-        )
-        session = setup.headers["session"]?.substringBefore(';')?.trim().orEmpty()
-        request(
-            method = "RECORD",
-            url = url,
-            headers = linkedMapOf("Session" to session, "Range" to "npt=0.000-"),
-        )
-        statusListener("RTSP直推已开始：session=$session")
-        startSenderThread()
+        synchronized(transportLock) {
+            check(socket == null) { "RTSP transport is already starting" }
+            socket = nextSocket
+        }
+        try {
+            nextSocket.connect(InetSocketAddress(host, port), SOCKET_CONNECT_TIMEOUT_MS)
+            val nextInput = BufferedInputStream(nextSocket.getInputStream())
+            val nextOutput = BufferedOutputStream(nextSocket.getOutputStream())
+            synchronized(transportLock) {
+                check(socket === nextSocket && !nextSocket.isClosed) { "RTSP start was cancelled" }
+                input = nextInput
+                output = nextOutput
+            }
+            statusListener("RTSP直推连接成功：$host:$port")
+            request("OPTIONS", url)
+            request(
+                method = "ANNOUNCE",
+                url = url,
+                headers = linkedMapOf("Content-Type" to "application/sdp"),
+                body = buildSdp(currentParameterSets),
+            )
+            val setup = request(
+                method = "SETUP",
+                url = "$url/trackID=0",
+                headers = linkedMapOf("Transport" to "RTP/AVP/TCP;unicast;interleaved=0-1"),
+            )
+            session = setup.headers["session"]?.substringBefore(';')?.trim().orEmpty()
+            request(
+                method = "RECORD",
+                url = url,
+                headers = linkedMapOf("Session" to session, "Range" to "npt=0.000-"),
+            )
+            statusListener("RTSP直推已开始：session=$session")
+            startSenderThread()
+        } catch (error: Throwable) {
+            closeTransport(nextSocket)
+            session = ""
+            parameterSets = null
+            throw error
+        }
     }
 
-    fun sendFrame(data: ByteArray, presentationTimeUs: Long, marker: Boolean) {
-        if (socket?.isConnected != true) {
+    fun sendFrame(data: ByteArray, presentationTimeUs: Long) {
+        if (!senderRunning || socket?.let { current -> current.isConnected && !current.isClosed } != true) {
             return
         }
+        var queueStatus: String? = null
         synchronized(sendLock) {
             while (pendingFrames.size >= MAX_PENDING_FRAMES) {
                 pendingFrames.removeFirst()
                 droppedFrameCount += 1
             }
-            pendingFrames.addLast(PendingFrame(data, presentationTimeUs, marker))
+            pendingFrames.addLast(PendingFrame(data, presentationTimeUs))
             val queuedFrames = pendingFrames.size
-            if (queuedFrames > 1 || droppedFrameCount > 0) {
-                statusListener("RTSP发送队列：queued=$queuedFrames dropped=$droppedFrameCount")
+            val nowMs = System.currentTimeMillis()
+            val droppedDelta = droppedFrameCount - lastReportedDroppedFrameCount
+            val reportDueToDrops = droppedDelta > 0 &&
+                (lastQueueReportAtMs == 0L || droppedDelta >= DROP_REPORT_INTERVAL || nowMs - lastQueueReportAtMs >= QUEUE_REPORT_INTERVAL_MS)
+            val reportDueToFullQueue = queuedFrames >= MAX_PENDING_FRAMES && nowMs - lastQueueReportAtMs >= QUEUE_REPORT_INTERVAL_MS
+            if (reportDueToDrops || reportDueToFullQueue) {
+                lastQueueReportAtMs = nowMs
+                lastReportedDroppedFrameCount = droppedFrameCount
+                queueStatus = "RTSP发送队列：queued=$queuedFrames dropped=$droppedFrameCount"
             }
             sendLock.notifyAll()
         }
+        queueStatus?.let(statusListener)
     }
 
     fun stop() {
@@ -97,25 +130,20 @@ class RtspTcpH265Publisher(
             pendingFrames.clear()
             sendLock.notifyAll()
         }
-        runCatching { senderThread?.join(1000) }
-        senderThread = null
-        runCatching {
-            if (socket?.isConnected == true && session.isNotBlank()) {
-                request("TEARDOWN", "*", linkedMapOf("Session" to session))
-            }
+        closeTransport()
+        val currentSenderThread = senderThread
+        if (currentSenderThread != null && Thread.currentThread() != currentSenderThread) {
+            runCatching { currentSenderThread.join(SENDER_JOIN_TIMEOUT_MS) }
         }
-        runCatching { output?.close() }
-        runCatching { input?.close() }
-        runCatching { socket?.close() }
-        output = null
-        input = null
-        socket = null
+        senderThread = null
         session = ""
         firstPresentationTimeUs = -1L
         parameterSets = null
         droppedFrameCount = 0
         framesSinceLastFlush = 0
         lastFlushAtMs = 0L
+        lastQueueReportAtMs = 0L
+        lastReportedDroppedFrameCount = 0
     }
 
     private fun startSenderThread() {
@@ -132,7 +160,12 @@ class RtspTcpH265Publisher(
                     sendFrameNow(frame)
                 }
             }.onFailure { error ->
-                statusListener("RTSP异步发送失败：${error.message ?: error::class.java.simpleName}")
+                val shouldReportFailure = senderRunning
+                senderRunning = false
+                closeTransport()
+                if (shouldReportFailure) {
+                    statusListener("RTSP异步发送失败：${error.message ?: error::class.java.simpleName}")
+                }
             }
         }.apply {
             name = "SmartCabinetRtspSender"
@@ -149,12 +182,9 @@ class RtspTcpH265Publisher(
         val nals = splitAnnexB(frame.data)
         nals.forEachIndexed { index, nal ->
             val isLastNal = index == nals.lastIndex
-            packetizeNal(nal, timestamp, frame.marker && isLastNal)
+            packetizeNal(nal, timestamp, isLastNal)
         }
         flushOutputIfNeeded()
-        if (droppedFrameCount > 0 && droppedFrameCount % DROP_REPORT_INTERVAL == 0) {
-            statusListener("RTSP异步发送丢弃旧帧：dropped=$droppedFrameCount queued=${pendingFrames.size}")
-        }
     }
 
     private fun flushOutputIfNeeded() {
@@ -188,8 +218,9 @@ class RtspTcpH265Publisher(
             append("\r\n")
             append(body)
         }
-        output?.write(raw.toByteArray(Charsets.UTF_8))
-        output?.flush()
+        val currentOutput = output ?: error("RTSP output is not ready")
+        currentOutput.write(raw.toByteArray(Charsets.UTF_8))
+        currentOutput.flush()
         val response = readResponse()
         if (response.code !in 200..299) {
             error("RTSP $method failed: code=${response.code}, text=${response.statusLine}")
@@ -199,7 +230,7 @@ class RtspTcpH265Publisher(
 
     private fun readResponse(): RtspResponse {
         val currentInput = input ?: error("RTSP input is not ready")
-        val bytes = ArrayList<Byte>()
+        val bytes = ByteArrayOutputStream()
         var matched = 0
         val end = byteArrayOf('\r'.code.toByte(), '\n'.code.toByte(), '\r'.code.toByte(), '\n'.code.toByte())
         while (true) {
@@ -208,7 +239,10 @@ class RtspTcpH265Publisher(
                 error("RTSP server closed connection")
             }
             val byte = value.toByte()
-            bytes.add(byte)
+            if (bytes.size() >= MAX_RTSP_RESPONSE_HEADER_BYTES) {
+                error("RTSP response header is too large")
+            }
+            bytes.write(value)
             matched = if (byte == end[matched]) matched + 1 else if (byte == end[0]) 1 else 0
             if (matched == end.size) {
                 break
@@ -222,6 +256,19 @@ class RtspTcpH265Publisher(
             val index = line.indexOf(':')
             if (index <= 0) null else line.substring(0, index).lowercase() to line.substring(index + 1).trim()
         }.toMap()
+        val contentLength = headers["content-length"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        if (contentLength > MAX_RTSP_RESPONSE_BODY_BYTES) {
+            error("RTSP response body is too large: $contentLength")
+        }
+        var remaining = contentLength
+        val discardBuffer = ByteArray(minOf(remaining.coerceAtLeast(1), RESPONSE_DISCARD_BUFFER_SIZE))
+        while (remaining > 0) {
+            val read = currentInput.read(discardBuffer, 0, minOf(remaining, discardBuffer.size))
+            if (read < 0) {
+                error("RTSP server closed connection while reading response body")
+            }
+            remaining -= read
+        }
         return RtspResponse(code, statusLine, headers)
     }
 
@@ -332,8 +379,25 @@ class RtspTcpH265Publisher(
 
     private fun writeInterleavedRtp(packet: ByteArray) {
         val header = byteArrayOf('$'.code.toByte(), 0, (packet.size ushr 8).toByte(), packet.size.toByte())
-        output?.write(header)
-        output?.write(packet)
+        val currentOutput = output ?: error("RTSP output is not ready")
+        currentOutput.write(header)
+        currentOutput.write(packet)
+    }
+
+    private fun closeTransport(expectedSocket: Socket? = null) {
+        val transport = synchronized(transportLock) {
+            if (expectedSocket != null && socket !== expectedSocket) {
+                return
+            }
+            val current = Transport(socket, input, output)
+            socket = null
+            input = null
+            output = null
+            current
+        }
+        runCatching { transport.socket?.close() }
+        runCatching { transport.input?.close() }
+        runCatching { transport.output?.close() }
     }
 
     private data class RtspResponse(
@@ -345,7 +409,12 @@ class RtspTcpH265Publisher(
     private data class PendingFrame(
         val data: ByteArray,
         val presentationTimeUs: Long,
-        val marker: Boolean,
+    )
+
+    private data class Transport(
+        val socket: Socket?,
+        val input: BufferedInputStream?,
+        val output: BufferedOutputStream?,
     )
 
     private data class H265ParameterSets(
@@ -359,8 +428,15 @@ class RtspTcpH265Publisher(
 
     companion object {
         private const val MAX_RTP_PAYLOAD = 1200
-        private const val MAX_PENDING_FRAMES = 16
+        private const val MAX_PENDING_FRAMES = 4
         private const val DROP_REPORT_INTERVAL = 30
+        private const val QUEUE_REPORT_INTERVAL_MS = 5_000L
+        private const val SOCKET_CONNECT_TIMEOUT_MS = 3_000
+        private const val SOCKET_READ_TIMEOUT_MS = 3_000
+        private const val SENDER_JOIN_TIMEOUT_MS = 1_000L
+        private const val MAX_RTSP_RESPONSE_HEADER_BYTES = 64 * 1024
+        private const val MAX_RTSP_RESPONSE_BODY_BYTES = 1024 * 1024
+        private const val RESPONSE_DISCARD_BUFFER_SIZE = 8 * 1024
         private const val SOCKET_SEND_BUFFER_SIZE = 1024 * 1024
         private const val FLUSH_FRAME_INTERVAL = 3
         private const val FLUSH_TIME_INTERVAL_MS = 100L

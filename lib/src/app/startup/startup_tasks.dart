@@ -24,7 +24,7 @@ class CacheLocalStoreStartupTask implements StartupTask {
   int get order => 10;
 
   @override
-  bool get required => true;
+  bool get required => false;
 
   @override
   Duration get timeout => const Duration(seconds: 8);

@@ -15,7 +15,7 @@ final class AppLocalState {
     this.deviceInfo = const <String, Object?>{},
     this.logging = const <String, Object?>{
       'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
-      'uploadEnabled': true,
+      'uploadEnabled': false,
     },
     this.video = const <String, Object?>{'streamUrl': ''},
   });
@@ -85,7 +85,7 @@ final class AppLocalState {
       deviceInfo: _asStringObjectMap(json['deviceInfo']),
       logging: _mergeObjectMap(const <String, Object?>{
         'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
-        'uploadEnabled': true,
+        'uploadEnabled': false,
       }, json['logging']),
       video: _mergeObjectMap(const <String, Object?>{
         'streamUrl': '',

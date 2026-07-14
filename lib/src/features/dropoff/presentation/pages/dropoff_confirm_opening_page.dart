@@ -29,6 +29,9 @@ class _DropoffConfirmOpeningPageState extends State<DropoffConfirmOpeningPage> {
   /// 倒计时定时器。
   Timer? _timer;
 
+  /// Prevents automatic and manual navigation from racing.
+  bool _navigationCommitted = false;
+
   @override
   void initState() {
     super.initState();
@@ -38,9 +41,7 @@ class _DropoffConfirmOpeningPageState extends State<DropoffConfirmOpeningPage> {
         return;
       }
       if (_seconds <= 1) {
-        Navigator.of(
-          context,
-        ).pushReplacementNamed(AppRoutes.dropoffOpenCabinet);
+        _openCabinet();
         return;
       }
       setState(() => _seconds -= 1);
@@ -56,6 +57,24 @@ class _DropoffConfirmOpeningPageState extends State<DropoffConfirmOpeningPage> {
     setState(() => _dropoffData = data);
   }
 
+  void _openCabinet() {
+    if (!mounted || _navigationCommitted) {
+      return;
+    }
+    _navigationCommitted = true;
+    _timer?.cancel();
+    Navigator.of(context).pushReplacementNamed(AppRoutes.dropoffOpenCabinet);
+  }
+
+  void _goBack() {
+    if (!mounted || _navigationCommitted) {
+      return;
+    }
+    _navigationCommitted = true;
+    _timer?.cancel();
+    Navigator.of(context).pop();
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
@@ -69,7 +88,7 @@ class _DropoffConfirmOpeningPageState extends State<DropoffConfirmOpeningPage> {
     return TerminalShell(
       topBarLeading: _DropoffHeader(
         title: l10n.t('dropoffConfirmTitle', '放件信息确认'),
-        onBack: () => Navigator.of(context).pop(),
+        onBack: _goBack,
       ),
       topRightBadge: FlowStatusBadge(
         text: l10n.t('dropoffConfirmBadge', '认证完成 · 待开柜'),

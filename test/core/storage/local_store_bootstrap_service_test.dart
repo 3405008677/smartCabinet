@@ -20,6 +20,14 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final storage = SharedPreferencesKeyValueStorage(preferences);
     final store = AppLocalStore(storage);
+    await store.setState(
+      const AppLocalState(
+        logging: <String, Object?>{
+          'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
+          'uploadEnabled': true,
+        },
+      ),
+    );
     final service = LocalStoreBootstrapService(
       store: store,
       fetchDeviceInfo: () async {
@@ -54,9 +62,64 @@ void main() {
           },
       ],
     });
+    final streamProfiles = state.video['streamProfiles']! as List<Object?>;
+    expect(streamProfiles.first, <String, Object?>{
+      'name': '720p',
+      'width': 1280,
+      'height': 720,
+      'fps': 15,
+      'bitrate': 2000 * 1000,
+      'gopSeconds': 1,
+    });
     expect(state.logging, <String, Object?>{
       'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
-      'uploadEnabled': true,
+      'uploadEnabled': false,
+    });
+  });
+
+  test('preserves custom stream URL and video extension fields', () async {
+    final preferences = await SharedPreferences.getInstance();
+    final storage = SharedPreferencesKeyValueStorage(preferences);
+    final store = AppLocalStore(storage);
+    await store.setState(
+      const AppLocalState(
+        video: <String, Object?>{
+          'streamUrl': 'rtsp://custom.example/live/cabinet-01',
+          'activeProfile': '720p',
+          'backendExtension': <String, Object?>{'tenant': 'alpha'},
+          'streamProfiles': [
+            <String, Object?>{'name': 'stale'},
+          ],
+        },
+      ),
+    );
+    final service = LocalStoreBootstrapService(
+      store: store,
+      fetchDeviceInfo: () async {
+        return const <DeviceInfoItem>[
+          DeviceInfoItem(label: '唯一设备ID', value: 'new-device-id'),
+        ];
+      },
+    );
+
+    await service.cacheStartupData();
+
+    final state = await store.state();
+    expect(state.video, <String, Object?>{
+      'streamUrl': 'rtsp://custom.example/live/cabinet-01',
+      'activeProfile': '720p',
+      'backendExtension': <String, Object?>{'tenant': 'alpha'},
+      'streamProfiles': [
+        for (final profile in AppConfig.streamProfiles)
+          <String, Object?>{
+            'name': profile.name,
+            'width': profile.width,
+            'height': profile.height,
+            'fps': profile.fps,
+            'bitrate': profile.bitrate,
+            'gopSeconds': profile.gopSeconds,
+          },
+      ],
     });
   });
 }

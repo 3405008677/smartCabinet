@@ -1,14 +1,25 @@
 package com.example.smart_cabinet
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import com.example.smart_cabinet.kiosk.KioskManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
     private lateinit var kioskManager: KioskManager
+    private var kioskChannel: MethodChannel? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val kioskReadExecutor: ExecutorService =
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "smart-cabinet-kiosk-read").apply { isDaemon = true }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -21,7 +32,13 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
-        runKioskAction("stop stream control server") { kioskManager.stopStreamControlServer() }
+        kioskChannel?.setMethodCallHandler(null)
+        kioskChannel = null
+        mainHandler.removeCallbacksAndMessages(null)
+        kioskReadExecutor.shutdownNow()
+        if (::kioskManager.isInitialized) {
+            kioskManager.release()
+        }
         super.onDestroy()
     }
 
@@ -34,17 +51,23 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(
+        val channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             KIOSK_CHANNEL,
-        ).setMethodCallHandler { call, result ->
+        )
+        kioskChannel = channel
+        channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "enterKioskMode" -> runKioskMethod(result) { kioskManager.enterKioskMode() }
                 "exitKioskMode" -> runKioskMethod(result) { kioskManager.exitKioskMode() }
                 "isKioskModeActive" -> runKioskMethod(result) { kioskManager.isKioskModeActive() }
                 "isDeviceOwner" -> runKioskMethod(result) { kioskManager.isDeviceOwner() }
-                "getDeviceInfo" -> runKioskMethod(result) { kioskManager.getDeviceInfo() }
-                "getHardwareStatus" -> runKioskMethod(result) { kioskManager.getHardwareStatus() }
+                "getDeviceInfo" -> runKioskReadMethod("getDeviceInfo", result) {
+                    kioskManager.getDeviceInfo()
+                }
+                "getHardwareStatus" -> runKioskReadMethod("getHardwareStatus", result) {
+                    kioskManager.getHardwareStatus()
+                }
                 "readOutsideEnvironmentStreamStatus" -> result.success(
                     kioskManager.readOutsideEnvironmentStreamStatus(),
                 )
@@ -107,6 +130,42 @@ class MainActivity : FlutterActivity() {
                     null,
                 )
             }
+    }
+
+    private fun <T> runKioskReadMethod(
+        action: String,
+        result: MethodChannel.Result,
+        block: () -> T,
+    ) {
+        val startedAt = SystemClock.elapsedRealtime()
+        runCatching {
+            kioskReadExecutor.execute {
+                val outcome = runCatching(block)
+                val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+                mainHandler.post {
+                    outcome
+                        .onSuccess { value ->
+                            Log.i(TAG, "Kiosk read completed: $action, ${elapsedMs}ms")
+                            result.success(value)
+                        }
+                        .onFailure { error ->
+                            Log.e(TAG, "Kiosk read failed: $action", error)
+                            result.error(
+                                "kiosk_method_failed",
+                                error.message ?: error::class.java.simpleName,
+                                null,
+                            )
+                        }
+                }
+            }
+        }.onFailure { error ->
+            Log.e(TAG, "Kiosk read dispatch failed: $action", error)
+            result.error(
+                "kiosk_method_failed",
+                error.message ?: error::class.java.simpleName,
+                null,
+            )
+        }
     }
 
     companion object {

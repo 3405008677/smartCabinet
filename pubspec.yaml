@@ -37,6 +37,7 @@ dependencies:
   mqtt_client: ^10.11.1
 
   shared_preferences: ^2.5.5
+  shared_preferences_android: ^2.4.26
 
 dev_dependencies:
   flutter_test:

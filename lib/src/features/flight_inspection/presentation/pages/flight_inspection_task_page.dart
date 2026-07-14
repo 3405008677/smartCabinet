@@ -84,6 +84,15 @@ class _FlightInspectionTaskPageState extends State<FlightInspectionTaskPage> {
     ),
   ];
 
+  /// Changes whenever the user mutates the in-memory fallback tasks.
+  int _taskRevision = 0;
+
+  /// Identifies the newest task request so stale responses can be ignored.
+  int _loadGeneration = 0;
+
+  /// Whether the initial task synchronization is still running.
+  bool _loadingTasks = true;
+
   @override
   void initState() {
     super.initState();
@@ -92,26 +101,47 @@ class _FlightInspectionTaskPageState extends State<FlightInspectionTaskPage> {
 
   /// 加载飞检任务数据。
   Future<void> _loadInspectionTasks() async {
-    final data = await flightInspectionRepository.fetchFlightInspectionData();
-    if (!mounted) {
-      return;
+    final generation = ++_loadGeneration;
+    final revisionAtRequest = _taskRevision;
+    try {
+      final data = await flightInspectionRepository.fetchFlightInspectionData();
+      if (!mounted || generation != _loadGeneration) {
+        return;
+      }
+
+      // Never replace a task that the operator has already started.
+      if (revisionAtRequest != _taskRevision) {
+        setState(() => _loadingTasks = false);
+        return;
+      }
+
+      setState(() {
+        _batchNo = data.batchNo;
+        _tasks
+          ..clear()
+          ..addAll(
+            data.tasks.map((task) {
+              return _InspectionCabinetTask(
+                doorNo: task.doorNo,
+                fileCode: task.fileCode,
+                secretLevel: task.secretLevel,
+                department: task.department,
+                status: _InspectionTaskStatus.waiting,
+              );
+            }),
+          );
+        _activeDoorNo = null;
+        _itemReturned = false;
+        _returnVerified = false;
+        _loadingTasks = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _loadGeneration) {
+        return;
+      }
+      // Keep the local fallback usable while the backend is unavailable.
+      setState(() => _loadingTasks = false);
     }
-    setState(() {
-      _batchNo = data.batchNo;
-      _tasks
-        ..clear()
-        ..addAll(
-          data.tasks.map((task) {
-            return _InspectionCabinetTask(
-              doorNo: task.doorNo,
-              fileCode: task.fileCode,
-              secretLevel: task.secretLevel,
-              department: task.department,
-              status: _InspectionTaskStatus.waiting,
-            );
-          }),
-        );
-    });
   }
 
   /// 当前正在飞检的柜门编号。
@@ -142,9 +172,8 @@ class _FlightInspectionTaskPageState extends State<FlightInspectionTaskPage> {
 
   /// 是否所有柜门均已飞检。
   bool get _allCompleted {
-    return _tasks.every(
-      (task) => task.status == _InspectionTaskStatus.completed,
-    );
+    return _tasks.isNotEmpty &&
+        _tasks.every((task) => task.status == _InspectionTaskStatus.completed);
   }
 
   /// 已完成飞检的柜门数量。
@@ -165,6 +194,7 @@ class _FlightInspectionTaskPageState extends State<FlightInspectionTaskPage> {
       return;
     }
     setState(() {
+      _taskRevision += 1;
       _tasks[taskIndex] = _tasks[taskIndex].copyWith(
         status: _InspectionTaskStatus.inspecting,
       );
@@ -180,6 +210,7 @@ class _FlightInspectionTaskPageState extends State<FlightInspectionTaskPage> {
       return;
     }
     setState(() {
+      _taskRevision += 1;
       _itemReturned = true;
       _returnVerified = false;
     });
@@ -190,7 +221,10 @@ class _FlightInspectionTaskPageState extends State<FlightInspectionTaskPage> {
     if (!_itemReturned || !_hasActiveTask) {
       return;
     }
-    setState(() => _returnVerified = true);
+    setState(() {
+      _taskRevision += 1;
+      _returnVerified = true;
+    });
   }
 
   /// 完成当前柜门飞检并恢复其他柜门可操作。
@@ -204,6 +238,7 @@ class _FlightInspectionTaskPageState extends State<FlightInspectionTaskPage> {
       return;
     }
     setState(() {
+      _taskRevision += 1;
       _tasks[taskIndex] = _tasks[taskIndex].copyWith(
         status: _InspectionTaskStatus.completed,
       );
@@ -218,65 +253,74 @@ class _FlightInspectionTaskPageState extends State<FlightInspectionTaskPage> {
     final activeTask = _activeTask;
     final l10n = context.l10n;
 
-    return TerminalShell(
-      topBarLeading: _InspectionHeader(
-        title: l10n.t('inspectionTaskListTitle', '飞检柜门列表'),
-        onBack: () => Navigator.of(context).pop(),
-      ),
-      topRightBadge: FlowStatusBadge(
-        text: l10n.t('inspectionTaskBadge', '柜门任务 · 飞检'),
-      ),
-      child: CustomPaint(
-        painter: const _InspectionDotGridPainter(),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(34, 28, 34, 28),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _TaskSummaryCard(
-                      batchNo: _batchNo,
-                      completedCount: _completedCount,
-                      totalCount: _tasks.length,
-                      allCompleted: _allCompleted,
-                    ),
-                    const SizedBox(height: 18),
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: _tasks.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 14),
-                        itemBuilder: (context, index) {
-                          final task = _tasks[index];
-                          return _InspectionTaskCard(
-                            task: task,
-                            lockedByOther:
-                                _hasActiveTask &&
-                                task.status != _InspectionTaskStatus.inspecting,
-                            onOpen: () => _openCabinet(task.doorNo),
-                          );
-                        },
+    return PopScope(
+      canPop: !_hasActiveTask,
+      child: TerminalShell(
+        topBarLeading: _InspectionHeader(
+          title: l10n.t('inspectionTaskListTitle', '飞检柜门列表'),
+          onBack: _hasActiveTask ? () {} : () => Navigator.of(context).pop(),
+        ),
+        topRightBadge: FlowStatusBadge(
+          text: l10n.t('inspectionTaskBadge', '柜门任务 · 飞检'),
+        ),
+        child: CustomPaint(
+          painter: const _InspectionDotGridPainter(),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(34, 28, 34, 28),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_loadingTasks) ...[
+                        const LinearProgressIndicator(minHeight: 3),
+                        const SizedBox(height: 8),
+                      ],
+                      _TaskSummaryCard(
+                        batchNo: _batchNo,
+                        completedCount: _completedCount,
+                        totalCount: _tasks.length,
+                        allCompleted: _allCompleted,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 18),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: _tasks.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 14),
+                          itemBuilder: (context, index) {
+                            final task = _tasks[index];
+                            return _InspectionTaskCard(
+                              task: task,
+                              lockedByOther:
+                                  _hasActiveTask &&
+                                  task.status !=
+                                      _InspectionTaskStatus.inspecting,
+                              onOpen: () => _openCabinet(task.doorNo),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 24),
-              Expanded(
-                flex: 2,
-                child: _ActiveInspectionPanel(
-                  activeTask: activeTask,
-                  itemReturned: _itemReturned,
-                  returnVerified: _returnVerified,
-                  allCompleted: _allCompleted,
-                  onMarkReturned: _markItemReturned,
-                  onVerifyReturned: _verifyReturnedItem,
-                  onComplete: _completeActiveTask,
+                const SizedBox(width: 24),
+                Expanded(
+                  flex: 2,
+                  child: _ActiveInspectionPanel(
+                    activeTask: activeTask,
+                    itemReturned: _itemReturned,
+                    returnVerified: _returnVerified,
+                    allCompleted: _allCompleted,
+                    onMarkReturned: _markItemReturned,
+                    onVerifyReturned: _verifyReturnedItem,
+                    onComplete: _completeActiveTask,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

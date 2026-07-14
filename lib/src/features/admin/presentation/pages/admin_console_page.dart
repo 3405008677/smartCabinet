@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -514,9 +516,21 @@ class _AdminCameraPreviewPanel extends StatefulWidget {
       _AdminCameraPreviewPanelState();
 }
 
-class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel> {
+class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
+    with WidgetsBindingObserver {
   /// 当前预览控制器。
   CameraController? _controller;
+
+  /// 正在初始化、尚未发布到界面的预览控制器。
+  CameraController? _initializingController;
+
+  Future<void> _releaseChain = Future<void>.value();
+
+  /// 预览异步请求代次，用于丢弃过期结果。
+  int _previewGeneration = 0;
+
+  /// 当前页面是否处于可使用摄像头的前台状态。
+  bool _lifecycleActive = true;
 
   /// 当前预览状态文案。
   String _message = '正在启动预览...';
@@ -524,17 +538,58 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel> {
   @override
   void initState() {
     super.initState();
-    _initializePreview();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _lifecycleActive =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
+    if (_lifecycleActive) {
+      unawaited(_initializePreview());
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _AdminCameraPreviewPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.camera.id != widget.camera.id && _lifecycleActive) {
+      unawaited(_initializePreview());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final lifecycleActive = state == AppLifecycleState.resumed;
+    if (_lifecycleActive == lifecycleActive) {
+      return;
+    }
+    _lifecycleActive = lifecycleActive;
+    if (lifecycleActive) {
+      unawaited(_initializePreview());
+      return;
+    }
+    unawaited(_releaseControllers(invalidate: true));
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
-    _controller?.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _lifecycleActive = false;
+    unawaited(_releaseControllers(invalidate: true));
     super.dispose();
   }
 
   /// 初始化摄像头实时预览。
   Future<void> _initializePreview() async {
+    final generation = ++_previewGeneration;
+    await _releaseControllers(invalidate: false);
+    if (!_isPreviewRequestCurrent(generation)) {
+      return;
+    }
+    setState(() => _message = '正在启动预览...');
+
+    CameraController? candidate;
     try {
       final controller = CameraController(
         widget.camera.description,
@@ -542,9 +597,15 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel> {
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
+      candidate = controller;
+      _initializingController = controller;
       await controller.initialize();
-      if (!mounted) {
-        await controller.dispose();
+      if (identical(_initializingController, controller)) {
+        _initializingController = null;
+      }
+
+      if (!_isPreviewRequestCurrent(generation)) {
+        await _disposeControllerSerially(controller);
         return;
       }
       setState(() {
@@ -552,10 +613,53 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel> {
         _message = '预览已启动';
       });
     } catch (error) {
-      if (!mounted) {
-        return;
+      if (identical(_initializingController, candidate)) {
+        _initializingController = null;
       }
-      setState(() => _message = '预览启动失败：$error');
+      await _disposeControllerSerially(candidate);
+      if (_isPreviewRequestCurrent(generation)) {
+        setState(() => _message = '预览启动失败：$error');
+      }
+    }
+  }
+
+  bool _isPreviewRequestCurrent(int generation) {
+    return mounted && _lifecycleActive && generation == _previewGeneration;
+  }
+
+  Future<void> _releaseControllers({required bool invalidate}) {
+    if (invalidate) {
+      _previewGeneration++;
+    }
+    final controller = _controller;
+    final initializingController = _initializingController;
+    _controller = null;
+    _initializingController = null;
+    var release = _disposeControllerSerially(controller);
+    if (!identical(initializingController, controller)) {
+      release = _disposeControllerSerially(initializingController);
+    }
+    return release;
+  }
+
+  Future<void> _disposeControllerSerially(CameraController? controller) {
+    if (controller == null) {
+      return _releaseChain;
+    }
+    _releaseChain = _releaseChain.then(
+      (_) => _safeDisposeController(controller),
+    );
+    return _releaseChain;
+  }
+
+  Future<void> _safeDisposeController(CameraController? controller) async {
+    if (controller == null) {
+      return;
+    }
+    try {
+      await controller.dispose();
+    } catch (_) {
+      // The platform may already have released the camera.
     }
   }
 

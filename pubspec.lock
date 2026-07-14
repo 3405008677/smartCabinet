@@ -454,7 +454,7 @@ packages:
     source: hosted
     version: "2.5.5"
   shared_preferences_android:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: shared_preferences_android
       sha256: "93ae5884a9df5d3bb696825bceb3a17590754548b5d740eba51500afc8d088f5"

@@ -29,6 +29,9 @@ class _OpenCabinetDoorPageState extends State<OpenCabinetDoorPage> {
   Timer? _timer;
   int _seconds = _initialSeconds;
 
+  /// Prevents timer and manual actions from navigating more than once.
+  bool _navigationCommitted = false;
+
   @override
   void initState() {
     super.initState();
@@ -38,9 +41,7 @@ class _OpenCabinetDoorPageState extends State<OpenCabinetDoorPage> {
         return;
       }
       if (_seconds <= 1) {
-        Navigator.of(
-          context,
-        ).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
+        _returnHome();
         return;
       }
       setState(() => _seconds -= 1);
@@ -54,6 +55,17 @@ class _OpenCabinetDoorPageState extends State<OpenCabinetDoorPage> {
       return;
     }
     setState(() => _pickupData = data);
+  }
+
+  void _returnHome() {
+    if (!mounted || _navigationCommitted) {
+      return;
+    }
+    _navigationCommitted = true;
+    _timer?.cancel();
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
   }
 
   @override
@@ -131,11 +143,7 @@ class _OpenCabinetDoorPageState extends State<OpenCabinetDoorPage> {
                     width: 144,
                     height: 46,
                     child: ElevatedButton.icon(
-                      onPressed: () =>
-                          Navigator.of(context).pushNamedAndRemoveUntil(
-                            AppRoutes.home,
-                            (route) => false,
-                          ),
+                      onPressed: _returnHome,
                       icon: const Icon(Icons.home_outlined, size: 18),
                       label: Text(l10n.t('pickupReturnHome', '返回首页')),
                       style: ElevatedButton.styleFrom(

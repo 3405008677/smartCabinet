@@ -47,6 +47,7 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            isCrunchPngs = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -65,4 +66,7 @@ flutter {
     source = "../.."
 }
 
-dependencies {}
+dependencies {
+    implementation("androidx.camera:camera-core:1.5.3")
+    implementation("androidx.camera:camera-camera2:1.5.3")
+}

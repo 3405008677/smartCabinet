@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
@@ -59,9 +60,21 @@ class FaceVerificationCard extends StatefulWidget {
   State<FaceVerificationCard> createState() => _FaceVerificationCardState();
 }
 
-class _FaceVerificationCardState extends State<FaceVerificationCard> {
+class _FaceVerificationCardState extends State<FaceVerificationCard>
+    with WidgetsBindingObserver {
   /// 摄像头控制器。
   CameraController? _controller;
+
+  /// 正在初始化、尚未发布到界面的摄像头控制器。
+  CameraController? _initializingController;
+
+  Future<void> _releaseChain = Future<void>.value();
+
+  /// 摄像头异步请求代次，用于丢弃过期结果。
+  int _cameraGeneration = 0;
+
+  /// 当前页面是否处于可使用摄像头的前台状态。
+  bool _lifecycleActive = true;
 
   /// 当前人脸识别状态。
   FaceVerificationStatus _status = FaceVerificationStatus.initializing;
@@ -81,62 +94,102 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
   @override
   void initState() {
     super.initState();
-
-    /// 页面初始化后立即尝试拉起摄像头，减少用户等待时间。
-    _initializeCamera();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _lifecycleActive =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
+    if (_lifecycleActive) {
+      unawaited(_initializeCamera());
+    }
   }
 
   @override
   void didUpdateWidget(covariant FaceVerificationCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    /// 当外部直接把 [verified] 置为 true 时，同步刷新内部状态文案。
     if (widget.verified && !oldWidget.verified) {
-      setState(() {
-        _status = FaceVerificationStatus.success;
-        _message = '人脸识别通过，照片已提交后端校验';
-      });
+      unawaited(_releaseControllers(invalidate: true));
+      _status = FaceVerificationStatus.success;
+      _message = '人脸识别通过，照片已提交后端校验';
+      _recoveryAdvice = null;
+    } else if (!widget.verified && oldWidget.verified && _lifecycleActive) {
+      unawaited(_initializeCamera());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final lifecycleActive = state == AppLifecycleState.resumed;
+    if (_lifecycleActive == lifecycleActive) {
+      return;
+    }
+    _lifecycleActive = lifecycleActive;
+    if (lifecycleActive) {
+      if (!widget.verified) {
+        unawaited(_initializeCamera());
+      }
+      return;
+    }
+    unawaited(_releaseControllers(invalidate: true));
+    if (mounted) {
+      setState(() {});
     }
   }
 
   @override
   void dispose() {
-    _controller?.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _lifecycleActive = false;
+    unawaited(_releaseControllers(invalidate: true));
+    final capturedImagePath = _capturedImagePath;
+    _capturedImagePath = null;
+    unawaited(_cleanupCapturedImage(capturedImagePath));
     super.dispose();
   }
 
   /// 初始化摄像头。
-  ///
-  /// 优先使用前置摄像头；若设备没有前置摄像头，则退回到列表中的第一个可用摄像头。
   Future<void> _initializeCamera() async {
-    await _disposeController();
-    if (!mounted) {
+    final generation = ++_cameraGeneration;
+    await _releaseControllers(invalidate: false);
+    if (!_isCameraRequestCurrent(generation) || widget.verified) {
       return;
     }
+
+    final previousImagePath = _capturedImagePath;
     setState(() {
+      _capturedImagePath = null;
       _status = FaceVerificationStatus.initializing;
       _message = '正在启动摄像头...';
+      _recoveryAdvice = null;
     });
+    unawaited(_cleanupCapturedImage(previousImagePath));
 
+    CameraController? candidate;
     try {
       final selectedCamera = await _cameraService
           .resolveFaceRecognitionCamera();
+      if (!_isCameraRequestCurrent(generation) || widget.verified) {
+        return;
+      }
       if (selectedCamera == null) {
         _markCameraFailure('未检测到可用摄像头');
         return;
       }
 
-      /// 当前使用中等分辨率以平衡预览性能和拍照清晰度。
       final controller = CameraController(
         selectedCamera,
         ResolutionPreset.medium,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
-
+      candidate = controller;
+      _initializingController = controller;
       await controller.initialize();
-      if (!mounted) {
-        await controller.dispose();
+      if (identical(_initializingController, controller)) {
+        _initializingController = null;
+      }
+
+      if (!_isCameraRequestCurrent(generation) || widget.verified) {
+        await _disposeControllerSerially(controller);
         return;
       }
       setState(() {
@@ -146,14 +199,18 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
         _recoveryAdvice = null;
       });
     } on CameraException catch (error) {
-      /// 根据平台抛出的摄像头错误码归类为统一的硬件失败类型。
+      if (identical(_initializingController, candidate)) {
+        _initializingController = null;
+      }
+      await _disposeControllerSerially(candidate);
+      if (!_isCameraRequestCurrent(generation)) {
+        return;
+      }
       final failure = switch (error.code) {
         'CameraAccessDenied' ||
         'CameraAccessDeniedWithoutPrompt' => HardwareFailure.permissionDenied,
         _ => HardwareFailure.unavailable,
       };
-
-      /// 面向用户展示的错误文案。
       final message = switch (error.code) {
         'CameraAccessDenied' => '摄像头权限被拒绝',
         'CameraAccessDeniedWithoutPrompt' => '摄像头权限被永久拒绝，请到系统设置开启',
@@ -161,16 +218,72 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
       };
       _markCameraFailure(message, failure: failure);
     } catch (error) {
-      _markCameraFailure('摄像头启动失败：$error');
+      if (identical(_initializingController, candidate)) {
+        _initializingController = null;
+      }
+      await _disposeControllerSerially(candidate);
+      if (_isCameraRequestCurrent(generation)) {
+        _markCameraFailure('摄像头启动失败：$error');
+      }
     }
   }
 
-  /// 释放当前摄像头控制器。
-  Future<void> _disposeController() async {
+  bool _isCameraRequestCurrent(int generation) {
+    return mounted && _lifecycleActive && generation == _cameraGeneration;
+  }
+
+  Future<void> _releaseControllers({required bool invalidate}) {
+    if (invalidate) {
+      _cameraGeneration++;
+    }
     final controller = _controller;
+    final initializingController = _initializingController;
     _controller = null;
-    if (controller != null) {
+    _initializingController = null;
+    var release = _disposeControllerSerially(controller);
+    if (!identical(initializingController, controller)) {
+      release = _disposeControllerSerially(initializingController);
+    }
+    return release;
+  }
+
+  Future<void> _disposeControllerSerially(CameraController? controller) {
+    if (controller == null) {
+      return _releaseChain;
+    }
+    _releaseChain = _releaseChain.then(
+      (_) => _safeDisposeController(controller),
+    );
+    return _releaseChain;
+  }
+
+  Future<void> _safeDisposeController(CameraController? controller) async {
+    if (controller == null) {
+      return;
+    }
+    try {
       await controller.dispose();
+    } catch (_) {
+      // The platform may already have released the camera.
+    }
+  }
+
+  Future<void> _cleanupCapturedImage(String? path) async {
+    if (path == null || path.isEmpty) {
+      return;
+    }
+    final file = File(path);
+    try {
+      await FileImage(file).evict();
+    } catch (_) {
+      // Cache eviction is best effort.
+    }
+    try {
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Temporary photo cleanup must not break the verification flow.
     }
   }
 
@@ -201,37 +314,54 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
   /// 当前实现以 UI 流程演示为主：拍照成功后延迟一小段时间再标记为通过，
   /// 方便后续替换成真实后端人脸比对接口。
   Future<void> _captureAndVerify() async {
-    if (widget.verified || _status == FaceVerificationStatus.verifying) {
+    if (!_lifecycleActive ||
+        widget.verified ||
+        _status == FaceVerificationStatus.verifying) {
       return;
     }
 
+    final generation = _cameraGeneration;
+    String? pendingImagePath;
     setState(() {
       _status = FaceVerificationStatus.verifying;
       _message = '正在拍照并提交后端校验...';
     });
 
     try {
-      /// 当前摄像头控制器实例。
       final controller = _controller;
       if (controller != null && controller.value.isInitialized) {
         final image = await controller.takePicture();
-        if (!mounted) {
+        pendingImagePath = image.path;
+        if (!_isCameraRequestCurrent(generation)) {
+          unawaited(_cleanupCapturedImage(pendingImagePath));
           return;
         }
-        await _disposeController();
-        if (!mounted) {
+
+        if (identical(_controller, controller)) {
+          _controller = null;
+        }
+        await _disposeControllerSerially(controller);
+        if (!_isCameraRequestCurrent(generation)) {
+          unawaited(_cleanupCapturedImage(pendingImagePath));
           return;
         }
+
+        final previousImagePath = _capturedImagePath;
         setState(() => _capturedImagePath = image.path);
+        pendingImagePath = null;
+        unawaited(_cleanupCapturedImage(previousImagePath));
       } else if (widget.allowFallbackWithoutCamera) {
         await Future<void>.delayed(const Duration(milliseconds: 200));
+        if (!_isCameraRequestCurrent(generation)) {
+          return;
+        }
       } else {
         await _initializeCamera();
         return;
       }
 
       await Future<void>.delayed(const Duration(milliseconds: 300));
-      if (!mounted) {
+      if (!_isCameraRequestCurrent(generation) || widget.verified) {
         return;
       }
       setState(() {
@@ -240,9 +370,11 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
       });
       widget.onVerified();
     } catch (error) {
-      if (!mounted) {
+      unawaited(_cleanupCapturedImage(pendingImagePath));
+      if (!_isCameraRequestCurrent(generation)) {
         return;
       }
+      final capturedImagePath = _capturedImagePath;
       setState(() {
         _capturedImagePath = null;
         _status = FaceVerificationStatus.failure;
@@ -252,6 +384,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
           failure: HardwareFailure.unavailable,
         );
       });
+      unawaited(_cleanupCapturedImage(capturedImagePath));
     }
   }
 
@@ -259,7 +392,9 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
   ///
   /// 只有在未通过、未校验中，且摄像头可用或允许 fallback 时才允许点击。
   bool get _canConfirm {
-    if (widget.verified || _status == FaceVerificationStatus.verifying) {
+    if (!_lifecycleActive ||
+        widget.verified ||
+        _status == FaceVerificationStatus.verifying) {
       return false;
     }
     return _controller?.value.isInitialized == true ||
@@ -286,15 +421,12 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
       '摄像头已启动，请对准面部后点击确认',
     );
 
-    if (_message == '正在启动摄像头...') {
-      _message = cameraStartingText;
-    }
-    if (_message == '摄像头已启动，请对准面部后点击确认') {
-      _message = cameraReadyText;
-    }
-    if (_message == '人脸识别通过，照片已提交后端校验') {
-      _message = verifiedSubmittedText;
-    }
+    final displayMessage = switch (_status) {
+      FaceVerificationStatus.initializing => cameraStartingText,
+      FaceVerificationStatus.ready => cameraReadyText,
+      FaceVerificationStatus.success => verifiedSubmittedText,
+      _ => _message,
+    };
 
     /// 当前组件实际使用的强调色。
     final effectiveAccentColor =
@@ -428,7 +560,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
                       controller: _controller,
                       capturedImagePath: _capturedImagePath,
                       color: activeColor,
-                      message: _message,
+                      message: displayMessage,
                     ),
                     Container(
                       width: circleSize,
@@ -471,7 +603,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard> {
                         child: Text(
                           widget.verified
                               ? l10n.t('sharedFaceVerifiedShort', '人脸识别通过')
-                              : _message,
+                              : displayMessage,
                           textAlign: TextAlign.center,
                           maxLines: 2,
                           softWrap: true,

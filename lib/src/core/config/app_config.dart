@@ -25,8 +25,8 @@ class AppConfig {
       name: '720p',
       width: 1280,
       height: 720,
-      fps: 20,
-      bitrate: 3000 * 1000,
+      fps: 15,
+      bitrate: 2000 * 1000,
       gopSeconds: 1,
     ),
     StreamProfileConfig(

@@ -28,6 +28,31 @@ void main() {
     expect(selectedCamera?.name, 'cameraId_0');
   });
 
+  test(
+    'configured raw Camera2 id takes precedence over lens fallback',
+    () async {
+      CabinetCameraService.debugUseCameraData(
+        cameras: const [
+          CameraDescription(
+            name: '1',
+            lensDirection: CameraLensDirection.front,
+            sensorOrientation: 90,
+          ),
+          CameraDescription(
+            name: '0',
+            lensDirection: CameraLensDirection.back,
+            sensorOrientation: 90,
+          ),
+        ],
+      );
+
+      final selectedCamera = await const CabinetCameraService()
+          .resolveFaceRecognitionCamera();
+
+      expect(selectedCamera?.name, '0');
+    },
+  );
+
   test('face recognition falls back to front camera without binding', () async {
     CabinetCameraService.debugUseCameraData(
       cameras: const [

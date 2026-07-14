@@ -25,7 +25,7 @@ void main() {
     expect(state.info, <String, Object?>{});
     expect(state.logging, <String, Object?>{
       'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
-      'uploadEnabled': true,
+      'uploadEnabled': false,
     });
     expect(state.video, <String, Object?>{'streamUrl': ''});
     expect(await store.snapshot(), <String, Object?>{
@@ -36,7 +36,7 @@ void main() {
       'deviceInfo': <String, Object?>{},
       'logging': <String, Object?>{
         'errorReportUrl': 'http://192.168.1.100:3000/api/logs/error',
-        'uploadEnabled': true,
+        'uploadEnabled': false,
       },
       'video': <String, Object?>{'streamUrl': ''},
     });

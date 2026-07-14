@@ -443,12 +443,19 @@ class CabinetCameraService {
     if (cameraId.isEmpty) {
       return null;
     }
+    final normalizedCameraId = _normalizeCameraId(cameraId);
     for (final camera in cameras) {
-      if (camera.id == cameraId) {
+      if (_normalizeCameraId(camera.id) == normalizedCameraId) {
         return camera;
       }
     }
     return null;
+  }
+
+  String _normalizeCameraId(String cameraId) {
+    return cameraId.startsWith('cameraId_')
+        ? cameraId.replaceFirst('cameraId_', '')
+        : cameraId;
   }
 
   /// 将原始摄像头信息转换成管理员可读的名称。

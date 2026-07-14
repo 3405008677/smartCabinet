@@ -20,69 +20,85 @@ import 'package:smart_cabinet/src/app/startup/startup_tasks.dart';
 /// - 接管平台层未捕获异常；
 /// - 创建 Riverpod 的 [ProviderScope]；
 /// - 最后调用 [runApp] 显示根组件 [SmartCabinetApp]。
-Future<void> bootstrap() async {
+Future<void> bootstrap() {
+  final completer = Completer<void>();
+
   /// [runZonedGuarded] 可以捕获当前 Zone 内未被 try/catch 处理的异步异常。
   ///
   /// 简单理解：它是应用最外层的“安全网”，防止异步异常悄悄丢失。
-  runZonedGuarded(
+  runZonedGuarded<Future<void>>(
     () async {
-      /// 确保 Flutter 框架初始化完成。
-      ///
-      /// 如果启动阶段需要使用插件、平台通道或其它依赖 Flutter 引擎的能力，
-      /// 通常都要先调用这一句。
-      WidgetsFlutterBinding.ensureInitialized();
-      RuntimeHealthMonitor.instance.start();
-
-      /// 捕获 Flutter 框架构建、布局、绘制过程中的错误。
-      FlutterError.onError = (FlutterErrorDetails details) {
-        AppLogger.error(
-          'Flutter framework error',
-          details.exception,
-          details.stack,
-        );
-
-        /// 保留 Flutter 默认的错误展示行为，方便调试时在控制台看到红色错误信息。
-        FlutterError.presentError(details);
-      };
-
-      /// 捕获平台层或引擎层抛出的未处理错误。
-      ///
-      /// 返回 true 表示这个错误已经被应用处理过了，Flutter 不需要继续抛出。
-      PlatformDispatcher.instance.onError =
-          (Object error, StackTrace stackTrace) {
-            AppLogger.error('Uncaught platform error', error, stackTrace);
-            return true;
-          };
-
-      final providerContainer = ProviderContainer();
-
       try {
-        await StartupManager(
-          tasks: [
-            CacheLocalStoreStartupTask(providerContainer),
-            const LoadCamerasStartupTask(),
-            const ConnectMqttStartupTask(),
-          ],
-        ).start();
-      } on StartupFailedException catch (error, stackTrace) {
-        AppLogger.error('Application startup failed', error, stackTrace);
-        runApp(StartupFailureApp(result: error.result));
-        return;
+        await retryBootstrap();
+      } finally {
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
       }
-
-      /// 启动应用界面。
-      ///
-      /// [ProviderScope] 是 Riverpod 的根容器，后续所有 Provider 都需要在它下面使用。
-      runApp(
-        UncontrolledProviderScope(
-          container: providerContainer,
-          child: const SmartCabinetApp(),
-        ),
-      );
     },
     (Object error, StackTrace stackTrace) {
       /// 捕获 [runZonedGuarded] 保护范围内遗漏的异步异常。
       AppLogger.error('Uncaught zone error', error, stackTrace);
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
     },
   );
+  return completer.future;
+}
+
+/// Re-runs startup work inside the error Zone installed by [bootstrap].
+///
+/// The failure UI must call this function instead of nesting another guarded
+/// Zone, because Flutter requires binding initialization and [runApp] to use
+/// the same Zone.
+Future<void> retryBootstrap() => _bootstrapInCurrentZone();
+
+Future<void> _bootstrapInCurrentZone() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  RuntimeHealthMonitor.instance.start();
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    AppLogger.error(
+      'Flutter framework error',
+      details.exception,
+      details.stack,
+    );
+    FlutterError.presentError(details);
+  };
+
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stackTrace) {
+    AppLogger.error('Uncaught platform error', error, stackTrace);
+    return true;
+  };
+
+  final providerContainer = ProviderContainer();
+
+  try {
+    await StartupManager(tasks: [const LoadCamerasStartupTask()]).start();
+  } on StartupFailedException catch (error, stackTrace) {
+    AppLogger.error('Application startup failed', error, stackTrace);
+    providerContainer.dispose();
+    runApp(StartupFailureApp(result: error.result));
+    return;
+  }
+
+  runApp(
+    UncontrolledProviderScope(
+      container: providerContainer,
+      child: const SmartCabinetApp(),
+    ),
+  );
+
+  // Local cache refresh and MQTT are optional. Let the first frame render
+  // before doing disk/network work so a slow device or unavailable broker
+  // cannot hold the kiosk on its launch screen.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(
+      StartupManager(
+        tasks: [CacheLocalStoreStartupTask(providerContainer)],
+      ).start(),
+    );
+    unawaited(StartupManager(tasks: const [ConnectMqttStartupTask()]).start());
+  });
 }

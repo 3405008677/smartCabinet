@@ -209,6 +209,7 @@ bool load_rkmpp_locked() {
       load_symbol(handle, "mpp_packet_get_pos", &rkmpp_api.mpp_packet_get_pos) &&
       load_symbol(handle, "mpp_packet_get_length", &rkmpp_api.mpp_packet_get_length);
   if (!loaded) {
+    dlclose(handle);
     rkmpp_api = RkMppApi();
     return false;
   }

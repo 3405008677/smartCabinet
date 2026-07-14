@@ -17,6 +17,9 @@ import android.util.Range
 import android.view.Surface
 import androidx.core.app.ActivityCompat
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 class DualMediaCodecH265Stream(
     private val context: Context,
@@ -34,6 +37,8 @@ class DualMediaCodecH265Stream(
     )
 
     private class EncoderLane(val request: StreamRequest) {
+        val encoderLock = ReentrantLock()
+        @Volatile var encoderDetached = false
         var encoderHandle = 0L
         var imageReader: ImageReader? = null
         var rtspPublisher: RtspTcpH265Publisher? = null
@@ -51,6 +56,7 @@ class DualMediaCodecH265Stream(
     private var lanes = emptyList<EncoderLane>()
     private val streaming = AtomicBoolean(false)
     private val stopping = AtomicBoolean(false)
+    private val streamGeneration = AtomicLong(0L)
     var currentCameraId: String? = null
         private set
 
@@ -69,17 +75,23 @@ class DualMediaCodecH265Stream(
         }
 
         return runCatching {
+            val generation = streamGeneration.incrementAndGet()
             stopping.set(false)
             currentCameraId = cameraId
             statusListener("正在初始化 RKMPP H265：profiles=${requests.joinToString(",") { request -> request.profile }}，${bridge.rkMppStatus()}")
             if (!bridge.initialize(context)) {
                 statusListener("RKMPP 依赖库初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
+                currentCameraId = null
                 return false
             }
             startWorkerThread()
-            lanes = requests.map { request -> createEncoderLane(request) }
-            openCamera(cameraId)
+            lanes = emptyList()
+            requests.forEach { request ->
+                lanes = lanes + createEncoderLane(request, generation)
+            }
+            val activeLanes = lanes
             streaming.set(true)
+            openCamera(cameraId, generation, activeLanes)
             true
         }.getOrElse { error ->
             Log.e(TAG, "RKMPP H265 stream start failed", error)
@@ -93,152 +105,251 @@ class DualMediaCodecH265Stream(
         if (!stopping.compareAndSet(false, true) && !streaming.get()) {
             return
         }
+        streamGeneration.incrementAndGet()
         streaming.set(false)
         currentCameraId = null
         runCatching { captureSession?.close() }
         captureSession = null
         runCatching { cameraDevice?.close() }
         cameraDevice = null
-        lanes.forEach { lane ->
+        val cleanupHandler = workerHandler
+        val lanesToDestroy = lanes
+        lanes = emptyList()
+        lanesToDestroy.forEach { lane ->
+            lane.encoderDetached = true
+            runCatching { lane.imageReader?.setOnImageAvailableListener(null, null) }
             runCatching { lane.imageReader?.close() }
             lane.imageReader = null
             runCatching { lane.rtspPublisher?.stop() }
             lane.rtspPublisher = null
-            bridge.destroyRkMppH265Encoder(lane.encoderHandle)
-            lane.encoderHandle = 0L
+            scheduleEncoderDestroy(lane, cleanupHandler)
         }
-        lanes = emptyList()
         stopWorkerThread()
         statusListener("RKMPP H265 已停止")
     }
 
     fun isStreaming(): Boolean = streaming.get()
 
-    private fun createEncoderLane(request: StreamRequest): EncoderLane {
-        val handle = bridge.createRkMppH265Encoder(
-            request.width,
-            request.height,
-            request.fps,
-            request.bitrate,
-            request.iframeInterval,
-        )
-        if (handle == 0L) {
-            error("${request.profile} RKMPP H265 初始化失败：${bridge.lastError().ifBlank { bridge.rkMppStatus() }}")
-        }
+    private fun createEncoderLane(request: StreamRequest, generation: Long): EncoderLane {
         val lane = EncoderLane(request)
-        lane.encoderHandle = handle
-        lane.imageReader = ImageReader.newInstance(request.width, request.height, ImageFormat.YUV_420_888, 2).also { reader ->
-            reader.setOnImageAvailableListener({ availableReader -> handleImageAvailable(lane, availableReader) }, workerHandler)
+        try {
+            lane.encoderHandle = bridge.createRkMppH265Encoder(
+                request.width,
+                request.height,
+                request.fps,
+                request.bitrate,
+                request.iframeInterval,
+            )
+            if (lane.encoderHandle == 0L) {
+                error("${request.profile} RKMPP H265 初始化失败：${bridge.lastError().ifBlank { bridge.rkMppStatus() }}")
+            }
+            lane.imageReader = ImageReader.newInstance(
+                request.width,
+                request.height,
+                ImageFormat.YUV_420_888,
+                2,
+            ).also { reader ->
+                reader.setOnImageAvailableListener(
+                    { availableReader -> handleImageAvailable(lane, availableReader, generation) },
+                    workerHandler,
+                )
+            }
+        } catch (error: Throwable) {
+            runCatching { lane.imageReader?.setOnImageAvailableListener(null, null) }
+            runCatching { lane.imageReader?.close() }
+            lane.imageReader = null
+            lane.encoderDetached = true
+            scheduleEncoderDestroy(lane, workerHandler)
+            throw error
         }
         statusListener("${request.profile} RKMPP H265 编码器已启动：${request.width}x${request.height}@${request.fps}")
         return lane
     }
 
-    private fun openCamera(cameraId: String) {
+
+    private fun openCamera(cameraId: String, generation: Long, activeLanes: List<EncoderLane>) {
         val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         cameraManager.openCamera(
             cameraId,
             object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
+                    if (!isGenerationActive(generation)) {
+                        camera.close()
+                        return
+                    }
                     runCatching {
                         cameraDevice = camera
-                        createCaptureSession(camera)
+                        if (!isGenerationActive(generation)) {
+                            if (cameraDevice === camera) {
+                                cameraDevice = null
+                            }
+                            camera.close()
+                            return
+                        }
+                        createCaptureSession(camera, generation, activeLanes)
                     }.onFailure { error ->
-                        stopAfterRuntimeFailure("RKMPP H265 摄像头启动失败：${error.message ?: error::class.java.simpleName}", error)
+                        if (isGenerationActive(generation)) {
+                            stopAfterRuntimeFailure("RKMPP H265 摄像头启动失败：${error.message ?: error::class.java.simpleName}", error)
+                        } else {
+                            camera.close()
+                        }
                     }
                 }
 
                 override fun onDisconnected(camera: CameraDevice) {
-                    cameraDevice = camera
-                    stopAfterRuntimeFailure("RKMPP H265 摄像头断开")
+                    camera.close()
+                    if (cameraDevice === camera) {
+                        cameraDevice = null
+                    }
+                    if (isGenerationActive(generation)) {
+                        stopAfterRuntimeFailure("RKMPP H265 摄像头断开")
+                    }
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
-                    cameraDevice = camera
-                    stopAfterRuntimeFailure("RKMPP H265 摄像头错误：$error")
+                    camera.close()
+                    if (cameraDevice === camera) {
+                        cameraDevice = null
+                    }
+                    if (isGenerationActive(generation)) {
+                        stopAfterRuntimeFailure("RKMPP H265 摄像头错误：$error")
+                    }
                 }
             },
             workerHandler,
         )
-        statusListener("RKMPP H265 摄像头打开中")
+        if (isGenerationActive(generation)) {
+            statusListener("RKMPP H265 摄像头打开中")
+        }
     }
 
-    private fun createCaptureSession(camera: CameraDevice) {
-        val targetSurfaces = lanes.mapNotNull { lane -> lane.imageReader?.surface }
+
+    private fun createCaptureSession(camera: CameraDevice, generation: Long, activeLanes: List<EncoderLane>) {
+        val targetSurfaces = activeLanes.mapNotNull { lane -> lane.imageReader?.surface }
         camera.createCaptureSession(
             targetSurfaces,
             object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(session: CameraCaptureSession) {
+                    if (!isGenerationActive(generation)) {
+                        session.close()
+                        return
+                    }
                     runCatching {
                         captureSession = session
-                        val maxFps = lanes.maxOf { lane -> lane.request.fps }.coerceAtLeast(1)
+                        if (!isGenerationActive(generation)) {
+                            if (captureSession === session) {
+                                captureSession = null
+                            }
+                            session.close()
+                            return
+                        }
+                        val maxFps = activeLanes.maxOf { lane -> lane.request.fps }.coerceAtLeast(1)
                         val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             targetSurfaces.forEach(::addTarget)
                             set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
                             set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(maxFps, maxFps))
                         }
                         session.setRepeatingRequest(request.build(), null, workerHandler)
-                        statusListener("RKMPP H265 摄像头会话已启动：profiles=${lanes.joinToString(",") { lane -> lane.request.profile }}")
+                        if (isGenerationActive(generation)) {
+                            statusListener("RKMPP H265 摄像头会话已启动：profiles=${activeLanes.joinToString(",") { lane -> lane.request.profile }}")
+                        }
                     }.onFailure { error ->
-                        stopAfterRuntimeFailure("RKMPP H265 摄像头会话启动失败：${error.message ?: error::class.java.simpleName}", error)
+                        session.close()
+                        if (isGenerationActive(generation)) {
+                            stopAfterRuntimeFailure("RKMPP H265 摄像头会话启动失败：${error.message ?: error::class.java.simpleName}", error)
+                        }
                     }
                 }
 
                 override fun onConfigureFailed(session: CameraCaptureSession) {
-                    stopAfterRuntimeFailure("RKMPP H265 摄像头会话配置失败")
+                    session.close()
+                    if (isGenerationActive(generation)) {
+                        stopAfterRuntimeFailure("RKMPP H265 摄像头会话配置失败")
+                    }
                 }
             },
             workerHandler,
         )
     }
 
-    private fun handleImageAvailable(lane: EncoderLane, availableReader: ImageReader) {
+
+    private fun handleImageAvailable(lane: EncoderLane, availableReader: ImageReader, generation: Long) {
         runCatching {
             val image = availableReader.acquireLatestImage() ?: return
             image.use { currentImage ->
-                if (!streaming.get() || !shouldAcceptImage(lane, currentImage.timestamp)) {
+                if (!isGenerationActive(generation) || !shouldAcceptImage(lane, currentImage.timestamp)) {
                     return@use
                 }
                 val encoded = currentImage.encodeWithNative(lane, currentImage.timestamp / 1000)
+                if (!isGenerationActive(generation)) {
+                    return@use
+                }
                 if (encoded == null || encoded.isEmpty()) {
                     statusListener("${lane.request.profile} RKMPP H265 转换编码失败：${bridge.lastError().ifBlank { "无输出帧" }}")
                     return@use
                 }
                 lane.encodedFrameCount += 1
-                if (!ensureRtspPublisherStarted(lane, encoded)) {
+                if (!ensureRtspPublisherStarted(lane, encoded, generation)) {
+                    if (!isGenerationActive(generation)) {
+                        return@use
+                    }
                     lane.waitingParameterSetCount += 1
-                    if (lane.waitingParameterSetCount <= 3 || lane.waitingParameterSetCount % 30 == 0) {
+                    if (shouldReportProgress(lane.waitingParameterSetCount)) {
                         statusListener("${lane.request.profile} RKMPP H265 等待 VPS/SPS/PPS：frames=${lane.waitingParameterSetCount} bytes=${encoded.size}")
                     }
                     return@use
                 }
-                lane.rtspPublisher?.sendFrame(encoded, currentImage.timestamp / 1000, lane.encodedFrameCount == 1)
+                if (!isGenerationActive(generation)) {
+                    return@use
+                }
+                lane.rtspPublisher?.sendFrame(encoded, currentImage.timestamp / 1000)
                 lane.pushedFrameCount += 1
                 lane.pushedByteCount += encoded.size.toLong()
-                if (lane.pushedFrameCount <= 3 || lane.pushedFrameCount % 30 == 0) {
+                if (shouldReportProgress(lane.pushedFrameCount)) {
                     statusListener("${lane.request.profile} RKMPP H265 推流中：encoded=${lane.encodedFrameCount} pushed=${lane.pushedFrameCount} bytes=${lane.pushedByteCount} last=${encoded.size}")
                 }
             }
         }.onFailure { error ->
-            stopAfterRuntimeFailure("${lane.request.profile} RKMPP H265 推流失败：${error.message ?: error::class.java.simpleName}", error)
+            if (isGenerationActive(generation)) {
+                stopAfterRuntimeFailure("${lane.request.profile} RKMPP H265 推流失败：${error.message ?: error::class.java.simpleName}", error)
+            }
         }
     }
 
-    private fun ensureRtspPublisherStarted(lane: EncoderLane, codecConfig: ByteArray): Boolean {
-        val publisher = lane.rtspPublisher
-        if (publisher != null) {
-            return true
+
+    private fun ensureRtspPublisherStarted(
+        lane: EncoderLane,
+        codecConfig: ByteArray,
+        generation: Long,
+    ): Boolean {
+        lane.rtspPublisher?.let { return true }
+        if (!isGenerationActive(generation)) {
+            return false
         }
-        val nextPublisher = RtspTcpH265Publisher(statusListener)
+        val nextPublisher = RtspTcpH265Publisher { status ->
+            if (isGenerationActive(generation)) {
+                statusListener(status)
+            }
+        }
         if (!nextPublisher.canStart(codecConfig)) {
             return false
         }
         nextPublisher.start(lane.request.url, codecConfig)
+        if (!isGenerationActive(generation)) {
+            nextPublisher.stop()
+            return false
+        }
         lane.rtspPublisher = nextPublisher
+        if (!isGenerationActive(generation)) {
+            lane.rtspPublisher = null
+            nextPublisher.stop()
+            return false
+        }
         lane.waitingParameterSetCount = 0
         statusListener("${lane.request.profile} RKMPP H265 RTSP 已启动：${lane.request.url}")
         return true
     }
+
 
     private fun shouldAcceptImage(lane: EncoderLane, timestampNs: Long): Boolean {
         val minFrameIntervalNs = 1_000_000_000L / lane.request.fps.coerceAtLeast(1)
@@ -254,21 +365,45 @@ class DualMediaCodecH265Stream(
         val yPlane = planes[0]
         val uPlane = planes[1]
         val vPlane = planes[2]
-        return bridge.encodeRkMppH265ImageWithHandle(
-            handle = lane.encoderHandle,
-            yBuffer = yPlane.buffer,
-            uBuffer = uPlane.buffer,
-            vBuffer = vPlane.buffer,
-            width = width,
-            height = height,
-            yRowStride = yPlane.rowStride,
-            yPixelStride = yPlane.pixelStride,
-            uRowStride = uPlane.rowStride,
-            uPixelStride = uPlane.pixelStride,
-            vRowStride = vPlane.rowStride,
-            vPixelStride = vPlane.pixelStride,
-            presentationTimeUs = presentationTimeUs,
-        )
+        return lane.encoderLock.withLock {
+            if (lane.encoderDetached || lane.encoderHandle == 0L) {
+                return@withLock null
+            }
+            bridge.encodeRkMppH265ImageWithHandle(
+                handle = lane.encoderHandle,
+                yBuffer = yPlane.buffer,
+                uBuffer = uPlane.buffer,
+                vBuffer = vPlane.buffer,
+                width = width,
+                height = height,
+                yRowStride = yPlane.rowStride,
+                yPixelStride = yPlane.pixelStride,
+                uRowStride = uPlane.rowStride,
+                uPixelStride = uPlane.pixelStride,
+                vRowStride = vPlane.rowStride,
+                vPixelStride = vPlane.pixelStride,
+                presentationTimeUs = presentationTimeUs,
+            )
+        }
+    }
+
+    private fun scheduleEncoderDestroy(lane: EncoderLane, cleanupHandler: Handler?) {
+        val cleanup = Runnable {
+            lane.encoderLock.withLock {
+                val handle = lane.encoderHandle
+                lane.encoderHandle = 0L
+                if (handle != 0L) {
+                    bridge.destroyRkMppH265Encoder(handle)
+                }
+            }
+        }
+        if (cleanupHandler?.post(cleanup) == true) {
+            return
+        }
+        Thread(cleanup, "SmartCabinetRkMppEncoderCleanup").apply {
+            isDaemon = true
+            start()
+        }
     }
 
     private fun startWorkerThread() {
@@ -292,6 +427,7 @@ class DualMediaCodecH265Stream(
         if (!streaming.getAndSet(false)) {
             return
         }
+        streamGeneration.incrementAndGet()
         statusListener(status)
         if (error != null) {
             Log.e(TAG, status, error)
@@ -302,6 +438,14 @@ class DualMediaCodecH265Stream(
             name = "SmartCabinetDualRkMppSafeStop"
             start()
         }
+    }
+
+    private fun isGenerationActive(generation: Long): Boolean {
+        return streaming.get() && streamGeneration.get() == generation
+    }
+
+    private fun shouldReportProgress(frameCount: Int): Boolean {
+        return frameCount <= 3 || frameCount % 300 == 0
     }
 
     companion object {

@@ -5,6 +5,19 @@ import 'package:flutter/material.dart';
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/features/home/data/repositories/home_repository_impl.dart';
 
+/// Returns the delay to the next wall-clock minute boundary.
+@visibleForTesting
+Duration terminalClockDelayUntilNextMinute(DateTime now) {
+  final nextMinute = DateTime(
+    now.year,
+    now.month,
+    now.day,
+    now.hour,
+    now.minute + 1,
+  );
+  return nextMinute.difference(now);
+}
+
 /// 智能柜终端的全局页面外壳。
 ///
 /// 任何业务页面都放在这个外壳中显示，这样顶部设备信息、当前时间、
@@ -40,25 +53,13 @@ class TerminalShell extends StatefulWidget {
 }
 
 class _TerminalShellState extends State<TerminalShell> {
-  /// 当前时间，用于顶部时间显示。
-  late DateTime _now;
-
   /// 当前柜体编号。
   String _cabinetCode = 'CAB-A01';
-
-  /// 每秒刷新一次时间的定时器。
-  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _now = DateTime.now();
     _loadHomeData();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() => _now = DateTime.now());
-      }
-    });
   }
 
   /// 加载顶部壳层展示数据。
@@ -68,12 +69,6 @@ class _TerminalShellState extends State<TerminalShell> {
       return;
     }
     setState(() => _cabinetCode = data.cabinetCode);
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -102,7 +97,7 @@ class _TerminalShellState extends State<TerminalShell> {
               clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
-                  _GlobalHeader(now: _now, cabinetCode: _cabinetCode),
+                  _GlobalHeader(cabinetCode: _cabinetCode),
                   if (widget.topBarLeading != null ||
                       widget.topRightBadge != null)
                     _SubHeader(
@@ -123,9 +118,7 @@ class _TerminalShellState extends State<TerminalShell> {
 
 /// 顶部全局信息栏。
 class _GlobalHeader extends StatelessWidget {
-  const _GlobalHeader({required this.now, required this.cabinetCode});
-
-  final DateTime now;
+  const _GlobalHeader({required this.cabinetCode});
 
   /// 当前柜体编号。
   final String cabinetCode;
@@ -185,31 +178,7 @@ class _GlobalHeader extends StatelessWidget {
             ],
           ),
           const Spacer(),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                _dateText(now, l10n.language),
-                style: const TextStyle(
-                  color: Color(0xFFA7B0CC),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                _timeText(now),
-                style: const TextStyle(
-                  color: Color(0xFF1B2340),
-                  fontSize: 22,
-                  height: 1,
-                  letterSpacing: 2,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+          _GlobalClock(language: l10n.language),
         ],
       ),
     );
@@ -235,10 +204,98 @@ class _GlobalHeader extends StatelessWidget {
     };
   }
 
-  /// 把时间格式化成 `HH:mm:ss`。
+  /// 把时间格式化成 `HH:mm`。
   static String _timeText(DateTime time) {
     String two(int value) => value.toString().padLeft(2, '0');
-    return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
+    return '${two(time.hour)}:${two(time.minute)}';
+  }
+}
+
+class _GlobalClock extends StatefulWidget {
+  const _GlobalClock({required this.language});
+
+  final AppLanguage language;
+
+  @override
+  State<_GlobalClock> createState() => _GlobalClockState();
+}
+
+class _GlobalClockState extends State<_GlobalClock> {
+  DateTime _now = DateTime.now();
+  Timer? _timer;
+  bool _tickerEnabled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tickerEnabled = TickerMode.valuesOf(context).enabled;
+    if (_tickerEnabled == tickerEnabled) {
+      return;
+    }
+    _tickerEnabled = tickerEnabled;
+    if (!tickerEnabled) {
+      _timer?.cancel();
+      _timer = null;
+      return;
+    }
+
+    _now = DateTime.now();
+    _scheduleNextMinute();
+  }
+
+  /// 只在下一分钟边界唤醒一次。
+  ///
+  /// 使用连续的一次性定时器而不是周期定时器，可以避免计时漂移，也不会为了
+  /// 不显示的“秒”字段每秒提交一整帧。
+  void _scheduleNextMinute() {
+    _timer?.cancel();
+    final now = DateTime.now();
+    _timer = Timer(terminalClockDelayUntilNextMinute(now), _onMinuteBoundary);
+  }
+
+  void _onMinuteBoundary() {
+    if (!mounted || !_tickerEnabled) {
+      return;
+    }
+    setState(() => _now = DateTime.now());
+    _scheduleNextMinute();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            _GlobalHeader._dateText(_now, widget.language),
+            style: const TextStyle(
+              color: Color(0xFFA7B0CC),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _GlobalHeader._timeText(_now),
+            style: const TextStyle(
+              color: Color(0xFF1B2340),
+              fontSize: 22,
+              height: 1,
+              letterSpacing: 2,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
