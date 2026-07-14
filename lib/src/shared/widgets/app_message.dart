@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 enum MessageType { info, success, warning, error, loading }
 
 class MessageHandle {
@@ -364,10 +366,10 @@ class _MessageColors {
         text: Color(0xFF7F1D1D),
       ),
       MessageType.info || MessageType.loading => const _MessageColors(
-        background: Color(0xFFF1F7FF),
-        border: Color(0xFFC8DDFA),
-        foreground: Color(0xFF2563EB),
-        text: Color(0xFF1E3A8A),
+        background: AppTheme.primarySoftColor,
+        border: AppTheme.primaryBorderColor,
+        foreground: AppTheme.primaryColor,
+        text: AppTheme.primaryStrongColor,
       ),
     };
   }

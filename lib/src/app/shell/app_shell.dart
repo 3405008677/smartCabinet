@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/features/home/data/repositories/home_repository_impl.dart';
 
@@ -83,9 +85,9 @@ class _TerminalShellState extends State<TerminalShell> {
             height: 800,
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFFF6F8FF),
+                color: AppTheme.scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFB9C8F5)),
+                border: Border.all(color: AppTheme.primaryBorderColor),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x140B1F4D),
@@ -132,8 +134,8 @@ class _GlobalHeader extends StatelessWidget {
       height: 86,
       padding: const EdgeInsets.only(left: 40, right: 40),
       decoration: const BoxDecoration(
-        color: Color(0xFFF9FAFF),
-        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F6))),
+        color: AppTheme.surfaceColor,
+        border: Border(bottom: BorderSide(color: AppTheme.outlineColor)),
       ),
       child: Row(
         children: [
@@ -158,7 +160,7 @@ class _GlobalHeader extends StatelessWidget {
               Text(
                 context.l10n.t('appTitle', '智能文件保管柜'),
                 style: const TextStyle(
-                  color: Color(0xFF17213D),
+                  color: AppTheme.textPrimaryColor,
                   fontSize: 14,
                   height: 1.1,
                   fontWeight: FontWeight.w700,
@@ -168,7 +170,7 @@ class _GlobalHeader extends StatelessWidget {
               Text(
                 'Intelligent Document Cabinet · $cabinetCode',
                 style: const TextStyle(
-                  color: Color(0xFF6E7CA7),
+                  color: AppTheme.textSecondaryColor,
                   fontSize: 13,
                   height: 1,
                   letterSpacing: .4,
@@ -286,7 +288,7 @@ class _GlobalClockState extends State<_GlobalClock> {
           Text(
             _GlobalHeader._timeText(_now),
             style: const TextStyle(
-              color: Color(0xFF1B2340),
+              color: AppTheme.textPrimaryColor,
               fontSize: 22,
               height: 1,
               letterSpacing: 2,
@@ -315,8 +317,8 @@ class _SubHeader extends StatelessWidget {
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 40),
       decoration: const BoxDecoration(
-        color: Color(0xFFF8FAFF),
-        border: Border(bottom: BorderSide(color: Color(0xFFEAF0FA))),
+        color: AppTheme.surfaceColor,
+        border: Border(bottom: BorderSide(color: AppTheme.outlineColor)),
       ),
       child: Row(children: [?leading, const Spacer(), ?topRightBadge]),
     );
@@ -336,8 +338,8 @@ class _GlobalFooter extends StatelessWidget {
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 40),
       decoration: const BoxDecoration(
-        color: Color(0xFFF9FAFF),
-        border: Border(top: BorderSide(color: Color(0xFFE4EAF6))),
+        color: AppTheme.surfaceColor,
+        border: Border(top: BorderSide(color: AppTheme.outlineColor)),
       ),
       child: Stack(
         alignment: Alignment.center,
@@ -347,12 +349,16 @@ class _GlobalFooter extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.shield_outlined, color: Color(0xFF7580A8), size: 16),
+                Icon(
+                  Icons.shield_outlined,
+                  color: AppTheme.textSecondaryColor,
+                  size: 16,
+                ),
                 SizedBox(width: 9),
                 Text(
                   '银行级加密保护',
                   style: TextStyle(
-                    color: Color(0xFF7580A8),
+                    color: AppTheme.textSecondaryColor,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -368,7 +374,7 @@ class _GlobalFooter extends StatelessWidget {
               Text(
                 '所有系统正常运行',
                 style: TextStyle(
-                  color: Color(0xFF7580A8),
+                  color: AppTheme.textSecondaryColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -58,7 +60,7 @@ class _DropoffOpenCabinetPageState extends State<DropoffOpenCabinetPage> {
               Text(
                 _dropoffData.openDoorTitle,
                 style: TextStyle(
-                  color: Color(0xFF111936),
+                  color: AppTheme.textPrimaryColor,
                   fontSize: 36,
                   height: 1,
                   fontWeight: FontWeight.w900,
@@ -69,7 +71,7 @@ class _DropoffOpenCabinetPageState extends State<DropoffOpenCabinetPage> {
               Text(
                 l10n.t('dropoffPlaceDocumentHint', '请将文件放入柜门并关闭'),
                 style: TextStyle(
-                  color: Color(0xFF69769E),
+                  color: AppTheme.textSecondaryColor,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                 ),
@@ -120,7 +122,7 @@ class _DropoffOpenCabinetPageState extends State<DropoffOpenCabinetPage> {
                       ),
                       label: Text(l10n.t('dropoffCloseDoorButton', '确认已关闭柜门')),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4664E9),
+                        backgroundColor: AppTheme.primaryColor,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
@@ -141,8 +143,8 @@ class _DropoffOpenCabinetPageState extends State<DropoffOpenCabinetPage> {
                       icon: const Icon(Icons.refresh_rounded, size: 18),
                       label: Text(l10n.t('dropoffReopenDoorButton', '重新开柜')),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF6877A2),
-                        side: const BorderSide(color: Color(0xFFD4DDF3)),
+                        foregroundColor: AppTheme.textSecondaryColor,
+                        side: const BorderSide(color: AppTheme.outlineColor),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -177,7 +179,7 @@ class _DoorOpenIcon extends StatelessWidget {
           height: 178,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0xFF4664E9).withValues(alpha: .08),
+            color: AppTheme.primaryColor.withValues(alpha: .08),
           ),
         ),
         Container(
@@ -185,7 +187,7 @@ class _DoorOpenIcon extends StatelessWidget {
           height: 138,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0xFF4664E9).withValues(alpha: .12),
+            color: AppTheme.primaryColor.withValues(alpha: .12),
           ),
         ),
         Container(
@@ -193,7 +195,7 @@ class _DoorOpenIcon extends StatelessWidget {
           height: 112,
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
-            color: Color(0xFF4664E9),
+            color: AppTheme.primaryColor,
           ),
           child: const Icon(
             Icons.meeting_room_outlined,
@@ -226,7 +228,7 @@ class _DropoffHeader extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_rounded, size: 18),
           label: Text(context.l10n.t('dropoffBack', '返回')),
           style: TextButton.styleFrom(
-            foregroundColor: const Color(0xFF4664E9),
+            foregroundColor: AppTheme.primaryColor,
             textStyle: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
@@ -237,7 +239,7 @@ class _DropoffHeader extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF111936),
+            color: AppTheme.textPrimaryColor,
             fontSize: 18,
             fontWeight: FontWeight.w900,
           ),
@@ -254,7 +256,7 @@ class _DropoffDotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     const spacing = 32.0;

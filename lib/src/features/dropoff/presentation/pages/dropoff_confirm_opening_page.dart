@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -102,7 +104,7 @@ class _DropoffConfirmOpeningPageState extends State<DropoffConfirmOpeningPage> {
               Text(
                 l10n.t('dropoffOpeningHint', '认证完成，柜门即将打开...'),
                 style: const TextStyle(
-                  color: Color(0xFF111936),
+                  color: AppTheme.textPrimaryColor,
                   fontSize: 34,
                   height: 1,
                   fontWeight: FontWeight.w900,
@@ -115,7 +117,7 @@ class _DropoffConfirmOpeningPageState extends State<DropoffConfirmOpeningPage> {
                     .t('dropoffOpeningCountdown', '{seconds}s 后自动打开柜门')
                     .replaceAll('{seconds}', '$_seconds'),
                 style: const TextStyle(
-                  color: Color(0xFF4664E9),
+                  color: AppTheme.primaryColor,
                   fontSize: 17,
                   fontWeight: FontWeight.w900,
                 ),
@@ -234,7 +236,7 @@ class _InfoPanel extends StatelessWidget {
           Text(
             title,
             style: const TextStyle(
-              color: Color(0xFF111936),
+              color: AppTheme.textPrimaryColor,
               fontSize: 22,
               fontWeight: FontWeight.w900,
             ),
@@ -268,14 +270,14 @@ class _DoorSummaryPanel extends StatelessWidget {
         children: [
           const Icon(
             Icons.meeting_room_outlined,
-            color: Color(0xFF4664E9),
+            color: AppTheme.primaryColor,
             size: 34,
           ),
           const SizedBox(width: 18),
           Text(
             context.l10n.t('pickupDoorNoSectionTitle', '柜门信息'),
             style: TextStyle(
-              color: Color(0xFF111936),
+              color: AppTheme.textPrimaryColor,
               fontSize: 20,
               fontWeight: FontWeight.w900,
             ),
@@ -284,7 +286,7 @@ class _DoorSummaryPanel extends StatelessWidget {
           Text(
             doorNo,
             style: TextStyle(
-              color: Color(0xFF4664E9),
+              color: AppTheme.primaryColor,
               fontSize: 26,
               fontWeight: FontWeight.w900,
             ),
@@ -293,7 +295,7 @@ class _DoorSummaryPanel extends StatelessWidget {
           Text(
             doorLocation,
             style: const TextStyle(
-              color: Color(0xFF53658F),
+              color: AppTheme.textSecondaryColor,
               fontSize: 15,
               fontWeight: FontWeight.w800,
             ),
@@ -319,7 +321,7 @@ class _InfoLine extends StatelessWidget {
     return Container(
       height: 38,
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFEAF0FA))),
+        border: Border(bottom: BorderSide(color: AppTheme.outlineColor)),
       ),
       child: Row(
         children: [
@@ -338,7 +340,7 @@ class _InfoLine extends StatelessWidget {
             child: Text(
               value,
               style: const TextStyle(
-                color: Color(0xFF233158),
+                color: AppTheme.textPrimaryColor,
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
               ),
@@ -355,7 +357,7 @@ BoxDecoration _cardDecoration() {
   return BoxDecoration(
     color: Colors.white,
     borderRadius: BorderRadius.circular(18),
-    border: Border.all(color: const Color(0xFFE1E8F8)),
+    border: Border.all(color: AppTheme.outlineColor),
     boxShadow: const [
       BoxShadow(
         color: Color(0x0D1B2E5A),
@@ -386,7 +388,7 @@ class _DropoffHeader extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_rounded, size: 18),
           label: Text(context.l10n.t('dropoffBack', '返回')),
           style: TextButton.styleFrom(
-            foregroundColor: const Color(0xFF4664E9),
+            foregroundColor: AppTheme.primaryColor,
             textStyle: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
@@ -397,7 +399,7 @@ class _DropoffHeader extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF111936),
+            color: AppTheme.textPrimaryColor,
             fontSize: 18,
             fontWeight: FontWeight.w900,
           ),
@@ -414,7 +416,7 @@ class _DropoffDotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     const spacing = 32.0;

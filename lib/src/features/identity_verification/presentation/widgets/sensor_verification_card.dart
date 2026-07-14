@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/core/device/hardware_recovery_advice.dart';
 
@@ -128,7 +130,9 @@ class SensorVerificationCard extends StatelessWidget {
               height: compact ? 54 : 58,
               padding: const EdgeInsets.fromLTRB(0, 0, 0, 14),
               decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFFE9EEF8))),
+                border: Border(
+                  bottom: BorderSide(color: AppTheme.outlineColor),
+                ),
               ),
               child: Row(
                 children: [
@@ -152,7 +156,7 @@ class SensorVerificationCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: const Color(0xFF111936),
+                        color: AppTheme.textPrimaryColor,
                         fontSize: headerTitleSize,
                         height: 1,
                         fontWeight: FontWeight.w900,
@@ -268,7 +272,7 @@ class SensorVerificationCard extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: effectiveAccentColor,
                 foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFFEAF0FF),
+                disabledBackgroundColor: AppTheme.primarySoftColor,
                 disabledForegroundColor: const Color(0xFF22A857),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),

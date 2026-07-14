@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -281,7 +283,7 @@ class _AdminLoginIllustration extends StatelessWidget {
               const SizedBox(height: 8),
               const Icon(
                 Icons.sentiment_satisfied_alt_rounded,
-                color: Color(0xFF8A2364),
+                color: AppTheme.primaryColor,
                 size: 96,
               ),
               const SizedBox(height: 2),
@@ -289,13 +291,13 @@ class _AdminLoginIllustration extends StatelessWidget {
                 width: 118,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FBFF),
+                  color: AppTheme.surfaceColor,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFC8D6F2)),
+                  border: Border.all(color: AppTheme.primaryBorderColor),
                 ),
                 child: const Icon(
                   Icons.admin_panel_settings_outlined,
-                  color: Color(0xFF8A2364),
+                  color: AppTheme.primaryColor,
                   size: 38,
                 ),
               ),
@@ -312,7 +314,7 @@ class _AdminLoginIllustration extends StatelessWidget {
                 context.l10n.t('adminLoginSubtitleTitle', '智能柜管理后台'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Color(0xFF7F1D58),
+                  color: AppTheme.primaryStrongColor,
                   fontSize: 18,
                   height: 1.05,
                   fontWeight: FontWeight.w900,
@@ -326,7 +328,7 @@ class _AdminLoginIllustration extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Color(0xFF7F1D58),
+                  color: AppTheme.primaryStrongColor,
                   fontSize: 11,
                   height: 1.15,
                   fontWeight: FontWeight.w600,
@@ -409,7 +411,7 @@ class _AdminLoginPanel extends StatelessWidget {
                 l10n.t('adminLoginTitle', '管理员后台'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Color(0xFF555555),
+                  color: AppTheme.textSecondaryColor,
                   fontSize: 21,
                   height: 1,
                   fontWeight: FontWeight.w900,
@@ -441,9 +443,9 @@ class _AdminLoginPanel extends StatelessWidget {
                     child: Checkbox(
                       value: true,
                       onChanged: (_) {},
-                      activeColor: const Color(0xFF8A2364),
+                      activeColor: AppTheme.primaryColor,
                       side: const BorderSide(
-                        color: Color(0xFFC8D6F2),
+                        color: AppTheme.primaryBorderColor,
                         width: 1,
                       ),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -454,7 +456,7 @@ class _AdminLoginPanel extends StatelessWidget {
                   Text(
                     l10n.t('adminRememberPassword', '记住密码'),
                     style: TextStyle(
-                      color: Color(0xFFA99AA5),
+                      color: AppTheme.textSecondaryColor,
                       fontSize: 10,
                       height: 1,
                       fontWeight: FontWeight.w600,
@@ -499,7 +501,7 @@ class _AdminLoginMark extends StatelessWidget {
     return const Center(
       child: Icon(
         Icons.scatter_plot_rounded,
-        color: Color(0xFF8A2364),
+        color: AppTheme.primaryColor,
         size: 38,
       ),
     );
@@ -532,7 +534,7 @@ class _AdminPrimaryButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: loading ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF8A2364),
+          backgroundColor: AppTheme.primaryColor,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -594,7 +596,7 @@ class _AdminNumberKeyboardPanel extends StatelessWidget {
     };
 
     return Container(
-      color: const Color(0xFFFBF6F9),
+      color: AppTheme.primarySoftColor,
       padding: const EdgeInsets.fromLTRB(18, 24, 18, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -605,7 +607,7 @@ class _AdminNumberKeyboardPanel extends StatelessWidget {
                 child: Text(
                   title,
                   style: const TextStyle(
-                    color: Color(0xFF555555),
+                    color: AppTheme.textSecondaryColor,
                     fontSize: 15,
                     height: 1,
                     fontWeight: FontWeight.w900,
@@ -616,7 +618,7 @@ class _AdminNumberKeyboardPanel extends StatelessWidget {
                 key: const ValueKey('admin_keyboard_back'),
                 onPressed: onBack,
                 style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF8A2364),
+                  foregroundColor: AppTheme.primaryColor,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   minimumSize: const Size(0, 28),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -634,7 +636,7 @@ class _AdminNumberKeyboardPanel extends StatelessWidget {
           Text(
             l10n.t('adminKeyboardHint', '使用左侧数字键盘录入'),
             style: TextStyle(
-              color: Color(0xFFA99AA5),
+              color: AppTheme.textSecondaryColor,
               fontSize: 11,
               height: 1,
               fontWeight: FontWeight.w700,
@@ -762,11 +764,11 @@ class _AdminKeyboardButton extends StatelessWidget {
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        backgroundColor: isAction ? const Color(0xFFF3EDF1) : Colors.white,
+        backgroundColor: isAction ? AppTheme.primarySoftColor : Colors.white,
         foregroundColor: isAction
-            ? const Color(0xFF7E7078)
-            : const Color(0xFF8A2364),
-        side: const BorderSide(color: Color(0xFFE2D7DE)),
+            ? AppTheme.textSecondaryColor
+            : AppTheme.primaryColor,
+        side: const BorderSide(color: AppTheme.primaryBorderColor),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         textStyle: TextStyle(
           fontSize: isAction ? 12 : 20,
@@ -818,7 +820,7 @@ class _AdminLoginField extends StatelessWidget {
           Text(
             labelText,
             style: const TextStyle(
-              color: Color(0xFF7E7078),
+              color: AppTheme.textSecondaryColor,
               fontSize: 10,
               height: 1,
               fontWeight: FontWeight.w700,
@@ -834,7 +836,7 @@ class _AdminLoginField extends StatelessWidget {
               onTap: onTap,
               readOnly: true,
               style: const TextStyle(
-                color: Color(0xFF555555),
+                color: AppTheme.textSecondaryColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -847,7 +849,7 @@ class _AdminLoginField extends StatelessWidget {
                   vertical: 0,
                 ),
                 hintStyle: const TextStyle(
-                  color: Color(0xFFD8CED5),
+                  color: AppTheme.outlineColor,
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                 ),
@@ -855,15 +857,15 @@ class _AdminLoginField extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                   borderSide: BorderSide(
                     color: selected
-                        ? const Color(0xFF8A2364)
-                        : const Color(0xFFE2D7DE),
+                        ? AppTheme.primaryColor
+                        : AppTheme.primaryBorderColor,
                     width: selected ? 1.2 : 1,
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(4),
                   borderSide: const BorderSide(
-                    color: Color(0xFF8A2364),
+                    color: AppTheme.primaryColor,
                     width: 1.2,
                   ),
                 ),
@@ -913,7 +915,7 @@ class _SpeechBubblePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0xFF64164F);
+    final paint = Paint()..color = AppTheme.primaryStrongColor;
     final path = Path()
       ..moveTo(4, 0)
       ..lineTo(size.width - 4, 0)
@@ -957,15 +959,15 @@ class _AdminIllustrationPainter extends CustomPainter {
     canvas.drawCircle(
       const Offset(16, 18),
       74,
-      Paint()..color = const Color(0xFFB8313E).withValues(alpha: .94),
+      Paint()..color = AppTheme.primaryStrongColor.withValues(alpha: .94),
     );
     canvas.drawCircle(
       Offset(size.width - 52, size.height + 4),
       40,
-      Paint()..color = const Color(0xFFC774A4).withValues(alpha: .48),
+      Paint()..color = AppTheme.primaryLightColor.withValues(alpha: .48),
     );
 
-    final dotPaint = Paint()..color = const Color(0xFFB8313E);
+    final dotPaint = Paint()..color = AppTheme.primaryStrongColor;
     const points = [
       Offset(76, 64),
       Offset(142, 112),
@@ -981,7 +983,7 @@ class _AdminIllustrationPainter extends CustomPainter {
     }
 
     final linePaint = Paint()
-      ..color = const Color(0xFFC35B67).withValues(alpha: .65)
+      ..color = AppTheme.primaryLightColor.withValues(alpha: .65)
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(const Offset(112, 300), const Offset(144, 278), linePaint);

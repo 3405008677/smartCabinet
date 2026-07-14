@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 /// 应用启动阶段展示的媒体层。
 ///
 /// 当前使用图片资源，后续如果要替换成视频，只需要保留外部调用不变，
@@ -84,7 +86,7 @@ class _StartupImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFD6DEEF),
+      color: AppTheme.scaffoldBackgroundColor,
       child: Center(
         child: FittedBox(
           fit: BoxFit.contain,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/shell/app_shell.dart';
 import 'package:smart_cabinet/src/features/home/data/repositories/home_repository_impl.dart';
 import 'package:smart_cabinet/src/features/home/domain/entities/home.dart';
@@ -74,7 +76,7 @@ class _SmartCabinetHomePageState extends State<SmartCabinetHomePage> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFFEAF2FF), Color(0xFFF7FAFF)],
+              colors: [AppTheme.scaffoldBackgroundColor, AppTheme.surfaceColor],
             ),
           ),
           child: HomeDashboard(

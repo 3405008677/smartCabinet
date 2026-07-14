@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -244,7 +246,7 @@ class _CapturePanel extends StatelessWidget {
           Text(
             l10n.t('dropoffPlaceFileHint', '请将文件放到指定识别区'),
             style: TextStyle(
-              color: Color(0xFF111936),
+              color: AppTheme.textPrimaryColor,
               fontSize: 26,
               fontWeight: FontWeight.w900,
             ),
@@ -256,7 +258,7 @@ class _CapturePanel extends StatelessWidget {
               '点击开始识别后，系统将依次采集合格证正面常规图、正面紫外荧光图和反面常规图。',
             ),
             style: TextStyle(
-              color: Color(0xFF6877A2),
+              color: AppTheme.textSecondaryColor,
               fontSize: 14,
               height: 1.45,
               fontWeight: FontWeight.w600,
@@ -266,14 +268,14 @@ class _CapturePanel extends StatelessWidget {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFFEAF0FF),
+                color: AppTheme.primarySoftColor,
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFFC8D5FF)),
+                border: Border.all(color: AppTheme.primaryBorderColor),
               ),
               child: const Center(
                 child: Icon(
                   Icons.document_scanner_outlined,
-                  color: Color(0xFF4664E9),
+                  color: AppTheme.primaryColor,
                   size: 86,
                 ),
               ),
@@ -293,7 +295,7 @@ class _CapturePanel extends StatelessWidget {
                     : l10n.t('dropoffStartRecognition', '开始识别'),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4664E9),
+                backgroundColor: AppTheme.primaryColor,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -339,7 +341,7 @@ class _FrcPanel extends StatelessWidget {
           Text(
             l10n.t('dropoffFrcTitle', 'FRC 文件识别'),
             style: TextStyle(
-              color: Color(0xFF111936),
+              color: AppTheme.textPrimaryColor,
               fontSize: 24,
               fontWeight: FontWeight.w900,
             ),
@@ -424,7 +426,7 @@ class _ImageStatusCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: done ? const Color(0xFFBEE8CC) : const Color(0xFFE1E8F8),
+          color: done ? const Color(0xFFBEE8CC) : AppTheme.outlineColor,
         ),
       ),
       child: Column(
@@ -433,7 +435,7 @@ class _ImageStatusCard extends StatelessWidget {
           Text(
             title,
             style: const TextStyle(
-              color: Color(0xFF111936),
+              color: AppTheme.textPrimaryColor,
               fontSize: 17,
               fontWeight: FontWeight.w900,
             ),
@@ -471,7 +473,7 @@ class _DropoffCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE1E8F8)),
+        border: Border.all(color: AppTheme.outlineColor),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0D1B2E5A),
@@ -500,7 +502,7 @@ class _InfoLine extends StatelessWidget {
     return Container(
       height: 42,
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFEAF0FA))),
+        border: Border(bottom: BorderSide(color: AppTheme.outlineColor)),
       ),
       child: Row(
         children: [
@@ -519,7 +521,7 @@ class _InfoLine extends StatelessWidget {
             child: Text(
               value,
               style: const TextStyle(
-                color: Color(0xFF233158),
+                color: AppTheme.textPrimaryColor,
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
               ),
@@ -551,7 +553,7 @@ class _DropoffHeader extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_rounded, size: 18),
           label: Text(context.l10n.t('dropoffBack', '返回')),
           style: TextButton.styleFrom(
-            foregroundColor: const Color(0xFF4664E9),
+            foregroundColor: AppTheme.primaryColor,
             textStyle: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
@@ -562,7 +564,7 @@ class _DropoffHeader extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF111936),
+            color: AppTheme.textPrimaryColor,
             fontSize: 18,
             fontWeight: FontWeight.w900,
           ),
@@ -579,7 +581,7 @@ class _DropoffDotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     const spacing = 32.0;

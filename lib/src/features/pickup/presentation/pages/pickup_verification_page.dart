@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -201,7 +203,7 @@ class _PickupFrame extends StatelessWidget {
                     index: 1,
                     title: l10n.t('pickupFaceTitle', '人脸识别'),
                     icon: Icons.center_focus_strong_rounded,
-                    accentColor: const Color(0xFF7048F4),
+                    accentColor: AppTheme.primaryColor,
                     verified: faceVerified,
                     width: 295,
                     height: 619,
@@ -210,7 +212,7 @@ class _PickupFrame extends StatelessWidget {
                       child: FaceVerificationCard(
                         verified: faceVerified,
                         allowFallbackWithoutCamera: true,
-                        accentColor: const Color(0xFF7048F4),
+                        accentColor: AppTheme.primaryColor,
                         compact: true,
                         showHeader: false,
                         onVerified: onFaceVerified,
@@ -222,7 +224,7 @@ class _PickupFrame extends StatelessWidget {
                     index: 2,
                     title: l10n.t('pickupFingerprintTitle', '指纹识别'),
                     icon: Icons.fingerprint_rounded,
-                    accentColor: const Color(0xFF4D64EA),
+                    accentColor: AppTheme.primaryColor,
                     verified: fingerprintVerified,
                     width: 295,
                     height: 619,
@@ -241,7 +243,7 @@ class _PickupFrame extends StatelessWidget {
                           'pickupFingerprintDone',
                           '指纹识别已完成',
                         ),
-                        accentColor: const Color(0xFF4D64EA),
+                        accentColor: AppTheme.primaryColor,
                         compact: true,
                         showHeader: false,
                         onConfirm: onFingerprintConfirm,
@@ -253,7 +255,7 @@ class _PickupFrame extends StatelessWidget {
                     index: 3,
                     title: l10n.t('pickupNfcTitle', 'NFC识别'),
                     icon: Icons.contactless_rounded,
-                    accentColor: const Color(0xFF5791B6),
+                    accentColor: AppTheme.primaryColor,
                     verified: nfcVerified,
                     width: 295,
                     height: 619,
@@ -266,7 +268,7 @@ class _PickupFrame extends StatelessWidget {
                         verified: nfcVerified,
                         actionText: l10n.t('pickupConfirmNfc', '确认NFC识别'),
                         verifiedText: l10n.t('pickupNfcDone', 'NFC识别已完成'),
-                        accentColor: const Color(0xFF5791B6),
+                        accentColor: AppTheme.primaryColor,
                         compact: true,
                         showHeader: false,
                         onConfirm: onNfcConfirm,
@@ -278,7 +280,7 @@ class _PickupFrame extends StatelessWidget {
                     index: 4,
                     title: l10n.t('pickupCodeTitle', '取件码'),
                     icon: Icons.pin_outlined,
-                    accentColor: const Color(0xFF4664E9),
+                    accentColor: AppTheme.primaryColor,
                     verified: codeVerified,
                     width: 295,
                     height: 619,
@@ -328,8 +330,8 @@ class _PickupHeader extends StatelessWidget {
             icon: const Icon(Icons.arrow_back_rounded, size: 17),
             label: Text(l10n.t('pickupBack', '返回')),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF6877A2),
-              side: const BorderSide(color: Color(0xFFDDE5F7)),
+              foregroundColor: AppTheme.textSecondaryColor,
+              side: const BorderSide(color: AppTheme.primaryBorderColor),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -342,12 +344,12 @@ class _PickupHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 16),
-        Container(width: 1, height: 18, color: const Color(0xFFE0E6F4)),
+        Container(width: 1, height: 18, color: AppTheme.outlineColor),
         const SizedBox(width: 16),
         Text(
           l10n.t('pickupVerificationHeader', '安全身份验证'),
           style: TextStyle(
-            color: Color(0xFF111936),
+            color: AppTheme.textPrimaryColor,
             fontSize: 15,
             fontWeight: FontWeight.w800,
           ),
@@ -358,13 +360,13 @@ class _PickupHeader extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 9),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: const Color(0xFFEAF0FF),
+            color: AppTheme.primarySoftColor,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
             l10n.t('pickupFlowTag', '取件'),
             style: TextStyle(
-              color: Color(0xFF4664E9),
+              color: AppTheme.primaryColor,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -459,7 +461,7 @@ class _PickupCodeContent extends StatelessWidget {
             child: Text(
               l10n.t('pickupCodeHint', '请输入8位取件码'),
               style: TextStyle(
-                color: Color(0xFF647197),
+                color: AppTheme.textSecondaryColor,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
@@ -520,18 +522,18 @@ class _CodeDisplay extends StatelessWidget {
             margin: EdgeInsets.only(right: index == 7 ? 0 : 5),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: const Color(0xFFF4F7FF),
+              color: AppTheme.primarySoftColor,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: hasValue
-                    ? const Color(0xFF4664E9)
-                    : const Color(0xFFD7E0F4),
+                    ? AppTheme.primaryColor
+                    : AppTheme.primaryBorderColor,
               ),
             ),
             child: Text(
               hasValue ? code[index] : '',
               style: const TextStyle(
-                color: Color(0xFF243264),
+                color: AppTheme.textPrimaryColor,
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
               ),
@@ -634,11 +636,11 @@ class _KeyboardButton extends StatelessWidget {
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        backgroundColor: isAction ? const Color(0xFFF4F7FF) : Colors.white,
+        backgroundColor: isAction ? AppTheme.primarySoftColor : Colors.white,
         foregroundColor: isAction
-            ? const Color(0xFF7580A8)
-            : const Color(0xFF4664E9),
-        side: const BorderSide(color: Color(0xFFD7E0F4)),
+            ? AppTheme.textSecondaryColor
+            : AppTheme.primaryColor,
+        side: const BorderSide(color: AppTheme.primaryBorderColor),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         textStyle: TextStyle(
           fontSize: isAction ? 13 : 20,
@@ -660,7 +662,7 @@ class _DotGridPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     /// 页面背景点阵绘制使用的统一画笔。
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     /// 相邻点之间的水平和垂直间距。

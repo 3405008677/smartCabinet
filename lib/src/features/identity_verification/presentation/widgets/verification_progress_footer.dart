@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 /// 底部验证进度条。
@@ -41,8 +43,8 @@ class VerificationProgressFooter extends StatelessWidget {
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 40),
       decoration: const BoxDecoration(
-        color: Color(0xFFF9FAFF),
-        border: Border(top: BorderSide(color: Color(0xFFE4EAF6))),
+        color: AppTheme.surfaceColor,
+        border: Border(top: BorderSide(color: AppTheme.outlineColor)),
       ),
       child: Row(
         children: [
@@ -66,7 +68,7 @@ class VerificationProgressFooter extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: value,
                     minHeight: 8,
-                    backgroundColor: const Color(0xFFE9EEF8),
+                    backgroundColor: AppTheme.outlineColor,
                     valueColor: AlwaysStoppedAnimation<Color>(
                       effectiveAccentColor,
                     ),

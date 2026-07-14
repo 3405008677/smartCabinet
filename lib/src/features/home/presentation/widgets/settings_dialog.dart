@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
@@ -46,7 +48,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFFE4EAF6)),
+            border: Border.all(color: AppTheme.outlineColor),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x24111B3D),
@@ -66,7 +68,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                   gradient: LinearGradient(
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
-                    colors: [Color(0xFF17213D), Color(0xFF2F64F6)],
+                    colors: [AppTheme.textPrimaryColor, AppTheme.primaryColor],
                   ),
                 ),
                 child: Row(
@@ -178,9 +180,9 @@ class _AdminModeSettingRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
           decoration: BoxDecoration(
-            color: const Color(0xFFF7FAFF),
+            color: AppTheme.surfaceColor,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE4EAF6)),
+            border: Border.all(color: AppTheme.outlineColor),
           ),
           child: Row(
             children: [
@@ -188,12 +190,12 @@ class _AdminModeSettingRow extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2F64F6).withValues(alpha: .08),
+                  color: AppTheme.primaryColor.withValues(alpha: .08),
                   borderRadius: BorderRadius.circular(13),
                 ),
                 child: const Icon(
                   Icons.admin_panel_settings_outlined,
-                  color: Color(0xFF2F64F6),
+                  color: AppTheme.primaryColor,
                   size: 21,
                 ),
               ),
@@ -202,7 +204,7 @@ class _AdminModeSettingRow extends StatelessWidget {
                 child: Text(
                   l10n.t('adminMode', '管理员模式'),
                   style: const TextStyle(
-                    color: Color(0xFF17213D),
+                    color: AppTheme.textPrimaryColor,
                     fontSize: 16,
                     height: 1,
                     fontWeight: FontWeight.w900,
@@ -212,7 +214,7 @@ class _AdminModeSettingRow extends StatelessWidget {
               const SizedBox(width: 16),
               const Icon(
                 Icons.chevron_right_rounded,
-                color: Color(0xFF7A86A8),
+                color: AppTheme.textSecondaryColor,
                 size: 24,
               ),
             ],
@@ -242,9 +244,9 @@ class _AboutDeviceSettingRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
           decoration: BoxDecoration(
-            color: const Color(0xFFF7FAFF),
+            color: AppTheme.surfaceColor,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE4EAF6)),
+            border: Border.all(color: AppTheme.outlineColor),
           ),
           child: Row(
             children: [
@@ -252,12 +254,12 @@ class _AboutDeviceSettingRow extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2F64F6).withValues(alpha: .08),
+                  color: AppTheme.primaryColor.withValues(alpha: .08),
                   borderRadius: BorderRadius.circular(13),
                 ),
                 child: const Icon(
                   Icons.memory_rounded,
-                  color: Color(0xFF2F64F6),
+                  color: AppTheme.primaryColor,
                   size: 21,
                 ),
               ),
@@ -269,7 +271,7 @@ class _AboutDeviceSettingRow extends StatelessWidget {
                     Text(
                       l10n.t('aboutDevice', '关于设备'),
                       style: const TextStyle(
-                        color: Color(0xFF17213D),
+                        color: AppTheme.textPrimaryColor,
                         fontSize: 16,
                         height: 1,
                         fontWeight: FontWeight.w900,
@@ -279,7 +281,7 @@ class _AboutDeviceSettingRow extends StatelessWidget {
                     Text(
                       l10n.t('aboutDeviceHint', '查看当前主板与系统信息'),
                       style: const TextStyle(
-                        color: Color(0xFF7A86A8),
+                        color: AppTheme.textSecondaryColor,
                         fontSize: 12,
                         height: 1,
                         fontWeight: FontWeight.w600,
@@ -291,7 +293,7 @@ class _AboutDeviceSettingRow extends StatelessWidget {
               const SizedBox(width: 16),
               const Icon(
                 Icons.chevron_right_rounded,
-                color: Color(0xFF7A86A8),
+                color: AppTheme.textSecondaryColor,
                 size: 24,
               ),
             ],
@@ -362,7 +364,7 @@ class _AboutDeviceDialogState extends State<_AboutDeviceDialog> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFFE4EAF6)),
+            border: Border.all(color: AppTheme.outlineColor),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x24111B3D),
@@ -427,7 +429,7 @@ class _AboutDeviceHeader extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [Color(0xFF17213D), Color(0xFF2F64F6)],
+          colors: [AppTheme.textPrimaryColor, AppTheme.primaryColor],
         ),
       ),
       child: Row(
@@ -499,9 +501,9 @@ class _AboutDeviceInfoRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7FAFF),
+        color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE4EAF6)),
+        border: Border.all(color: AppTheme.outlineColor),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -511,7 +513,7 @@ class _AboutDeviceInfoRow extends StatelessWidget {
             child: Text(
               item.label,
               style: const TextStyle(
-                color: Color(0xFF6E7CA7),
+                color: AppTheme.textSecondaryColor,
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
               ),
@@ -522,7 +524,7 @@ class _AboutDeviceInfoRow extends StatelessWidget {
             child: SelectableText(
               item.value,
               style: const TextStyle(
-                color: Color(0xFF17213D),
+                color: AppTheme.textPrimaryColor,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
@@ -587,9 +589,9 @@ class _LanguageSettingRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7FAFF),
+        color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE4EAF6)),
+        border: Border.all(color: AppTheme.outlineColor),
       ),
       child: Row(
         children: [
@@ -597,12 +599,12 @@ class _LanguageSettingRow extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: const Color(0xFF2F64F6).withValues(alpha: .08),
+              color: AppTheme.primaryColor.withValues(alpha: .08),
               borderRadius: BorderRadius.circular(13),
             ),
             child: const Icon(
               Icons.language_rounded,
-              color: Color(0xFF2F64F6),
+              color: AppTheme.primaryColor,
               size: 21,
             ),
           ),
@@ -614,7 +616,7 @@ class _LanguageSettingRow extends StatelessWidget {
                 Text(
                   l10n.t('languageSetting', '语言设置'),
                   style: const TextStyle(
-                    color: Color(0xFF17213D),
+                    color: AppTheme.textPrimaryColor,
                     fontSize: 16,
                     height: 1,
                     fontWeight: FontWeight.w900,
@@ -624,7 +626,7 @@ class _LanguageSettingRow extends StatelessWidget {
                 Text(
                   l10n.t('languageSettingHint', '选择终端界面显示语言'),
                   style: const TextStyle(
-                    color: Color(0xFF7A86A8),
+                    color: AppTheme.textSecondaryColor,
                     fontSize: 12,
                     height: 1,
                     fontWeight: FontWeight.w600,
@@ -676,7 +678,7 @@ class _LanguageDropdown extends StatelessWidget {
           isExpanded: true,
           icon: const Icon(
             Icons.keyboard_arrow_down_rounded,
-            color: Color(0xFF6877A2),
+            color: AppTheme.textSecondaryColor,
           ),
           items: AppLanguage.values
               .map((language) {
@@ -711,7 +713,7 @@ class _LanguageOption extends StatelessWidget {
             language.label,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Color(0xFF17213D),
+              color: AppTheme.textPrimaryColor,
               fontSize: 13,
               fontWeight: FontWeight.w800,
             ),

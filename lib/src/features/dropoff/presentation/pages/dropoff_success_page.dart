@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -54,7 +56,7 @@ class _DropoffSuccessPageState extends State<DropoffSuccessPage> {
               Text(
                 l10n.t('dropoffSuccessTitle', '放件成功'),
                 style: TextStyle(
-                  color: Color(0xFF111936),
+                  color: AppTheme.textPrimaryColor,
                   fontSize: 36,
                   height: 1,
                   fontWeight: FontWeight.w900,
@@ -65,7 +67,7 @@ class _DropoffSuccessPageState extends State<DropoffSuccessPage> {
               Text(
                 _dropoffData.successSummary,
                 style: TextStyle(
-                  color: Color(0xFF69769E),
+                  color: AppTheme.textSecondaryColor,
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                 ),
@@ -86,7 +88,7 @@ class _DropoffSuccessPageState extends State<DropoffSuccessPage> {
                       icon: const Icon(Icons.home_outlined, size: 18),
                       label: Text(l10n.t('dropoffReturnHome', '返回首页')),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4664E9),
+                        backgroundColor: AppTheme.primaryColor,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
@@ -110,8 +112,10 @@ class _DropoffSuccessPageState extends State<DropoffSuccessPage> {
                       icon: const Icon(Icons.add_box_outlined, size: 18),
                       label: Text(l10n.t('dropoffContinue', '继续放件')),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF4664E9),
-                        side: const BorderSide(color: Color(0xFFC8D5FF)),
+                        foregroundColor: AppTheme.primaryColor,
+                        side: const BorderSide(
+                          color: AppTheme.primaryBorderColor,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -178,7 +182,7 @@ class _DropoffDotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     const spacing = 32.0;

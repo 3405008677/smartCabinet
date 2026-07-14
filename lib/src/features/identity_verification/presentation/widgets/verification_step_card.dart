@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 /// 认证步骤统一外壳卡片。
 ///
 /// 用于给人脸、指纹、NFC、取件码等步骤提供统一的外层边框和头部样式。
@@ -68,7 +70,9 @@ class VerificationStepCard extends StatelessWidget {
               height: 74,
               padding: const EdgeInsets.fromLTRB(20, 0, 18, 0),
               decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFFE9EEF8))),
+                border: Border(
+                  bottom: BorderSide(color: AppTheme.outlineColor),
+                ),
               ),
               child: Row(
                 children: [
@@ -88,7 +92,7 @@ class VerificationStepCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Color(0xFF111936),
+                        color: AppTheme.textPrimaryColor,
                         fontSize: 16,
                         height: 1,
                         fontWeight: FontWeight.w900,

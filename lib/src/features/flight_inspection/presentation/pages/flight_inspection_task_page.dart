@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/app/shell/app_shell.dart';
 import 'package:smart_cabinet/src/features/flight_inspection/data/repositories/flight_inspection_repository_impl.dart';
@@ -348,7 +350,7 @@ class _InspectionHeader extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_rounded, size: 18),
           label: Text(context.l10n.t('inspectionBack', '返回')),
           style: TextButton.styleFrom(
-            foregroundColor: const Color(0xFF0891B2),
+            foregroundColor: AppTheme.primaryColor,
             textStyle: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
@@ -359,7 +361,7 @@ class _InspectionHeader extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF111936),
+            color: AppTheme.textPrimaryColor,
             fontSize: 18,
             fontWeight: FontWeight.w900,
           ),
@@ -399,7 +401,7 @@ class _TaskSummaryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD8F3F7)),
+        border: Border.all(color: AppTheme.primaryBorderColor),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0D1B2E5A),
@@ -414,12 +416,12 @@ class _TaskSummaryCard extends StatelessWidget {
             width: 54,
             height: 54,
             decoration: BoxDecoration(
-              color: const Color(0xFF0891B2).withValues(alpha: .1),
+              color: AppTheme.primaryColor.withValues(alpha: .1),
               borderRadius: BorderRadius.circular(16),
             ),
             child: const Icon(
               Icons.fact_check_outlined,
-              color: Color(0xFF0891B2),
+              color: AppTheme.primaryColor,
               size: 30,
             ),
           ),
@@ -435,7 +437,7 @@ class _TaskSummaryCard extends StatelessWidget {
                             .t('inspectionRandomTask', '后台随机任务 {batchNo}')
                             .replaceAll('{batchNo}', batchNo),
                   style: const TextStyle(
-                    color: Color(0xFF111936),
+                    color: AppTheme.textPrimaryColor,
                     fontSize: 22,
                     height: 1,
                     fontWeight: FontWeight.w900,
@@ -451,7 +453,7 @@ class _TaskSummaryCard extends StatelessWidget {
                       .replaceAll('{completedCount}', '$completedCount')
                       .replaceAll('{totalCount}', '$totalCount'),
                   style: const TextStyle(
-                    color: Color(0xFF6877A2),
+                    color: AppTheme.textSecondaryColor,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
@@ -485,7 +487,7 @@ class _InspectionTaskCard extends StatelessWidget {
   /// 状态强调色。
   Color get _statusColor {
     return switch (task.status) {
-      _InspectionTaskStatus.waiting => const Color(0xFF0891B2),
+      _InspectionTaskStatus.waiting => AppTheme.primaryColor,
       _InspectionTaskStatus.inspecting => const Color(0xFFE68A00),
       _InspectionTaskStatus.completed => const Color(0xFF22A857),
     };
@@ -544,7 +546,7 @@ class _InspectionTaskCard extends StatelessWidget {
                 Text(
                   '${task.doorNo} $statusText',
                   style: const TextStyle(
-                    color: Color(0xFF111936),
+                    color: AppTheme.textPrimaryColor,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
@@ -553,7 +555,7 @@ class _InspectionTaskCard extends StatelessWidget {
                 Text(
                   '${task.fileCode} · ${task.secretLevel} · ${task.department}',
                   style: const TextStyle(
-                    color: Color(0xFF6877A2),
+                    color: AppTheme.textSecondaryColor,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -580,9 +582,9 @@ class _InspectionTaskCard extends StatelessWidget {
               key: ValueKey('open_inspection_${task.doorNo}'),
               onPressed: canOpen ? onOpen : null,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0891B2),
+                backgroundColor: AppTheme.primaryColor,
                 foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFFEAF0F2),
+                disabledBackgroundColor: AppTheme.outlineColor,
                 disabledForegroundColor: const Color(0xFF8A96A8),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -649,7 +651,7 @@ class _ActiveInspectionPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD8F3F7)),
+        border: Border.all(color: AppTheme.primaryBorderColor),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0D1B2E5A),
@@ -668,7 +670,7 @@ class _ActiveInspectionPanel extends StatelessWidget {
                       .t('inspectionCurrentDoorTitle', '柜门 {doorNo} 飞检中')
                       .replaceAll('{doorNo}', task.doorNo),
                   style: const TextStyle(
-                    color: Color(0xFF111936),
+                    color: AppTheme.textPrimaryColor,
                     fontSize: 26,
                     height: 1,
                     fontWeight: FontWeight.w900,
@@ -717,7 +719,7 @@ class _ActiveInspectionPanel extends StatelessWidget {
                 const SizedBox(height: 18),
                 ElevatedButton(
                   onPressed: itemReturned ? null : onMarkReturned,
-                  style: _buttonStyle(const Color(0xFF0891B2)),
+                  style: _buttonStyle(AppTheme.primaryColor),
                   child: Text(
                     itemReturned
                         ? l10n.t('inspectionItemReturned', '物品已放回')
@@ -729,7 +731,7 @@ class _ActiveInspectionPanel extends StatelessWidget {
                   onPressed: itemReturned && !returnVerified
                       ? onVerifyReturned
                       : null,
-                  style: _buttonStyle(const Color(0xFF4664E9)),
+                  style: _buttonStyle(AppTheme.primaryColor),
                   child: Text(
                     returnVerified
                         ? l10n.t('inspectionReturnVerified', '放回校验成功')
@@ -753,7 +755,7 @@ class _ActiveInspectionPanel extends StatelessWidget {
       minimumSize: const Size.fromHeight(46),
       backgroundColor: color,
       foregroundColor: Colors.white,
-      disabledBackgroundColor: const Color(0xFFEAF0F2),
+      disabledBackgroundColor: AppTheme.outlineColor,
       disabledForegroundColor: const Color(0xFF8A96A8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
       textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
@@ -777,9 +779,7 @@ class _IdleInspectionPanel extends StatelessWidget {
       children: [
         Icon(
           allCompleted ? Icons.verified_rounded : Icons.door_sliding_outlined,
-          color: allCompleted
-              ? const Color(0xFF22A857)
-              : const Color(0xFF0891B2),
+          color: allCompleted ? const Color(0xFF22A857) : AppTheme.primaryColor,
           size: 78,
         ),
         const SizedBox(height: 22),
@@ -789,7 +789,7 @@ class _IdleInspectionPanel extends StatelessWidget {
               : l10n.t('inspectionSelectDoorTitle', '请选择需要飞检的柜门'),
           textAlign: TextAlign.center,
           style: const TextStyle(
-            color: Color(0xFF111936),
+            color: AppTheme.textPrimaryColor,
             fontSize: 26,
             fontWeight: FontWeight.w900,
           ),
@@ -801,7 +801,7 @@ class _IdleInspectionPanel extends StatelessWidget {
               : l10n.t('inspectionSelectDoorHint', '打开一个柜门后，其他柜门将自动锁定'),
           textAlign: TextAlign.center,
           style: const TextStyle(
-            color: Color(0xFF6877A2),
+            color: AppTheme.textSecondaryColor,
             fontSize: 15,
             fontWeight: FontWeight.w700,
           ),
@@ -842,7 +842,7 @@ class _InfoLine extends StatelessWidget {
             child: Text(
               value,
               style: const TextStyle(
-                color: Color(0xFF111936),
+                color: AppTheme.textPrimaryColor,
                 fontSize: 15,
                 fontWeight: FontWeight.w900,
               ),
@@ -871,7 +871,7 @@ class _StepIndicator extends StatelessWidget {
       decoration: BoxDecoration(
         color: success
             ? const Color(0xFF22A857).withValues(alpha: .08)
-            : const Color(0xFFF5F7FC),
+            : AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -887,7 +887,7 @@ class _StepIndicator extends StatelessWidget {
             style: TextStyle(
               color: success
                   ? const Color(0xFF22A857)
-                  : const Color(0xFF6877A2),
+                  : AppTheme.textSecondaryColor,
               fontSize: 13,
               fontWeight: FontWeight.w800,
             ),
@@ -906,7 +906,7 @@ class _InspectionDotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF0891B2).withValues(alpha: .06)
+      ..color = AppTheme.primaryColor.withValues(alpha: .06)
       ..style = PaintingStyle.fill;
     for (double x = 18; x < size.width; x += 28) {
       for (double y = 18; y < size.height; y += 28) {

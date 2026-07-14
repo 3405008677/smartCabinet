@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -73,7 +75,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                       l10n.t('adminVerificationHeading', '请完成管理员安全身份认证'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF111936),
+                        color: AppTheme.textPrimaryColor,
                         fontSize: 34,
                         height: 1,
                         fontWeight: FontWeight.w900,
@@ -88,7 +90,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                       ),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF6877A2),
+                        color: AppTheme.textSecondaryColor,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),
@@ -100,7 +102,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                           .replaceAll('{count}', '$_verifiedCount'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF8A2364),
+                        color: AppTheme.primaryColor,
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
                       ),
@@ -114,7 +116,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                             index: 1,
                             title: l10n.t('pickupFaceTitle', '人脸识别'),
                             icon: Icons.center_focus_strong_rounded,
-                            accentColor: const Color(0xFF8A2364),
+                            accentColor: AppTheme.primaryColor,
                             verified: _verification.face,
                             width: 295,
                             height: 619,
@@ -122,7 +124,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                               padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
                               child: FaceVerificationCard(
                                 verified: _verification.face,
-                                accentColor: const Color(0xFF8A2364),
+                                accentColor: AppTheme.primaryColor,
                                 allowFallbackWithoutCamera: true,
                                 compact: true,
                                 showHeader: false,
@@ -137,7 +139,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                             index: 2,
                             title: l10n.t('pickupFingerprintTitle', '指纹识别'),
                             icon: Icons.fingerprint_rounded,
-                            accentColor: const Color(0xFF8A2364),
+                            accentColor: AppTheme.primaryColor,
                             verified: _verification.fingerprint,
                             width: 295,
                             height: 619,
@@ -156,7 +158,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                                   'pickupFingerprintDone',
                                   '指纹识别已完成',
                                 ),
-                                accentColor: const Color(0xFF8A2364),
+                                accentColor: AppTheme.primaryColor,
                                 compact: true,
                                 showHeader: false,
                                 onConfirm: () => _updateVerification(
@@ -170,7 +172,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                             index: 3,
                             title: l10n.t('pickupNfcTitle', 'NFC识别'),
                             icon: Icons.contactless_rounded,
-                            accentColor: const Color(0xFF8A2364),
+                            accentColor: AppTheme.primaryColor,
                             verified: _verification.nfc,
                             width: 295,
                             height: 619,
@@ -189,7 +191,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                                   'pickupNfcDone',
                                   'NFC识别已完成',
                                 ),
-                                accentColor: const Color(0xFF8A2364),
+                                accentColor: AppTheme.primaryColor,
                                 compact: true,
                                 showHeader: false,
                                 onConfirm: () => _updateVerification(
@@ -209,7 +211,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
           VerificationProgressFooter(
             completedCount: _verifiedCount,
             totalCount: 3,
-            accentColor: const Color(0xFF8A2364),
+            accentColor: AppTheme.primaryColor,
           ),
         ],
       ),
@@ -235,12 +237,15 @@ class _AdminHeader extends StatelessWidget {
       children: [
         IconButton(
           onPressed: onBack,
-          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF17213D)),
+          icon: const Icon(
+            Icons.arrow_back_rounded,
+            color: AppTheme.textPrimaryColor,
+          ),
         ),
         Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF17213D),
+            color: AppTheme.textPrimaryColor,
             fontSize: 18,
             fontWeight: FontWeight.w900,
           ),
@@ -257,7 +262,7 @@ class _AdminDotGridPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0x148A2364);
+    final paint = Paint()..color = AppTheme.primaryColor.withValues(alpha: .08);
     for (double x = 14; x < size.width; x += 28) {
       for (double y = 14; y < size.height; y += 28) {
         canvas.drawCircle(Offset(x, y), 1.2, paint);

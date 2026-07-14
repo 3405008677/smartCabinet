@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -90,7 +92,7 @@ class _OpenCabinetDoorPageState extends State<OpenCabinetDoorPage> {
               Text(
                 l10n.t('pickupSuccessTitle', '取件成功'),
                 style: TextStyle(
-                  color: Color(0xFF111936),
+                  color: AppTheme.textPrimaryColor,
                   fontSize: 34,
                   height: 1,
                   fontWeight: FontWeight.w900,
@@ -101,7 +103,7 @@ class _OpenCabinetDoorPageState extends State<OpenCabinetDoorPage> {
               Text(
                 _pickupData.pickupSuccessSummary,
                 style: TextStyle(
-                  color: Color(0xFF69769E),
+                  color: AppTheme.textSecondaryColor,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -147,7 +149,7 @@ class _OpenCabinetDoorPageState extends State<OpenCabinetDoorPage> {
                       icon: const Icon(Icons.home_outlined, size: 18),
                       label: Text(l10n.t('pickupReturnHome', '返回首页')),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2F64F6),
+                        backgroundColor: AppTheme.primaryColor,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
@@ -168,8 +170,8 @@ class _OpenCabinetDoorPageState extends State<OpenCabinetDoorPage> {
                       icon: const Icon(Icons.lock_outline_rounded, size: 18),
                       label: Text(l10n.t('pickupLockDoor', '锁定柜门')),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF6877A2),
-                        side: const BorderSide(color: Color(0xFFD4DDF3)),
+                        foregroundColor: AppTheme.textSecondaryColor,
+                        side: const BorderSide(color: AppTheme.outlineColor),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -247,7 +249,7 @@ class _DotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     const spacing = 32.0;

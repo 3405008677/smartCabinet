@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -118,7 +120,7 @@ class _CabinetOverviewCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF111936),
+                    color: AppTheme.textPrimaryColor,
                     fontSize: 18,
                     height: 1,
                     fontWeight: FontWeight.w900,
@@ -169,7 +171,7 @@ class _InfoLine extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Color(0xFF8C98B8),
+              color: AppTheme.textSecondaryColor,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -181,7 +183,7 @@ class _InfoLine extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Color(0xFF334166),
+              color: AppTheme.textPrimaryColor,
               fontSize: 12,
               fontWeight: FontWeight.w900,
             ),
@@ -209,7 +211,7 @@ class _FinishedBannerCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [Color(0xFF0F766E), Color(0xFF22C55E)],
+          colors: [AppTheme.primaryColor, AppTheme.primaryLightColor],
         ),
         boxShadow: const [
           BoxShadow(
@@ -423,14 +425,14 @@ class _StorageStatsCard extends StatelessWidget {
             icon: Icons.description_outlined,
             label: l10n.t('cabinetFiles', '柜内文件'),
             value: stats.documentCount,
-            color: const Color(0xFF2F64F6),
+            color: AppTheme.primaryColor,
           ),
           const SizedBox(height: 7),
           _StatRow(
             icon: Icons.view_in_ar_outlined,
             label: l10n.t('usedSlots', '已用格位'),
             value: stats.occupiedSlots,
-            color: const Color(0xFF7C3AED),
+            color: AppTheme.primaryColor,
           ),
           const SizedBox(height: 7),
           _StatRow(
@@ -451,7 +453,7 @@ class _StorageStatsCard extends StatelessWidget {
             icon: Icons.file_download_outlined,
             label: l10n.t('todayPickedUp', '今日取出'),
             value: stats.todayPickedUp,
-            color: const Color(0xFF0891B2),
+            color: AppTheme.primaryColor,
           ),
           const Spacer(),
           Row(
@@ -459,7 +461,7 @@ class _StorageStatsCard extends StatelessWidget {
               Text(
                 l10n.t('occupancyRate', '格位占用率'),
                 style: const TextStyle(
-                  color: Color(0xFF6877A2),
+                  color: AppTheme.textSecondaryColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
@@ -468,7 +470,7 @@ class _StorageStatsCard extends StatelessWidget {
               Text(
                 stats.occupancyRateText,
                 style: const TextStyle(
-                  color: Color(0xFF4664E9),
+                  color: AppTheme.primaryColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                 ),
@@ -483,7 +485,7 @@ class _StorageStatsCard extends StatelessWidget {
               minHeight: 6,
               backgroundColor: const Color(0xFFE6EAF5),
               valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF7C3AED),
+                AppTheme.primaryColor,
               ),
             ),
           ),
@@ -507,12 +509,12 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: const Color(0xFF2F64F6), size: 17),
+        Icon(icon, color: AppTheme.primaryColor, size: 17),
         const SizedBox(width: 8),
         Text(
           text,
           style: const TextStyle(
-            color: Color(0xFF111936),
+            color: AppTheme.textPrimaryColor,
             fontSize: 13,
             fontWeight: FontWeight.w800,
           ),
@@ -563,7 +565,7 @@ class _StatRow extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Color(0xFF6877A2),
+                color: AppTheme.textSecondaryColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -598,7 +600,7 @@ class _AccessEntryCard extends StatelessWidget {
     return HomeDashboardCard(
       width: double.infinity,
       padding: EdgeInsets.zero,
-      borderColor: const Color(0xFF2F64F6),
+      borderColor: AppTheme.primaryColor,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -614,12 +616,12 @@ class _AccessEntryCard extends StatelessWidget {
                       width: 78,
                       height: 78,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF2F64F6).withValues(alpha: .08),
+                        color: AppTheme.primaryColor.withValues(alpha: .08),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Icon(
                         Icons.move_to_inbox_outlined,
-                        color: Color(0xFF2F64F6),
+                        color: AppTheme.primaryColor,
                         size: 42,
                       ),
                     ),
@@ -627,7 +629,7 @@ class _AccessEntryCard extends StatelessWidget {
                     Text(
                       l10n.t('access', '存取件'),
                       style: const TextStyle(
-                        color: Color(0xFF020817),
+                        color: AppTheme.textPrimaryColor,
                         fontSize: 38,
                         height: 1,
                         fontWeight: FontWeight.w900,
@@ -638,7 +640,7 @@ class _AccessEntryCard extends StatelessWidget {
                     const Text(
                       'DEPOSIT & PICKUP',
                       style: TextStyle(
-                        color: Color(0xFF2F64F6),
+                        color: AppTheme.primaryColor,
                         fontSize: 13,
                         height: 1,
                         letterSpacing: 1.3,
@@ -649,7 +651,7 @@ class _AccessEntryCard extends StatelessWidget {
                     Text(
                       l10n.t('accessDescription', '进入存件 / 取件业务入口'),
                       style: const TextStyle(
-                        color: Color(0xFF4C5E8B),
+                        color: AppTheme.textSecondaryColor,
                         fontSize: 15,
                         height: 1,
                         fontWeight: FontWeight.w600,
@@ -660,10 +662,10 @@ class _AccessEntryCard extends StatelessWidget {
                       height: 40,
                       padding: const EdgeInsets.symmetric(horizontal: 22),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF2F64F6).withValues(alpha: .06),
+                        color: AppTheme.primaryColor.withValues(alpha: .06),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: const Color(0xFF2F64F6).withValues(alpha: .16),
+                          color: AppTheme.primaryColor.withValues(alpha: .16),
                         ),
                       ),
                       child: Row(
@@ -672,7 +674,7 @@ class _AccessEntryCard extends StatelessWidget {
                           Text(
                             l10n.t('start', '开始办理'),
                             style: const TextStyle(
-                              color: Color(0xFF2F64F6),
+                              color: AppTheme.primaryColor,
                               fontSize: 14,
                               fontWeight: FontWeight.w800,
                             ),
@@ -680,7 +682,7 @@ class _AccessEntryCard extends StatelessWidget {
                           const SizedBox(width: 7),
                           const Icon(
                             Icons.chevron_right_rounded,
-                            color: Color(0xFF2F64F6),
+                            color: AppTheme.primaryColor,
                             size: 19,
                           ),
                         ],
@@ -708,7 +710,7 @@ class _InspectionCard extends StatelessWidget {
     return HomeDashboardCard(
       width: 132,
       padding: EdgeInsets.zero,
-      borderColor: const Color(0xFF0891B2),
+      borderColor: AppTheme.primaryColor,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -724,12 +726,12 @@ class _InspectionCard extends StatelessWidget {
                   width: 58,
                   height: 58,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0891B2).withValues(alpha: .08),
+                    color: AppTheme.primaryColor.withValues(alpha: .08),
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: const Icon(
                     Icons.fact_check_outlined,
-                    color: Color(0xFF0891B2),
+                    color: AppTheme.primaryColor,
                     size: 32,
                   ),
                 ),
@@ -738,7 +740,7 @@ class _InspectionCard extends StatelessWidget {
                   l10n.t('inspection', '飞检操作'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(0xFF020817),
+                    color: AppTheme.textPrimaryColor,
                     fontSize: 22,
                     height: 1.15,
                     fontWeight: FontWeight.w900,

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -59,7 +61,7 @@ class _VerificationLoadingPageState extends State<VerificationLoadingPage> {
               Text(
                 l10n.t('pickupLoadingTitle', '验证成功，正在获取证据信息···'),
                 style: const TextStyle(
-                  color: Color(0xFF111936),
+                  color: AppTheme.textPrimaryColor,
                   fontSize: 34,
                   height: 1,
                   fontWeight: FontWeight.w900,
@@ -70,7 +72,7 @@ class _VerificationLoadingPageState extends State<VerificationLoadingPage> {
               Text(
                 l10n.t('pickupLoadingSubtitle', '系统正在读取本次取件凭证、人员信息与柜门授权数据'),
                 style: const TextStyle(
-                  color: Color(0xFF69769E),
+                  color: AppTheme.textSecondaryColor,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -85,8 +87,10 @@ class _VerificationLoadingPageState extends State<VerificationLoadingPage> {
                 child: LinearProgressIndicator(
                   minHeight: 6,
                   borderRadius: BorderRadius.all(Radius.circular(999)),
-                  backgroundColor: Color(0xFFE7ECF8),
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2F64F6)),
+                  backgroundColor: AppTheme.primarySoftColor,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    AppTheme.primaryColor,
+                  ),
                 ),
               ),
             ],
@@ -143,7 +147,7 @@ class _DotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     const spacing = 32.0;

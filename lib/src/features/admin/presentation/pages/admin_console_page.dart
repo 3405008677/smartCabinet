@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
@@ -126,7 +128,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFF8F2F6), Color(0xFFF7FAFF)],
+            colors: [AppTheme.primarySoftColor, AppTheme.surfaceColor],
           ),
         ),
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
@@ -171,12 +173,15 @@ class _AdminConsoleHeader extends StatelessWidget {
       children: [
         IconButton(
           onPressed: onBack,
-          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF17213D)),
+          icon: const Icon(
+            Icons.arrow_back_rounded,
+            color: AppTheme.textPrimaryColor,
+          ),
         ),
         Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF17213D),
+            color: AppTheme.textPrimaryColor,
             fontSize: 18,
             fontWeight: FontWeight.w900,
           ),
@@ -415,9 +420,9 @@ class _DeviceStatusTile extends StatelessWidget {
       key: item.key,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFF),
+        color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE4EAF6)),
+        border: Border.all(color: AppTheme.outlineColor),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -427,10 +432,10 @@ class _DeviceStatusTile extends StatelessWidget {
             height: 38,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: const Color(0xFF8A2364).withValues(alpha: .1),
+              color: AppTheme.primaryColor.withValues(alpha: .1),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(item.icon, color: const Color(0xFF8A2364), size: 28),
+            child: Icon(item.icon, color: AppTheme.primaryColor, size: 28),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -443,7 +448,7 @@ class _DeviceStatusTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF6877A2),
+                    color: AppTheme.textSecondaryColor,
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                   ),
@@ -454,7 +459,7 @@ class _DeviceStatusTile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF17213D),
+                    color: AppTheme.textPrimaryColor,
                     fontSize: 12,
                     fontWeight: FontWeight.w900,
                   ),
@@ -671,7 +676,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
       width: 620,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFF),
+        color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
@@ -684,7 +689,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
                 child: Text(
                   '${widget.role.label(context)}预览',
                   style: const TextStyle(
-                    color: Color(0xFF17213D),
+                    color: AppTheme.textPrimaryColor,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
@@ -726,7 +731,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Color(0xFF6877A2),
+              color: AppTheme.textSecondaryColor,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -755,9 +760,9 @@ class _OutsideEnvironmentStreamControls extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFBFE),
+        color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE9D7E7)),
+        border: Border.all(color: AppTheme.primaryBorderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -765,7 +770,7 @@ class _OutsideEnvironmentStreamControls extends StatelessWidget {
           const Text(
             '柜外环境推流由MQTT控制',
             style: TextStyle(
-              color: Color(0xFF17213D),
+              color: AppTheme.textPrimaryColor,
               fontSize: 11,
               fontWeight: FontWeight.w900,
             ),
@@ -776,7 +781,7 @@ class _OutsideEnvironmentStreamControls extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Color(0xFF6877A2),
+              color: AppTheme.textSecondaryColor,
               fontSize: 9,
               fontWeight: FontWeight.w700,
             ),
@@ -786,7 +791,7 @@ class _OutsideEnvironmentStreamControls extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Color(0xFF9B6B87),
+              color: AppTheme.textSecondaryColor,
               fontSize: 8,
               fontWeight: FontWeight.w700,
             ),
@@ -797,7 +802,7 @@ class _OutsideEnvironmentStreamControls extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Color(0xFF9B6B87),
+              color: AppTheme.textSecondaryColor,
               fontSize: 8,
               fontWeight: FontWeight.w700,
             ),
@@ -934,8 +939,8 @@ class _AdminFunctionTile extends StatelessWidget {
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.all(18),
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF17213D),
-        side: const BorderSide(color: Color(0xFFE4EAF6)),
+        foregroundColor: AppTheme.textPrimaryColor,
+        side: const BorderSide(color: AppTheme.outlineColor),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       child: Row(
@@ -945,10 +950,10 @@ class _AdminFunctionTile extends StatelessWidget {
             height: 46,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: const Color(0xFF8A2364).withValues(alpha: .08),
+              color: AppTheme.primaryColor.withValues(alpha: .08),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(item.icon, color: const Color(0xFF8A2364), size: 24),
+            child: Icon(item.icon, color: AppTheme.primaryColor, size: 24),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -961,7 +966,7 @@ class _AdminFunctionTile extends StatelessWidget {
                       .replaceAll('{index}', '$index')
                       .replaceAll('{title}', item.title),
                   style: const TextStyle(
-                    color: Color(0xFF17213D),
+                    color: AppTheme.textPrimaryColor,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
@@ -970,7 +975,7 @@ class _AdminFunctionTile extends StatelessWidget {
                 Text(
                   item.description,
                   style: const TextStyle(
-                    color: Color(0xFF6877A2),
+                    color: AppTheme.textSecondaryColor,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1000,7 +1005,7 @@ class _ConsoleCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: const Color(0xFFE4EAF6)),
+        border: Border.all(color: AppTheme.outlineColor),
         boxShadow: const [
           BoxShadow(
             color: Color(0x18111B3D),
@@ -1041,7 +1046,7 @@ class _PanelTitle extends StatelessWidget {
           height: 48,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: const Color(0xFF8A2364),
+            color: AppTheme.primaryColor,
             borderRadius: BorderRadius.circular(17),
           ),
           child: Icon(icon, color: Colors.white, size: 25),
@@ -1054,7 +1059,7 @@ class _PanelTitle extends StatelessWidget {
               Text(
                 title,
                 style: const TextStyle(
-                  color: Color(0xFF111936),
+                  color: AppTheme.textPrimaryColor,
                   fontSize: 22,
                   height: 1,
                   fontWeight: FontWeight.w900,
@@ -1064,7 +1069,7 @@ class _PanelTitle extends StatelessWidget {
               Text(
                 subtitle,
                 style: const TextStyle(
-                  color: Color(0xFF6877A2),
+                  color: AppTheme.textSecondaryColor,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),

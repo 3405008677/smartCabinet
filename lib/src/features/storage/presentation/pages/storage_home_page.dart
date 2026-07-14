@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -31,7 +33,7 @@ class FoundationHomePage extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFFF2F6FF), Color(0xFFF8FAFF)],
+              colors: [AppTheme.scaffoldBackgroundColor, AppTheme.surfaceColor],
             ),
           ),
           child: const _HomeBody(),
@@ -55,7 +57,7 @@ class _BackToHomeButton extends StatelessWidget {
       icon: const Icon(Icons.arrow_back_rounded, size: 18),
       label: Text(context.l10n.t('foundationBackHome', '返回首页')),
       style: TextButton.styleFrom(
-        foregroundColor: const Color(0xFF4664E9),
+        foregroundColor: AppTheme.primaryColor,
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
       ),
     );
@@ -78,7 +80,7 @@ class _HomeBody extends StatelessWidget {
         Text(
           l10n.t('foundationSelectActionTitle', '请选择操作类型'),
           style: TextStyle(
-            color: Color(0xFF111936),
+            color: AppTheme.textPrimaryColor,
             fontSize: 46,
             height: 1,
             fontWeight: FontWeight.w900,
@@ -89,7 +91,7 @@ class _HomeBody extends StatelessWidget {
         Text(
           l10n.t('foundationSecuritySubtitle', '四重安全认证 · 全程加密保护 · 实名追溯存档'),
           style: TextStyle(
-            color: Color(0xFF69769E),
+            color: AppTheme.textSecondaryColor,
             fontSize: 16,
             height: 1,
             fontWeight: FontWeight.w500,
@@ -108,7 +110,7 @@ class _HomeBody extends StatelessWidget {
               ),
               startText: l10n.t('foundationTapStart', '点击开始 →'),
               icon: const _DocumentActionIcon(
-                color: Color(0xFF4B67EA),
+                color: AppTheme.primaryColor,
                 isUpload: false,
               ),
               onTap: () =>
@@ -124,7 +126,7 @@ class _HomeBody extends StatelessWidget {
               ),
               startText: l10n.t('foundationTapStart', '点击开始 →'),
               icon: const _DocumentActionIcon(
-                color: Color(0xFF5791B6),
+                color: AppTheme.primaryColor,
                 isUpload: true,
               ),
               onTap: () => Navigator.of(
@@ -182,7 +184,7 @@ class _ActionCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE5EBF8)),
+            border: Border.all(color: AppTheme.outlineColor),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x0D1B2E5A),
@@ -199,7 +201,7 @@ class _ActionCard extends StatelessWidget {
               Text(
                 title,
                 style: const TextStyle(
-                  color: Color(0xFF020817),
+                  color: AppTheme.textPrimaryColor,
                   fontSize: 36,
                   height: 1,
                   fontWeight: FontWeight.w900,
@@ -210,7 +212,7 @@ class _ActionCard extends StatelessWidget {
               Text(
                 subtitle,
                 style: const TextStyle(
-                  color: Color(0xFF4664E9),
+                  color: AppTheme.primaryColor,
                   fontSize: 13,
                   height: 1,
                   letterSpacing: 1.2,
@@ -224,7 +226,7 @@ class _ActionCard extends StatelessWidget {
                   description,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(0xFF4C5E8B),
+                    color: AppTheme.textSecondaryColor,
                     fontSize: 15,
                     height: 1.45,
                     fontWeight: FontWeight.w600,
@@ -265,7 +267,7 @@ class _DocumentActionIcon extends StatelessWidget {
       width: 80,
       height: 80,
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F4FA),
+        color: AppTheme.primarySoftColor,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Center(
@@ -333,7 +335,7 @@ class _DotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     const spacing = 32.0;

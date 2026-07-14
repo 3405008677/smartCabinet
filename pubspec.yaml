@@ -62,10 +62,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/images/
-    - assets/icons/
-    - assets/i18n/
-    - assets/原型页面/
+    - assets/images/智能柜启动.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -79,7 +81,7 @@ class _DropoffPersonVerificationPageState
                       l10n.t('dropoffPersonVerificationHeading', '请完成存放人身份认证'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF111936),
+                        color: AppTheme.textPrimaryColor,
                         fontSize: 34,
                         height: 1,
                         fontWeight: FontWeight.w900,
@@ -96,7 +98,7 @@ class _DropoffPersonVerificationPageState
                           .replaceAll('{count}', '$_verifiedCount'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF6877A2),
+                        color: AppTheme.textSecondaryColor,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),
@@ -110,7 +112,7 @@ class _DropoffPersonVerificationPageState
                             index: 1,
                             title: l10n.t('pickupFaceTitle', '人脸识别'),
                             icon: Icons.center_focus_strong_rounded,
-                            accentColor: const Color(0xFF4664E9),
+                            accentColor: AppTheme.primaryColor,
                             verified: _verification.face,
                             width: 295,
                             height: 619,
@@ -132,7 +134,7 @@ class _DropoffPersonVerificationPageState
                             index: 2,
                             title: l10n.t('pickupFingerprintTitle', '指纹识别'),
                             icon: Icons.fingerprint_rounded,
-                            accentColor: const Color(0xFF4664E9),
+                            accentColor: AppTheme.primaryColor,
                             verified: _verification.fingerprint,
                             width: 295,
                             height: 619,
@@ -164,7 +166,7 @@ class _DropoffPersonVerificationPageState
                             index: 3,
                             title: l10n.t('pickupNfcTitle', 'NFC识别'),
                             icon: Icons.contactless_rounded,
-                            accentColor: const Color(0xFF4664E9),
+                            accentColor: AppTheme.primaryColor,
                             verified: _verification.nfc,
                             width: 295,
                             height: 619,
@@ -229,7 +231,7 @@ class _DropoffHeader extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_rounded, size: 18),
           label: Text(context.l10n.t('dropoffBack', '返回')),
           style: TextButton.styleFrom(
-            foregroundColor: const Color(0xFF4664E9),
+            foregroundColor: AppTheme.primaryColor,
             textStyle: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
@@ -240,7 +242,7 @@ class _DropoffHeader extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF111936),
+            color: AppTheme.textPrimaryColor,
             fontSize: 18,
             fontWeight: FontWeight.w900,
           ),
@@ -257,7 +259,7 @@ class _DropoffDotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     const spacing = 32.0;

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 import 'package:smart_cabinet/src/core/device/hardware_recovery_advice.dart';
@@ -481,7 +483,9 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
               height: widget.compact ? 54 : 58,
               padding: const EdgeInsets.fromLTRB(0, 0, 0, 14),
               decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFFE9EEF8))),
+                border: Border(
+                  bottom: BorderSide(color: AppTheme.outlineColor),
+                ),
               ),
               child: Row(
                 children: [
@@ -505,7 +509,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: const Color(0xFF111936),
+                        color: AppTheme.textPrimaryColor,
                         fontSize: headerTitleSize,
                         height: 1,
                         fontWeight: FontWeight.w900,
@@ -545,10 +549,10 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFFF4F7FF),
+                color: AppTheme.primarySoftColor,
                 borderRadius: BorderRadius.circular(14),
                 border: widget.showHeader
-                    ? Border.all(color: const Color(0xFFE0E7FA))
+                    ? Border.all(color: AppTheme.outlineColor)
                     : null,
               ),
               clipBehavior: Clip.antiAlias,
@@ -649,7 +653,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
               onPressed: _canConfirm ? _captureAndVerify : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: effectiveAccentColor,
-                disabledBackgroundColor: const Color(0xFFEAF0FF),
+                disabledBackgroundColor: AppTheme.primarySoftColor,
                 disabledForegroundColor: const Color(0xFF22A857),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(

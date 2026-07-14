@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -89,10 +91,10 @@ class _PersonInfoPanel extends StatelessWidget {
             children: [
               const CircleAvatar(
                 radius: 34,
-                backgroundColor: Color(0xFFEAF0FF),
+                backgroundColor: AppTheme.primarySoftColor,
                 child: Icon(
                   Icons.person_rounded,
-                  color: Color(0xFF2F64F6),
+                  color: AppTheme.primaryColor,
                   size: 38,
                 ),
               ),
@@ -104,7 +106,7 @@ class _PersonInfoPanel extends StatelessWidget {
                     Text(
                       pickupData.personName,
                       style: TextStyle(
-                        color: Color(0xFF111936),
+                        color: AppTheme.textPrimaryColor,
                         fontSize: 24,
                         height: 1,
                         fontWeight: FontWeight.w900,
@@ -170,7 +172,7 @@ class _PersonInfoPanel extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFF4F7FF),
+              color: AppTheme.primarySoftColor,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFDDE6FA)),
             ),
@@ -180,7 +182,7 @@ class _PersonInfoPanel extends StatelessWidget {
                 '身份链路完整，四重认证均已通过。本次取件行为将自动写入审计日志。',
               ),
               style: TextStyle(
-                color: Color(0xFF53658F),
+                color: AppTheme.textSecondaryColor,
                 fontSize: 12,
                 height: 1.45,
                 fontWeight: FontWeight.w600,
@@ -210,7 +212,7 @@ class _DenseInfoRow extends StatelessWidget {
     return Container(
       height: 36,
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFEAF0FA))),
+        border: Border(bottom: BorderSide(color: AppTheme.outlineColor)),
       ),
       child: Row(
         children: [
@@ -233,7 +235,7 @@ class _DenseInfoRow extends StatelessWidget {
               style: TextStyle(
                 color: success
                     ? const Color(0xFF22A857)
-                    : const Color(0xFF233158),
+                    : AppTheme.textPrimaryColor,
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
               ),
@@ -270,12 +272,12 @@ class _DoorInfoPanel extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEAF0FF),
+                  color: AppTheme.primarySoftColor,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Icon(
                   Icons.meeting_room_outlined,
-                  color: Color(0xFF2F64F6),
+                  color: AppTheme.primaryColor,
                   size: 31,
                 ),
               ),
@@ -286,7 +288,7 @@ class _DoorInfoPanel extends StatelessWidget {
                     Text(
                       l10n.t('pickupDoorNoSectionTitle', '柜门信息'),
                       style: TextStyle(
-                        color: Color(0xFF111936),
+                        color: AppTheme.textPrimaryColor,
                         fontSize: 30,
                         height: 1,
                         fontWeight: FontWeight.w900,
@@ -352,9 +354,9 @@ class _DoorInfoPanel extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
-              color: const Color(0xFFF6F8FF),
+              color: AppTheme.scaffoldBackgroundColor,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE0E8FA)),
+              border: Border.all(color: AppTheme.outlineColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,8 +402,8 @@ class _DoorInfoPanel extends StatelessWidget {
                   label: Text(l10n.t('pickupDoorInfoBack', '返回验证')),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 46),
-                    foregroundColor: const Color(0xFF6877A2),
-                    side: const BorderSide(color: Color(0xFFDDE5F7)),
+                    foregroundColor: AppTheme.textSecondaryColor,
+                    side: const BorderSide(color: AppTheme.primaryBorderColor),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -420,7 +422,7 @@ class _DoorInfoPanel extends StatelessWidget {
                   label: Text(l10n.t('pickupDoorInfoOpenDoor', '确认打开柜门')),
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(0, 46),
-                    backgroundColor: const Color(0xFF2F64F6),
+                    backgroundColor: AppTheme.primaryColor,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -456,7 +458,7 @@ class _BigInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = success ? const Color(0xFF22A857) : const Color(0xFF2F64F6);
+    final color = success ? const Color(0xFF22A857) : AppTheme.primaryColor;
     return Container(
       height: 98,
       padding: const EdgeInsets.all(12),
@@ -522,7 +524,7 @@ class _FileInfoLine extends StatelessWidget {
             child: Text(
               value,
               style: const TextStyle(
-                color: Color(0xFF233158),
+                color: AppTheme.textPrimaryColor,
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
               ),
@@ -538,7 +540,7 @@ BoxDecoration _cardDecoration() {
   return BoxDecoration(
     color: Colors.white.withValues(alpha: .96),
     borderRadius: BorderRadius.circular(18),
-    border: Border.all(color: const Color(0xFFE0E8FA)),
+    border: Border.all(color: AppTheme.outlineColor),
     boxShadow: const [
       BoxShadow(color: Color(0x0D1B2E5A), blurRadius: 18, offset: Offset(0, 8)),
     ],
@@ -552,7 +554,7 @@ class _DotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     const spacing = 32.0;

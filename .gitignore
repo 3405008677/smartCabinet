@@ -47,6 +47,7 @@ app.*.map.json
 
 # Local AI assistant/session records
 .openCode/
+.playwright-mcp/
 
 # Local PowerShell analysis cache accidentally created in the project root
 /Microsoft/

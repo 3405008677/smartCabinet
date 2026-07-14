@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
@@ -95,7 +97,7 @@ class _FlightInspectionVerificationPageState
                       l10n.t('inspectionVerificationHeading', '请完成飞检人员身份认证'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF111936),
+                        color: AppTheme.textPrimaryColor,
                         fontSize: 34,
                         height: 1,
                         fontWeight: FontWeight.w900,
@@ -117,7 +119,7 @@ class _FlightInspectionVerificationPageState
                           ),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF6877A2),
+                        color: AppTheme.textSecondaryColor,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),
@@ -132,7 +134,7 @@ class _FlightInspectionVerificationPageState
                           .replaceAll('{count}', '$_verifiedCount'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF0891B2),
+                        color: AppTheme.primaryColor,
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
                       ),
@@ -146,7 +148,7 @@ class _FlightInspectionVerificationPageState
                             index: 1,
                             title: l10n.t('pickupFaceTitle', '人脸识别'),
                             icon: Icons.center_focus_strong_rounded,
-                            accentColor: const Color(0xFF0891B2),
+                            accentColor: AppTheme.primaryColor,
                             verified: _verification.face,
                             width: 295,
                             height: 619,
@@ -154,7 +156,7 @@ class _FlightInspectionVerificationPageState
                               padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
                               child: FaceVerificationCard(
                                 verified: _verification.face,
-                                accentColor: const Color(0xFF0891B2),
+                                accentColor: AppTheme.primaryColor,
                                 allowFallbackWithoutCamera: true,
                                 compact: true,
                                 showHeader: false,
@@ -169,7 +171,7 @@ class _FlightInspectionVerificationPageState
                             index: 2,
                             title: l10n.t('pickupFingerprintTitle', '指纹识别'),
                             icon: Icons.fingerprint_rounded,
-                            accentColor: const Color(0xFF0891B2),
+                            accentColor: AppTheme.primaryColor,
                             verified: _verification.fingerprint,
                             width: 295,
                             height: 619,
@@ -188,7 +190,7 @@ class _FlightInspectionVerificationPageState
                                   'pickupFingerprintDone',
                                   '指纹识别已完成',
                                 ),
-                                accentColor: const Color(0xFF0891B2),
+                                accentColor: AppTheme.primaryColor,
                                 compact: true,
                                 showHeader: false,
                                 onConfirm: () => _updateVerification(
@@ -202,7 +204,7 @@ class _FlightInspectionVerificationPageState
                             index: 3,
                             title: l10n.t('pickupNfcTitle', 'NFC识别'),
                             icon: Icons.contactless_rounded,
-                            accentColor: const Color(0xFF0891B2),
+                            accentColor: AppTheme.primaryColor,
                             verified: _verification.nfc,
                             width: 295,
                             height: 619,
@@ -221,7 +223,7 @@ class _FlightInspectionVerificationPageState
                                   'pickupNfcDone',
                                   'NFC识别已完成',
                                 ),
-                                accentColor: const Color(0xFF0891B2),
+                                accentColor: AppTheme.primaryColor,
                                 compact: true,
                                 showHeader: false,
                                 onConfirm: () => _updateVerification(
@@ -241,7 +243,7 @@ class _FlightInspectionVerificationPageState
           VerificationProgressFooter(
             completedCount: _verifiedCount,
             totalCount: 3,
-            accentColor: const Color(0xFF0891B2),
+            accentColor: AppTheme.primaryColor,
           ),
         ],
       ),
@@ -269,7 +271,7 @@ class _InspectionHeader extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_rounded, size: 18),
           label: Text(context.l10n.t('inspectionBack', '返回')),
           style: TextButton.styleFrom(
-            foregroundColor: const Color(0xFF0891B2),
+            foregroundColor: AppTheme.primaryColor,
             textStyle: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
@@ -280,7 +282,7 @@ class _InspectionHeader extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF111936),
+            color: AppTheme.textPrimaryColor,
             fontSize: 18,
             fontWeight: FontWeight.w900,
           ),
@@ -298,7 +300,7 @@ class _InspectionDotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF0891B2).withValues(alpha: .06)
+      ..color = AppTheme.primaryColor.withValues(alpha: .06)
       ..style = PaintingStyle.fill;
     for (double x = 18; x < size.width; x += 28) {
       for (double y = 18; y < size.height; y += 28) {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+
 // Home 页面内部共享视觉组件。
 //
 // 这些组件目前只服务 Home 页面：基础卡片、柜体预览和背景点阵等。
@@ -38,7 +40,7 @@ class HomeDashboardCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: .96),
         borderRadius: radius,
-        border: Border.all(color: const Color(0xFFE5EBF8)),
+        border: Border.all(color: AppTheme.outlineColor),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0D1B2E5A),
@@ -78,7 +80,7 @@ class HomeCabinetModelViewer extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFEAF2FF), Color(0xFFF8FBFF)],
+            colors: [AppTheme.scaffoldBackgroundColor, AppTheme.surfaceColor],
           ),
         ),
         child: CustomPaint(
@@ -155,7 +157,7 @@ class _CabinetPreviewPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFF8FBFF), Color(0xFFD8E4F8)],
+          colors: [AppTheme.surfaceColor, Color(0xFFD8E4F8)],
         ).createShader(bodyRect),
     );
 
@@ -230,7 +232,7 @@ class _CabinetPreviewPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [Color(0xFF2563EB), Color(0xFF22C55E)],
+          colors: [AppTheme.primaryColor, AppTheme.primaryLightColor],
         ).createShader(screenRect),
     );
     canvas.drawCircle(
@@ -257,12 +259,12 @@ class _CabinetPreviewPainter extends CustomPainter {
     canvas.drawCircle(
       Offset(size.width * .83, size.height * .24),
       4.4,
-      Paint()..color = const Color(0x3322C55E),
+      Paint()..color = AppTheme.primaryLightColor.withValues(alpha: .2),
     );
     canvas.drawCircle(
       Offset(size.width * .83, size.height * .24),
       2.4,
-      Paint()..color = const Color(0xFF22C55E),
+      Paint()..color = AppTheme.primaryLightColor,
     );
   }
 
@@ -277,7 +279,7 @@ class HomeDotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFD8E1F4)
+      ..color = AppTheme.outlineColor
       ..style = PaintingStyle.fill;
 
     const spacing = 32.0;
