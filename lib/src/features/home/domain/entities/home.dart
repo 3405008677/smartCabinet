@@ -59,43 +59,6 @@ class HomeStats {
   }
 }
 
-/// 首页底部状态摘要模型。
-class HomeFooter {
-  /// 创建首页底部状态摘要模型。
-  const HomeFooter({
-    required this.statusSummary,
-    required this.doorStatus,
-    required this.slotSummary,
-  });
-
-  /// 柜体在线摘要。
-  final String statusSummary;
-
-  /// 柜门状态摘要。
-  final String doorStatus;
-
-  /// 格位摘要。
-  final String slotSummary;
-
-  /// 从接口数据创建模型。
-  factory HomeFooter.fromMap(Map<String, Object> map) {
-    return HomeFooter(
-      statusSummary: map['statusSummary'] as String,
-      doorStatus: map['doorStatus'] as String,
-      slotSummary: map['slotSummary'] as String,
-    );
-  }
-
-  /// 转为 JSON 结构。
-  Map<String, Object> toJson() {
-    return {
-      'statusSummary': statusSummary,
-      'doorStatus': doorStatus,
-      'slotSummary': slotSummary,
-    };
-  }
-}
-
 /// 首页展示模型。
 class HomeData {
   /// 创建首页展示模型。
@@ -105,7 +68,6 @@ class HomeData {
     required this.status,
     required this.headline,
     required this.stats,
-    required this.footer,
   });
 
   /// 页面首帧兜底展示数据。
@@ -123,11 +85,6 @@ class HomeData {
         'todayPickedUp': '2 份',
         'occupancyRateText': '50%',
         'occupancyRateValue': 0.5,
-      },
-      'footer': {
-        'statusSummary': 'CAB-A01 · 在线',
-        'doorStatus': '柜门已锁定',
-        'slotSummary': '格位 A·B 区 · 共 12 个',
       },
     });
   }
@@ -147,9 +104,6 @@ class HomeData {
   /// 首页统计数据。
   final HomeStats stats;
 
-  /// 首页底部摘要。
-  final HomeFooter footer;
-
   /// 从接口数据创建模型。
   factory HomeData.fromMap(Map<String, Object> map) {
     return HomeData(
@@ -158,7 +112,6 @@ class HomeData {
       status: map['status'] as String,
       headline: map['headline'] as String,
       stats: HomeStats.fromMap(map['stats'] as Map<String, Object>),
-      footer: HomeFooter.fromMap(map['footer'] as Map<String, Object>),
     );
   }
 
@@ -170,7 +123,6 @@ class HomeData {
       'status': status,
       'headline': headline,
       'stats': stats.toJson(),
-      'footer': footer.toJson(),
     };
   }
 }

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
+import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
@@ -59,18 +60,22 @@ class DualMediaCodecH265Stream(
     private val streamGeneration = AtomicLong(0L)
     var currentCameraId: String? = null
         private set
+    @Volatile
+    var startFailureReason: String? = null
+        private set
 
     fun start(cameraId: String, requests: List<StreamRequest>): Boolean {
+        startFailureReason = null
         if (streaming.get()) {
             statusListener("RKMPP H265 推流中")
             return true
         }
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            statusListener("缺少摄像头权限")
+            reportStartFailure("RKMPP H265 启动失败：缺少摄像头权限")
             return false
         }
         if (requests.isEmpty()) {
-            statusListener("RKMPP H265 至少需要一个 profile")
+            reportStartFailure("RKMPP H265 启动失败：至少需要一个 profile")
             return false
         }
 
@@ -80,7 +85,7 @@ class DualMediaCodecH265Stream(
             currentCameraId = cameraId
             statusListener("正在初始化 RKMPP H265：profiles=${requests.joinToString(",") { request -> request.profile }}，${bridge.rkMppStatus()}")
             if (!bridge.initialize(context)) {
-                statusListener("RKMPP 依赖库初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
+                reportStartFailure("RKMPP H265 启动失败：依赖库初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
                 currentCameraId = null
                 return false
             }
@@ -95,7 +100,12 @@ class DualMediaCodecH265Stream(
             true
         }.getOrElse { error ->
             Log.e(TAG, "RKMPP H265 stream start failed", error)
-            statusListener("RKMPP H265 启动失败：${error.message ?: error::class.java.simpleName}")
+            val detail = when (error) {
+                is CameraAccessException, is IllegalArgumentException, is SecurityException ->
+                    describeCameraAccessFailure(cameraId, error)
+                else -> error.message ?: error::class.java.simpleName
+            }
+            reportStartFailure("RKMPP H265 启动失败：$detail")
             stop()
             false
         }
@@ -189,7 +199,12 @@ class DualMediaCodecH265Stream(
                         createCaptureSession(camera, generation, activeLanes)
                     }.onFailure { error ->
                         if (isGenerationActive(generation)) {
-                            stopAfterRuntimeFailure("RKMPP H265 摄像头启动失败：${error.message ?: error::class.java.simpleName}", error)
+                            val detail = when (error) {
+                                is CameraAccessException, is IllegalArgumentException, is SecurityException ->
+                                    describeCameraAccessFailure(cameraId, error)
+                                else -> error.message ?: error::class.java.simpleName
+                            }
+                            stopAfterRuntimeFailure("RKMPP H265 推流失败：摄像头启动失败：$detail", error)
                         } else {
                             camera.close()
                         }
@@ -202,7 +217,7 @@ class DualMediaCodecH265Stream(
                         cameraDevice = null
                     }
                     if (isGenerationActive(generation)) {
-                        stopAfterRuntimeFailure("RKMPP H265 摄像头断开")
+                        stopAfterRuntimeFailure("RKMPP H265 推流失败：${describeCameraDisconnected(cameraId)}")
                     }
                 }
 
@@ -212,7 +227,7 @@ class DualMediaCodecH265Stream(
                         cameraDevice = null
                     }
                     if (isGenerationActive(generation)) {
-                        stopAfterRuntimeFailure("RKMPP H265 摄像头错误：$error")
+                        stopAfterRuntimeFailure("RKMPP H265 推流失败：[${cameraDeviceFailureCode(error)}] ${describeCameraDeviceFailure(cameraId, error)}")
                     }
                 }
             },
@@ -256,7 +271,7 @@ class DualMediaCodecH265Stream(
                     }.onFailure { error ->
                         session.close()
                         if (isGenerationActive(generation)) {
-                            stopAfterRuntimeFailure("RKMPP H265 摄像头会话启动失败：${error.message ?: error::class.java.simpleName}", error)
+                            stopAfterRuntimeFailure("RKMPP H265 推流失败：摄像头会话启动失败：${error.message ?: error::class.java.simpleName}", error)
                         }
                     }
                 }
@@ -264,7 +279,7 @@ class DualMediaCodecH265Stream(
                 override fun onConfigureFailed(session: CameraCaptureSession) {
                     session.close()
                     if (isGenerationActive(generation)) {
-                        stopAfterRuntimeFailure("RKMPP H265 摄像头会话配置失败")
+                        stopAfterRuntimeFailure("RKMPP H265 推流失败：摄像头会话配置失败")
                     }
                 }
             },
@@ -334,7 +349,14 @@ class DualMediaCodecH265Stream(
         if (!nextPublisher.canStart(codecConfig)) {
             return false
         }
-        nextPublisher.start(lane.request.url, codecConfig)
+        try {
+            nextPublisher.start(lane.request.url, codecConfig)
+        } catch (error: Throwable) {
+            throw IllegalStateException(
+                "RTSP 启动失败：${error.message ?: error::class.java.simpleName}",
+                error,
+            )
+        }
         if (!isGenerationActive(generation)) {
             nextPublisher.stop()
             return false
@@ -442,6 +464,13 @@ class DualMediaCodecH265Stream(
 
     private fun isGenerationActive(generation: Long): Boolean {
         return streaming.get() && streamGeneration.get() == generation
+    }
+
+    private fun reportStartFailure(status: String) {
+        if (startFailureReason.isNullOrBlank()) {
+            startFailureReason = status
+        }
+        statusListener(status)
     }
 
     private fun shouldReportProgress(frameCount: Int): Boolean {

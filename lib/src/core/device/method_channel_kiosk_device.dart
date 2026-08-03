@@ -60,4 +60,13 @@ class MethodChannelKioskDevice implements KioskDevice {
       'profiles': profiles ?? const <String>[],
     });
   }
+
+  @override
+  Future<List<String>> retryCameraStream(CabinetCameraRole role) async {
+    final profiles = await _channel.invokeListMethod<String>(
+      'retryCameraStream',
+      {'role': role.name},
+    );
+    return List<String>.unmodifiable(profiles ?? const <String>[]);
+  }
 }

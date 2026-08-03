@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 
 import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
+
 import 'package:smart_cabinet/src/app/shell/app_shell.dart';
 import 'package:smart_cabinet/src/features/home/data/repositories/home_repository_impl.dart';
 import 'package:smart_cabinet/src/features/home/domain/entities/home.dart';
 import 'package:smart_cabinet/src/features/home/presentation/widgets/home_dashboard.dart';
 import 'package:smart_cabinet/src/features/home/presentation/widgets/home_widgets.dart';
 import 'package:smart_cabinet/src/features/home/presentation/widgets/settings_dialog.dart';
+import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_identity_navigation.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/operator_login_coordinator.dart';
 
 /// 智能柜新首页。
 ///
-/// 下方展示统计、存取件入口和飞检操作。
+/// 下方展示柜体统计、背景展示区以及人脸和账号登录入口。
 class SmartCabinetHomePage extends StatefulWidget {
   /// 创建智能柜新首页。
   const SmartCabinetHomePage({super.key});
@@ -64,6 +68,19 @@ class _SmartCabinetHomePageState extends State<SmartCabinetHomePage> {
     showSettingsDialog(context);
   }
 
+  /// 从首页进入人脸、指纹、NFC 三项认证流程。
+  void _handleFaceLogin() {
+    Navigator.of(context).pushNamed(
+      AppRoutes.operatorVerification,
+      arguments: const OperatorVerificationArguments(),
+    );
+  }
+
+  /// 打开操作员账号登录，并按本机身份资料状态继续认证或录入流程。
+  Future<void> _handleAccountLogin() async {
+    await coordinateOperatorAccountLogin(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     return TerminalShell(
@@ -82,6 +99,8 @@ class _SmartCabinetHomePageState extends State<SmartCabinetHomePage> {
           child: HomeDashboard(
             homeData: _homeData,
             onCabinetModelTap: _handleVersionTap,
+            onFaceLogin: _handleFaceLogin,
+            onAccountLogin: _handleAccountLogin,
           ),
         ),
       ),

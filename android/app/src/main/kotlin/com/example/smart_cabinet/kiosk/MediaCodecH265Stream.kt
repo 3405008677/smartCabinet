@@ -3,6 +3,7 @@ package com.example.smart_cabinet.kiosk
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
@@ -45,14 +46,18 @@ class MediaCodecH265Stream(
     private val streamGeneration = AtomicLong(0L)
     override var currentCameraId: String? = null
         private set
+    @Volatile
+    override var startFailureReason: String? = null
+        private set
 
     override fun start(cameraId: String, url: String, width: Int, height: Int, fps: Int, bitrate: Int, iframeInterval: Int): Boolean {
+        startFailureReason = null
         if (streaming.get()) {
             statusListener("MediaCodec H265 推流中")
             return true
         }
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            statusListener("缺少摄像头权限")
+            reportStartFailure("MediaCodec H265 启动失败：缺少摄像头权限")
             return false
         }
 
@@ -61,7 +66,7 @@ class MediaCodecH265Stream(
             stopping.set(false)
             val codecName = findHevcEncoderName()
             if (codecName.isNullOrBlank()) {
-                statusListener("MediaCodec H265 初始化失败：设备无 HEVC 编码器")
+                reportStartFailure("MediaCodec H265 初始化失败：设备无 HEVC 编码器")
                 return false
             }
             currentCameraId = cameraId
@@ -82,7 +87,12 @@ class MediaCodecH265Stream(
             true
         }.getOrElse { error ->
             Log.e(TAG, "MediaCodec H265 stream start failed", error)
-            statusListener("MediaCodec H265 启动失败：${error.message ?: error::class.java.simpleName}")
+            val detail = when (error) {
+                is CameraAccessException, is IllegalArgumentException, is SecurityException ->
+                    describeCameraAccessFailure(cameraId, error)
+                else -> error.message ?: error::class.java.simpleName
+            }
+            reportStartFailure("MediaCodec H265 启动失败：$detail")
             stop()
             false
         }
@@ -186,7 +196,7 @@ class MediaCodecH265Stream(
                         camera.close()
                         if (isGenerationActive(generation)) {
                             stopAfterRuntimeFailure(
-                                "MediaCodec H265 摄像头启动失败：${error.message ?: error::class.java.simpleName}",
+                                "MediaCodec H265 推流失败：摄像头启动失败：${error.message ?: error::class.java.simpleName}",
                                 error,
                             )
                         }
@@ -201,7 +211,7 @@ class MediaCodecH265Stream(
                     if (cameraDevice === camera) {
                         cameraDevice = null
                     }
-                    stopAfterRuntimeFailure("MediaCodec H265 摄像头断开")
+                    stopAfterRuntimeFailure("MediaCodec H265 推流失败：${describeCameraDisconnected(cameraId)}")
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
@@ -212,7 +222,7 @@ class MediaCodecH265Stream(
                     if (cameraDevice === camera) {
                         cameraDevice = null
                     }
-                    stopAfterRuntimeFailure("MediaCodec H265 摄像头错误：$error")
+                    stopAfterRuntimeFailure("MediaCodec H265 推流失败：[${cameraDeviceFailureCode(error)}] ${describeCameraDeviceFailure(cameraId, error)}")
                 }
             },
             workerHandler,
@@ -251,7 +261,7 @@ class MediaCodecH265Stream(
                         session.close()
                         if (isGenerationActive(generation)) {
                             stopAfterRuntimeFailure(
-                                "MediaCodec H265 摄像头会话启动失败：${error.message ?: error::class.java.simpleName}",
+                                "MediaCodec H265 推流失败：摄像头会话启动失败：${error.message ?: error::class.java.simpleName}",
                                 error,
                             )
                         }
@@ -263,7 +273,7 @@ class MediaCodecH265Stream(
                     if (!isGenerationActive(generation)) {
                         return
                     }
-                    stopAfterRuntimeFailure("MediaCodec H265 摄像头会话配置失败")
+                    stopAfterRuntimeFailure("MediaCodec H265 推流失败：摄像头会话配置失败")
                 }
             },
             workerHandler,
@@ -370,7 +380,14 @@ class MediaCodecH265Stream(
         if (!nextPublisher.canStart(codecConfig)) {
             return false
         }
-        nextPublisher.start(rtspUrl, codecConfig)
+        try {
+            nextPublisher.start(rtspUrl, codecConfig)
+        } catch (error: Throwable) {
+            throw IllegalStateException(
+                "RTSP 启动失败：${error.message ?: error::class.java.simpleName}",
+                error,
+            )
+        }
         if (!isGenerationActive(generation)) {
             nextPublisher.stop()
             return false
@@ -425,6 +442,13 @@ class MediaCodecH265Stream(
 
     private fun isGenerationActive(generation: Long): Boolean {
         return streaming.get() && streamGeneration.get() == generation
+    }
+
+    private fun reportStartFailure(status: String) {
+        if (startFailureReason.isNullOrBlank()) {
+            startFailureReason = status
+        }
+        statusListener(status)
     }
 
     private fun shouldReportProgress(frameCount: Int): Boolean {

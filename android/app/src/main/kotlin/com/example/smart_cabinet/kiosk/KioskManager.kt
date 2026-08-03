@@ -6,6 +6,9 @@ import android.app.admin.DevicePolicyManager
 import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.content.ComponentName
+import android.graphics.ImageFormat
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
@@ -52,7 +55,35 @@ class KioskManager(private val activity: Activity) {
     @Volatile
     private var operationAreaStreamStatus: String = "未启动"
 
+    @Volatile
+    private var outsideEnvironmentLastErrorCode: String = ""
+
+    @Volatile
+    private var outsideEnvironmentLastErrorMessage: String = ""
+
+    @Volatile
+    private var outsideEnvironmentFailureStage: String = ""
+
+    @Volatile
+    private var operationAreaLastErrorCode: String = ""
+
+    @Volatile
+    private var operationAreaLastErrorMessage: String = ""
+
+    @Volatile
+    private var operationAreaFailureStage: String = ""
+
+    @Volatile
+    private var outsideEnvironmentFailureClearLocked: Boolean = false
+
+    @Volatile
+    private var operationAreaFailureClearLocked: Boolean = false
+
+    @Volatile
     private var activeOutsideEnvironmentProfiles: List<StreamProfile> = emptyList()
+
+    @Volatile
+    private var confirmedOutsideEnvironmentProfiles: Set<String> = emptySet()
 
     private var enabledOutsideEnvironmentProfiles: Set<String> = emptySet()
 
@@ -261,16 +292,49 @@ class KioskManager(private val activity: Activity) {
     }
 
     fun startCameraStream(role: String, profiles: List<String>) {
+        require(role == ROLE_OUTSIDE_ENVIRONMENT || role == ROLE_OPERATION_AREA) {
+            "unsupported camera stream role: $role"
+        }
         when (role) {
             ROLE_OUTSIDE_ENVIRONMENT -> {
                 val cameraId = OUTSIDE_ENVIRONMENT_CAMERA_ID
                 val requestedProfiles = profiles.mapNotNull(::findStreamProfile)
                 require(requestedProfiles.isNotEmpty()) { "no supported stream profiles requested" }
                 if (isOutsideEnvironmentStreamAlreadyActive(cameraId, requestedProfiles)) {
+                    outsideEnvironmentFailureClearLocked = false
+                    clearStreamFailure(ROLE_OUTSIDE_ENVIRONMENT)
+                    reconnectAttempts = 0
+                    outsideEnvironmentStreamStatus =
+                        "${activeOutsideEnvironmentProfiles.joinToString(",") { profile -> profile.name }} 推流中"
                     Log.i(TAG, "start camera stream skipped, already active, role=$role, profiles=${requestedProfiles.map { it.name }}, cameraId=$cameraId")
                     appendOutsideEnvironmentLog("start skipped, already active, cameraId=$cameraId, profiles=${requestedProfiles.joinToString(",") { it.name }}")
                     return
                 }
+
+                outsideEnvironmentFailureClearLocked = true
+                clearStreamFailure(ROLE_OUTSIDE_ENVIRONMENT)
+                val effectiveProfileNames = enabledOutsideEnvironmentProfiles +
+                    requestedProfiles.map { profile -> profile.name }
+                val profilesToValidate = STREAM_PROFILES.filter { profile ->
+                    effectiveProfileNames.contains(profile.name)
+                }
+                val preflight = validateConfiguredCameraForStart(role, profilesToValidate)
+                if (!preflight.allowed) {
+                    recordStreamFailure(
+                        role = ROLE_OUTSIDE_ENVIRONMENT,
+                        code = preflight.errorCode,
+                        message = preflight.failureStatus,
+                        stage = FAILURE_STAGE_CAMERA_PREFLIGHT,
+                        replaceExisting = true,
+                    )
+                }
+                if (!preflight.allowed && !preflight.recoverable) {
+                    abandonOutsideEnvironmentDesiredProfilesAfterTerminalFailure(
+                        reason = preflight.failureStatus,
+                    )
+                    return
+                }
+
                 outsideEnvironmentCameraId = cameraId
                 enabledOutsideEnvironmentProfiles = enabledOutsideEnvironmentProfiles + requestedProfiles.map { profile -> profile.name }
                 outsideEnvironmentDesired = enabledOutsideEnvironmentProfiles.isNotEmpty()
@@ -278,21 +342,69 @@ class KioskManager(private val activity: Activity) {
                 val epoch = outsideEnvironmentStreamEpoch
                 cancelOutsideEnvironmentReconnect()
                 reconnectAttempts = 0
+                outsideEnvironmentFailureClearLocked = false
+                if (!preflight.allowed) {
+                    val expectedStream = outsideEnvironmentStream
+                    runCatching { expectedStream?.stop() }
+                        .onFailure { error -> appendOutsideEnvironmentLog("preflight retry stop failed, epoch=$epoch", error) }
+                    activeOutsideEnvironmentProfiles = emptyList()
+                    scheduleOutsideEnvironmentReconnect(
+                        cameraId = cameraId,
+                        epoch = epoch,
+                        expectedStream = expectedStream,
+                        reason = preflight.failureStatus,
+                    )
+                    return
+                }
                 Log.i(TAG, "start camera stream by role, role=$role, profiles=${requestedProfiles.map { it.name }}, cameraId=$cameraId, epoch=$epoch")
                 startOutsideEnvironmentStream(cameraId, epoch)
             }
             ROLE_OPERATION_AREA -> {
                 val cameraId = OPERATION_AREA_CAMERA_ID
                 require(cameraId.isNotBlank()) { "operation area camera is not configured" }
-                if (operationAreaDesired && operationAreaStream?.isStreaming() == true && operationAreaStream?.currentCameraId == cameraId) {
+                if (operationAreaDesired && operationAreaStream?.isStreaming() == true && operationAreaStream?.currentCameraId == cameraId && streamStateName(operationAreaStreamStatus) == STREAM_STATE_STREAMING) {
+                    operationAreaFailureClearLocked = false
+                    clearStreamFailure(ROLE_OPERATION_AREA)
+                    operationReconnectAttempts = 0
+                    operationAreaStreamStatus = "推流中"
                     return
                 }
+
+                operationAreaFailureClearLocked = true
+                clearStreamFailure(ROLE_OPERATION_AREA)
+                val preflight = validateConfiguredCameraForStart(role, listOf(DEFAULT_STREAM_PROFILE))
+                if (!preflight.allowed) {
+                    recordStreamFailure(
+                        role = ROLE_OPERATION_AREA,
+                        code = preflight.errorCode,
+                        message = preflight.failureStatus,
+                        stage = FAILURE_STAGE_CAMERA_PREFLIGHT,
+                        replaceExisting = true,
+                    )
+                }
+                if (!preflight.allowed && !preflight.recoverable) {
+                    return
+                }
+
                 operationAreaCameraId = cameraId
                 operationAreaDesired = true
                 operationAreaStreamEpoch += 1
                 val epoch = operationAreaStreamEpoch
                 cancelOperationAreaReconnect()
                 operationReconnectAttempts = 0
+                operationAreaFailureClearLocked = false
+                if (!preflight.allowed) {
+                    val expectedStream = operationAreaStream
+                    runCatching { expectedStream?.stop() }
+                        .onFailure { error -> appendOutsideEnvironmentLog("role=operationArea preflight retry stop failed, epoch=$epoch", error) }
+                    scheduleOperationAreaReconnect(
+                        cameraId = cameraId,
+                        epoch = epoch,
+                        expectedStream = expectedStream,
+                        reason = preflight.failureStatus,
+                    )
+                    return
+                }
                 startOperationAreaStream(cameraId, epoch)
             }
             else -> throw IllegalArgumentException("unsupported camera stream role: $role")
@@ -302,6 +414,8 @@ class KioskManager(private val activity: Activity) {
     fun stopCameraStream(role: String, profiles: List<String>) {
         when (role) {
             ROLE_OUTSIDE_ENVIRONMENT -> {
+                outsideEnvironmentFailureClearLocked = false
+                clearStreamFailure(ROLE_OUTSIDE_ENVIRONMENT)
                 val cameraId = OUTSIDE_ENVIRONMENT_CAMERA_ID
                 outsideEnvironmentCameraId = cameraId
                 val requestedProfiles = if (profiles.isEmpty()) {
@@ -326,6 +440,8 @@ class KioskManager(private val activity: Activity) {
                 startOutsideEnvironmentStream(cameraId, epoch)
             }
             ROLE_OPERATION_AREA -> {
+                operationAreaFailureClearLocked = false
+                clearStreamFailure(ROLE_OPERATION_AREA)
                 operationAreaDesired = false
                 operationAreaStreamEpoch += 1
                 cancelOperationAreaReconnect()
@@ -337,20 +453,56 @@ class KioskManager(private val activity: Activity) {
         }
     }
 
+    fun retryCameraStream(role: String): List<String> {
+        val profiles = when (role) {
+            ROLE_OUTSIDE_ENVIRONMENT -> STREAM_PROFILES
+                .filter { profile -> enabledOutsideEnvironmentProfiles.contains(profile.name) }
+                .map { profile -> profile.name }
+            ROLE_OPERATION_AREA -> if (operationAreaDesired) {
+                listOf(DEFAULT_STREAM_PROFILE.name)
+            } else {
+                emptyList()
+            }
+            else -> throw IllegalArgumentException("unsupported camera stream role: $role")
+        }
+        require(profiles.isNotEmpty()) { "no enabled stream profiles to retry for role: $role" }
+
+        // Keep the desired-profile snapshot, stop, and restart in one platform call.
+        // MQTT commands are delivered on the same main thread, so they cannot interleave
+        // and reintroduce an obsolete profile between these two operations.
+        stopCameraStream(role, profiles)
+        startCameraStream(role, profiles)
+        return profiles
+    }
+
     fun readOutsideEnvironmentStreamStatus(): Map<String, String> {
+        val activeProfileNames = activeOutsideEnvironmentProfiles.map { profile -> profile.name }.toSet()
+        val allProfilesStreaming = activeProfileNames.isNotEmpty() &&
+            confirmedOutsideEnvironmentProfiles.containsAll(activeProfileNames)
+        val reportedState = streamStateName(outsideEnvironmentStreamStatus)
+        val state = if (reportedState == STREAM_STATE_STREAMING && !allProfilesStreaming) {
+            STREAM_STATE_STARTING
+        } else {
+            reportedState
+        }
         return linkedMapOf(
             "status" to outsideEnvironmentStreamStatus,
-            "state" to streamStateName(outsideEnvironmentStreamStatus),
+            "state" to state,
             "role" to ROLE_OUTSIDE_ENVIRONMENT,
-            "recoverable" to outsideEnvironmentStreamStatus.isRecoverableStreamFailure().toString(),
+            "recoverable" to isStreamFailureRecoverable(outsideEnvironmentStreamStatus, outsideEnvironmentLastErrorCode).toString(),
             "reconnectAttempts" to reconnectAttempts.toString(),
             "url" to activeOutsideEnvironmentProfiles.joinToString(",") { profile -> buildOutsideEnvironmentRtspUrl(profile) },
             "cameraId" to outsideEnvironmentCameraId,
             "profile" to activeOutsideEnvironmentProfiles.joinToString(",") { profile -> profile.name },
             "enabledProfiles" to enabledOutsideEnvironmentProfiles.joinToString(","),
+            "streamingProfiles" to confirmedOutsideEnvironmentProfiles.joinToString(","),
+            "allProfilesStreaming" to allProfilesStreaming.toString(),
             "streamMode" to if (activeOutsideEnvironmentProfiles.size > 1) OUTSIDE_ENVIRONMENT_STREAM_MODE else "profile_active",
             "logFile" to outsideEnvironmentLogFile().absolutePath,
             "downloadsLogFile" to DOWNLOADS_LOG_PATH,
+            "lastErrorCode" to outsideEnvironmentLastErrorCode,
+            "lastErrorMessage" to outsideEnvironmentLastErrorMessage,
+            "failureStage" to outsideEnvironmentFailureStage,
         )
     }
 
@@ -364,16 +516,65 @@ class KioskManager(private val activity: Activity) {
                 "reconnectAttempts" to operationReconnectAttempts.toString(),
                 "url" to "",
                 "cameraId" to "",
+                "profile" to "",
+                "enabledProfiles" to "",
+                "streamingProfiles" to "",
+                "allProfilesStreaming" to "false",
+                "lastErrorCode" to operationAreaLastErrorCode,
+                "lastErrorMessage" to operationAreaLastErrorMessage,
+                "failureStage" to operationAreaFailureStage,
             )
         }
+        val allProfilesStreaming = operationAreaDesired &&
+            operationAreaStream?.isStreaming() == true &&
+            streamStateName(operationAreaStreamStatus) == STREAM_STATE_STREAMING
         return linkedMapOf(
             "status" to operationAreaStreamStatus,
             "state" to streamStateName(operationAreaStreamStatus),
             "role" to ROLE_OPERATION_AREA,
-            "recoverable" to operationAreaStreamStatus.isRecoverableStreamFailure().toString(),
+            "recoverable" to isStreamFailureRecoverable(operationAreaStreamStatus, operationAreaLastErrorCode).toString(),
             "reconnectAttempts" to operationReconnectAttempts.toString(),
             "url" to buildOperationAreaRtspUrl(),
             "cameraId" to operationAreaCameraId,
+            "profile" to if (operationAreaDesired) DEFAULT_STREAM_PROFILE.name else "",
+            "enabledProfiles" to if (operationAreaDesired) DEFAULT_STREAM_PROFILE.name else "",
+            "streamingProfiles" to if (allProfilesStreaming) DEFAULT_STREAM_PROFILE.name else "",
+            "allProfilesStreaming" to allProfilesStreaming.toString(),
+            "lastErrorCode" to operationAreaLastErrorCode,
+            "lastErrorMessage" to operationAreaLastErrorMessage,
+            "failureStage" to operationAreaFailureStage,
+        )
+    }
+
+    fun readCameraStreamCapability(role: String): Map<String, Any?> {
+        val snapshot = probeCameraCapability(role)
+        val supportedSizeKeys = snapshot.yuvSupportedSizes
+            .mapTo(mutableSetOf()) { size -> "${size.width}x${size.height}" }
+        val compatibilityKnown = snapshot.available &&
+            (snapshot.errorCode.isBlank() || snapshot.errorCode == "YUV_OUTPUT_UNAVAILABLE")
+        val configuredProfiles = configuredProfilesForRole(role).map { profile ->
+            linkedMapOf<String, Any?>(
+                "name" to profile.name,
+                "width" to profile.width,
+                "height" to profile.height,
+                "compatible" to if (compatibilityKnown) {
+                    supportedSizeKeys.contains("${profile.width}x${profile.height}")
+                } else {
+                    null
+                },
+            )
+        }
+        return linkedMapOf(
+            "role" to role,
+            "configuredCameraId" to snapshot.configuredCameraId,
+            "availableCameraIds" to snapshot.availableCameraIds,
+            "available" to snapshot.available,
+            "supportedYuvSizes" to snapshot.yuvSupportedSizes.map { size ->
+                linkedMapOf<String, Any>("width" to size.width, "height" to size.height)
+            },
+            "configuredProfiles" to configuredProfiles,
+            "errorCode" to snapshot.errorCode,
+            "errorMessage" to snapshot.errorMessage,
         )
     }
 
@@ -567,14 +768,40 @@ class KioskManager(private val activity: Activity) {
             outsideEnvironmentStreamStatus = "正在重连第 $reconnectAttempts 次"
         }
 
-        stopOutsideEnvironmentStream()
-
         val profiles = STREAM_PROFILES.filter { profile -> enabledOutsideEnvironmentProfiles.contains(profile.name) }
         if (profiles.isEmpty()) {
+            stopOutsideEnvironmentStream()
             outsideEnvironmentStreamStatus = "720p/1080p 已停止"
             appendOutsideEnvironmentLog("stream start skipped, no enabled profiles")
             return
         }
+
+        val preflight = validateConfiguredCameraForStart(ROLE_OUTSIDE_ENVIRONMENT, profiles)
+        if (!preflight.allowed) {
+            outsideEnvironmentStreamStatus = preflight.failureStatus
+            recordStreamFailure(
+                role = ROLE_OUTSIDE_ENVIRONMENT,
+                code = preflight.errorCode,
+                message = preflight.failureStatus,
+                stage = FAILURE_STAGE_CAMERA_PREFLIGHT,
+                replaceExisting = true,
+            )
+            if (preflight.recoverable) {
+                scheduleOutsideEnvironmentReconnect(
+                    cameraId = cameraId,
+                    epoch = epoch,
+                    expectedStream = outsideEnvironmentStream,
+                    reason = preflight.failureStatus,
+                )
+            } else {
+                abandonOutsideEnvironmentDesiredProfilesAfterTerminalFailure(
+                    reason = preflight.failureStatus,
+                )
+            }
+            return
+        }
+
+        stopOutsideEnvironmentStream()
 
         try {
             val videoConfig = readVideoConfig()
@@ -595,14 +822,38 @@ class KioskManager(private val activity: Activity) {
                 appendOutsideEnvironmentLog("profile=${request.profile} build=$H265_BUILD_MARK encoder=rkmpp protocol=RTSP codec=H265 transport=TCP cameraId=$cameraId url=${request.url} size=${request.width}x${request.height} fps=${request.fps} bitrate=${request.bitrate} gop=${request.iframeInterval}s epoch=$epoch")
             }
             appendOutsideEnvironmentLog("starting H265 RTSP streams, cameraId=$cameraId, profiles=${profiles.joinToString(",") { it.name }}, epoch=$epoch")
+            val requiredProfileNames = profiles.mapTo(mutableSetOf()) { profile -> profile.name }
+            val pushedProfileNames = mutableSetOf<String>()
+            confirmedOutsideEnvironmentProfiles = emptySet()
             lateinit var stream: DualMediaCodecH265Stream
             stream = DualMediaCodecH265Stream(activity.applicationContext, rkMppBridge) { status ->
                 streamHandler.post {
                     if (!isOutsideEnvironmentStreamCurrent(cameraId, epoch, stream) || reconnectRunnable != null) {
                         return@post
                     }
-                    if (status.isSustainedStreamProgress()) {
-                        reconnectAttempts = 0
+                    val sustainedProgress = status.isSustainedStreamProgress()
+                    if (sustainedProgress) {
+                        requiredProfileNames.firstOrNull { profileName ->
+                            status.startsWith("$profileName ")
+                        }?.let { profileName ->
+                            pushedProfileNames.add(profileName)
+                            confirmedOutsideEnvironmentProfiles = pushedProfileNames.toSet()
+                        }
+                        if (pushedProfileNames.containsAll(requiredProfileNames)) {
+                            reconnectAttempts = 0
+                            if (!outsideEnvironmentFailureClearLocked) {
+                                clearStreamFailure(ROLE_OUTSIDE_ENVIRONMENT)
+                            }
+                        }
+                    } else if (status.isAnyStreamFailure()) {
+                        pushedProfileNames.clear()
+                        confirmedOutsideEnvironmentProfiles = emptySet()
+                        recordStreamFailure(
+                            role = ROLE_OUTSIDE_ENVIRONMENT,
+                            code = streamFailureCode(status),
+                            message = status,
+                            stage = streamFailureStage(status),
+                        )
                     }
                     outsideEnvironmentStreamStatus = "${profiles.joinToString(",") { it.name }} $status"
                     Log.i(TAG, "outside environment H265 status: $status, epoch=$epoch")
@@ -614,15 +865,30 @@ class KioskManager(private val activity: Activity) {
             activeOutsideEnvironmentProfiles = profiles
             val started = stream.start(cameraId, requests)
             if (!started) {
-                val reason = outsideEnvironmentStreamStatus
+                val reason = stream.startFailureReason
+                    ?.takeIf { failure -> failure.isNotBlank() }
+                    ?: outsideEnvironmentStreamStatus
                 if (outsideEnvironmentStream === stream) {
                     outsideEnvironmentStream = null
                     activeOutsideEnvironmentProfiles = emptyList()
                 }
-                outsideEnvironmentStreamStatus = "H265 推流启动失败：$reason"
-                Log.e(TAG, "outside environment RKMPP RTSP H265 stream start returned false: $reason, epoch=$epoch")
-                appendOutsideEnvironmentLog("start returned false: $reason epoch=$epoch")
-                scheduleOutsideEnvironmentReconnect(cameraId, epoch, null, reason)
+                val failureStatus = ensureFailureStatus(reason)
+                outsideEnvironmentStreamStatus = "${profiles.joinToString(",") { it.name }} $failureStatus"
+                recordStreamFailure(
+                    role = ROLE_OUTSIDE_ENVIRONMENT,
+                    code = streamFailureCode(failureStatus),
+                    message = failureStatus,
+                    stage = FAILURE_STAGE_STREAM_START,
+                )
+                Log.e(TAG, "outside environment RKMPP RTSP H265 stream start returned false: $failureStatus, epoch=$epoch")
+                appendOutsideEnvironmentLog("start returned false: $failureStatus epoch=$epoch")
+                if (failureStatus.isRecoverableStreamFailure()) {
+                    scheduleOutsideEnvironmentReconnect(cameraId, epoch, null, failureStatus)
+                } else {
+                    abandonOutsideEnvironmentDesiredProfilesAfterTerminalFailure(
+                        reason = failureStatus,
+                    )
+                }
                 return
             }
 
@@ -644,9 +910,21 @@ class KioskManager(private val activity: Activity) {
             }
             val reason = "${enabledOutsideEnvironmentProfiles.joinToString(",")} 推流启动失败：${error.message ?: error::class.java.simpleName}"
             outsideEnvironmentStreamStatus = reason
+            recordStreamFailure(
+                role = ROLE_OUTSIDE_ENVIRONMENT,
+                code = streamFailureCode(reason),
+                message = reason,
+                stage = FAILURE_STAGE_STREAM_START,
+            )
             Log.e(TAG, "outside environment RKMPP RTSP H265 stream start failed, epoch=$epoch", error)
             appendOutsideEnvironmentLog("start failed, epoch=$epoch", error)
-            scheduleOutsideEnvironmentReconnect(cameraId, epoch, null, reason)
+            if (reason.isRecoverableStreamFailure()) {
+                scheduleOutsideEnvironmentReconnect(cameraId, epoch, null, reason)
+            } else {
+                abandonOutsideEnvironmentDesiredProfilesAfterTerminalFailure(
+                    reason = reason,
+                )
+            }
         }
     }
 
@@ -658,12 +936,18 @@ class KioskManager(private val activity: Activity) {
         if (!outsideEnvironmentDesired || !stream.isStreaming() || outsideEnvironmentCameraId != cameraId) {
             return false
         }
+        if (streamStateName(outsideEnvironmentStreamStatus) != STREAM_STATE_STREAMING) {
+            return false
+        }
         val activeProfileNames = activeOutsideEnvironmentProfiles.map { profile -> profile.name }.toSet()
         val requestedProfileNames = requestedProfiles.map { profile -> profile.name }.toSet()
-        return activeProfileNames.containsAll(requestedProfileNames)
+        return activeProfileNames.isNotEmpty() &&
+            confirmedOutsideEnvironmentProfiles.containsAll(activeProfileNames) &&
+            activeProfileNames.containsAll(requestedProfileNames)
     }
 
     private fun stopOutsideEnvironmentStream() {
+        confirmedOutsideEnvironmentProfiles = emptySet()
         val stream = outsideEnvironmentStream ?: return
         runCatching { stream.stop() }
             .onFailure { error -> appendOutsideEnvironmentLog("stop failed", error) }
@@ -672,6 +956,18 @@ class KioskManager(private val activity: Activity) {
             activeOutsideEnvironmentProfiles = emptyList()
         }
         appendOutsideEnvironmentLog("stream stopped")
+    }
+
+    private fun abandonOutsideEnvironmentDesiredProfilesAfterTerminalFailure(reason: String) {
+        outsideEnvironmentStreamEpoch += 1
+        outsideEnvironmentDesired = false
+        enabledOutsideEnvironmentProfiles = emptySet()
+        cancelOutsideEnvironmentReconnect()
+        reconnectAttempts = 0
+        outsideEnvironmentFailureClearLocked = false
+        stopOutsideEnvironmentStream()
+        activeOutsideEnvironmentProfiles = emptyList()
+        appendOutsideEnvironmentLog("terminal failure cleared desired profiles, reason=$reason")
     }
 
     private fun scheduleOutsideEnvironmentReconnect(
@@ -686,6 +982,10 @@ class KioskManager(private val activity: Activity) {
         cancelOutsideEnvironmentReconnect()
         if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
             outsideEnvironmentStreamStatus = "推流重连失败，已达到最大次数：$reason"
+            runCatching { expectedStream?.stop() }
+                .onFailure { error -> appendOutsideEnvironmentLog("max-retry stop failed, epoch=$epoch", error) }
+            outsideEnvironmentStream = null
+            activeOutsideEnvironmentProfiles = emptyList()
             Log.e(TAG, "outside environment RKMPP RTSP H265 stream reconnect failed, max attempts reached")
             appendOutsideEnvironmentLog("reconnect failed, max attempts reached, reason=$reason, epoch=$epoch")
             return
@@ -718,15 +1018,22 @@ class KioskManager(private val activity: Activity) {
         stream: DualMediaCodecH265Stream,
         status: String,
     ) {
-        if (!status.isRecoverableStreamFailure() ||
+        if (!status.isAnyStreamFailure() ||
             !isOutsideEnvironmentStreamCurrent(cameraId, epoch, stream) ||
             reconnectRunnable != null
         ) {
             return
         }
+        val recoverable = status.isRecoverableStreamFailure()
         runCatching { stream.stop() }
             .onFailure { error -> appendOutsideEnvironmentLog("runtime stop failed, epoch=$epoch", error) }
-        scheduleOutsideEnvironmentReconnect(cameraId, epoch, stream, status)
+        if (recoverable) {
+            scheduleOutsideEnvironmentReconnect(cameraId, epoch, stream, status)
+        } else {
+            abandonOutsideEnvironmentDesiredProfilesAfterTerminalFailure(
+                reason = status,
+            )
+        }
     }
 
     private fun isOutsideEnvironmentRequestCurrent(cameraId: String, epoch: Long): Boolean {
@@ -1046,6 +1353,32 @@ class KioskManager(private val activity: Activity) {
             operationAreaStreamStatus = "正在重连第 $operationReconnectAttempts 次"
         }
 
+        val preflight = validateConfiguredCameraForStart(
+            ROLE_OPERATION_AREA,
+            listOf(DEFAULT_STREAM_PROFILE),
+        )
+        if (!preflight.allowed) {
+            operationAreaStreamStatus = preflight.failureStatus
+            recordStreamFailure(
+                role = ROLE_OPERATION_AREA,
+                code = preflight.errorCode,
+                message = preflight.failureStatus,
+                stage = FAILURE_STAGE_CAMERA_PREFLIGHT,
+                replaceExisting = true,
+            )
+            if (preflight.recoverable) {
+                scheduleOperationAreaReconnect(
+                    cameraId = cameraId,
+                    epoch = epoch,
+                    expectedStream = operationAreaStream,
+                    reason = preflight.failureStatus,
+                )
+            } else {
+                stopOperationAreaStream()
+            }
+            return
+        }
+
         stopOperationAreaStream()
 
         try {
@@ -1068,6 +1401,16 @@ class KioskManager(private val activity: Activity) {
                     }
                     if (status.isSustainedStreamProgress()) {
                         operationReconnectAttempts = 0
+                        if (!operationAreaFailureClearLocked) {
+                            clearStreamFailure(ROLE_OPERATION_AREA)
+                        }
+                    } else if (status.isAnyStreamFailure()) {
+                        recordStreamFailure(
+                            role = ROLE_OPERATION_AREA,
+                            code = streamFailureCode(status),
+                            message = status,
+                            stage = streamFailureStage(status),
+                        )
                     }
                     operationAreaStreamStatus = status
                     Log.i(TAG, "operation area H265 status: $status, epoch=$epoch")
@@ -1086,14 +1429,25 @@ class KioskManager(private val activity: Activity) {
                 iframeInterval = streamGopSeconds,
             )
             if (!started) {
-                val reason = "RTSP H265 推流启动失败：$operationAreaStreamStatus"
+                val reason = stream.startFailureReason
+                    ?.takeIf { failure -> failure.isNotBlank() }
+                    ?: operationAreaStreamStatus
                 if (operationAreaStream === stream) {
                     operationAreaStream = null
                 }
-                operationAreaStreamStatus = reason
-                Log.e(TAG, "operation area RTSP H265 stream start returned false: $reason, epoch=$epoch")
-                appendOutsideEnvironmentLog("role=operationArea start returned false: $reason epoch=$epoch")
-                scheduleOperationAreaReconnect(cameraId, epoch, null, reason)
+                val failureStatus = ensureFailureStatus(reason)
+                operationAreaStreamStatus = failureStatus
+                recordStreamFailure(
+                    role = ROLE_OPERATION_AREA,
+                    code = streamFailureCode(failureStatus),
+                    message = failureStatus,
+                    stage = FAILURE_STAGE_STREAM_START,
+                )
+                Log.e(TAG, "operation area RTSP H265 stream start returned false: $failureStatus, epoch=$epoch")
+                appendOutsideEnvironmentLog("role=operationArea start returned false: $failureStatus epoch=$epoch")
+                if (failureStatus.isRecoverableStreamFailure()) {
+                    scheduleOperationAreaReconnect(cameraId, epoch, null, failureStatus)
+                }
                 return
             }
 
@@ -1114,9 +1468,17 @@ class KioskManager(private val activity: Activity) {
             }
             val reason = "推流启动失败：${error.message ?: error::class.java.simpleName}"
             operationAreaStreamStatus = reason
+            recordStreamFailure(
+                role = ROLE_OPERATION_AREA,
+                code = streamFailureCode(reason),
+                message = reason,
+                stage = FAILURE_STAGE_STREAM_START,
+            )
             Log.e(TAG, "operation area RTSP H265 stream start failed, epoch=$epoch", error)
             appendOutsideEnvironmentLog("role=operationArea start failed, epoch=$epoch", error)
-            scheduleOperationAreaReconnect(cameraId, epoch, null, reason)
+            if (reason.isRecoverableStreamFailure()) {
+                scheduleOperationAreaReconnect(cameraId, epoch, null, reason)
+            }
         }
     }
 
@@ -1141,9 +1503,12 @@ class KioskManager(private val activity: Activity) {
         }
         cancelOperationAreaReconnect()
         if (operationReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            operationAreaStreamStatus = "推流重连失败，已达到最大次数"
+            operationAreaStreamStatus = "推流重连失败，已达到最大次数：$reason"
+            runCatching { expectedStream?.stop() }
+                .onFailure { error -> appendOutsideEnvironmentLog("role=operationArea max-retry stop failed, epoch=$epoch", error) }
+            operationAreaStream = null
             Log.e(TAG, "operation area RTSP H265 stream reconnect failed, max attempts reached")
-            appendOutsideEnvironmentLog("role=operationArea reconnect failed, max attempts reached, epoch=$epoch")
+            appendOutsideEnvironmentLog("role=operationArea reconnect failed, max attempts reached, reason=$reason, epoch=$epoch")
             return
         }
         operationReconnectAttempts += 1
@@ -1174,15 +1539,20 @@ class KioskManager(private val activity: Activity) {
         stream: H265RtspStream,
         status: String,
     ) {
-        if (!status.isRecoverableStreamFailure() ||
+        if (!status.isAnyStreamFailure() ||
             !isOperationAreaStreamCurrent(cameraId, epoch, stream) ||
             operationReconnectRunnable != null
         ) {
             return
         }
+        val recoverable = status.isRecoverableStreamFailure()
         runCatching { stream.stop() }
             .onFailure { error -> appendOutsideEnvironmentLog("role=operationArea runtime stop failed, epoch=$epoch", error) }
-        scheduleOperationAreaReconnect(cameraId, epoch, stream, status)
+        if (recoverable) {
+            scheduleOperationAreaReconnect(cameraId, epoch, stream, status)
+        } else if (operationAreaStream === stream) {
+            operationAreaStream = null
+        }
     }
 
     private fun isOperationAreaRequestCurrent(cameraId: String, epoch: Long): Boolean {
@@ -1204,6 +1574,174 @@ class KioskManager(private val activity: Activity) {
         operationReconnectingCameraId = null
     }
 
+    private fun validateConfiguredCameraForStart(role: String, profiles: List<StreamProfile>): CameraPreflightResult {
+        val snapshot = probeCameraCapability(role)
+        val supportedSizeKeys = snapshot.yuvSupportedSizes
+            .mapTo(mutableSetOf()) { size -> "${size.width}x${size.height}" }
+        val unsupportedProfiles = profiles.filterNot { profile ->
+            supportedSizeKeys.contains("${profile.width}x${profile.height}")
+        }
+        if (snapshot.available && unsupportedProfiles.isEmpty()) {
+            return CameraPreflightResult(
+                allowed = true,
+                recoverable = false,
+                errorCode = "",
+                failureStatus = "",
+            )
+        }
+        val unsupportedSizeMessage = if (unsupportedProfiles.isNotEmpty() && snapshot.yuvSupportedSizes.isNotEmpty()) {
+            val requested = unsupportedProfiles.joinToString(",") { profile ->
+                "${profile.name}(${profile.width}x${profile.height})"
+            }
+            val supported = snapshot.yuvSupportedSizes.joinToString(",") { size ->
+                "${size.width}x${size.height}"
+            }
+            "推流分辨率不支持：请求 $requested，摄像头 ID ${snapshot.configuredCameraId} 支持 $supported"
+        } else {
+            ""
+        }
+        val errorCode = when {
+            unsupportedSizeMessage.isNotBlank() -> "UNSUPPORTED_STREAM_SIZE"
+            snapshot.errorCode.isNotBlank() -> snapshot.errorCode
+            else -> "CAMERA_UNAVAILABLE"
+        }
+        val message = unsupportedSizeMessage.ifBlank {
+            snapshot.errorMessage.ifBlank {
+                "摄像头不可用：配置 ID ${snapshot.configuredCameraId}"
+            }
+        }
+        val status = ensureFailureStatus(message)
+        when (role) {
+            ROLE_OUTSIDE_ENVIRONMENT -> {
+                outsideEnvironmentCameraId = snapshot.configuredCameraId
+                outsideEnvironmentStreamStatus = status
+            }
+            ROLE_OPERATION_AREA -> {
+                operationAreaCameraId = snapshot.configuredCameraId
+                operationAreaStreamStatus = status
+            }
+        }
+        recordStreamFailure(
+            role = role,
+            code = errorCode,
+            message = message,
+            stage = FAILURE_STAGE_CAMERA_PREFLIGHT,
+        )
+        Log.e(
+            TAG,
+            "camera stream preflight failed, role=$role, configured=${snapshot.configuredCameraId}, " +
+                "available=${snapshot.availableCameraIds}, code=$errorCode, message=$message",
+        )
+        appendOutsideEnvironmentLog(
+            "role=$role camera preflight failed, configured=${snapshot.configuredCameraId}, " +
+                "available=${snapshot.availableCameraIds}, code=$errorCode, message=$message",
+        )
+        return CameraPreflightResult(
+            allowed = false,
+            recoverable = isPreflightFailureRecoverable(errorCode),
+            errorCode = errorCode,
+            failureStatus = status,
+        )
+    }
+
+    private fun isPreflightFailureRecoverable(errorCode: String): Boolean {
+        return when (errorCode) {
+            "CAMERA_IN_USE",
+            "MAX_CAMERAS_IN_USE",
+            "CAMERA_DISCONNECTED",
+            "CAMERA_OFFLINE",
+            "CAMERA_DEVICE",
+            "CAMERA_SERVICE",
+            "CAMERA_ERROR",
+            "CAMERA_ACCESS_FAILED" -> true
+            else -> false
+        }
+    }
+
+    private fun probeCameraCapability(role: String): CameraCapabilitySnapshot {
+        val configuredCameraId = configuredCameraIdForRole(role)
+        val cameraManager = activity.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val availableCameraIds = try {
+            cameraManager.cameraIdList.toList()
+        } catch (error: Throwable) {
+            return CameraCapabilitySnapshot(
+                configuredCameraId = configuredCameraId,
+                availableCameraIds = emptyList(),
+                available = false,
+                yuvSupportedSizes = emptyList(),
+                errorCode = cameraAccessFailureCode(error),
+                errorMessage = describeCameraAccessFailure(configuredCameraId, error),
+            )
+        }
+        if (!availableCameraIds.contains(configuredCameraId)) {
+            val noCameras = availableCameraIds.isEmpty()
+            return CameraCapabilitySnapshot(
+                configuredCameraId = configuredCameraId,
+                availableCameraIds = availableCameraIds,
+                available = false,
+                yuvSupportedSizes = emptyList(),
+                errorCode = if (noCameras) "CAMERA_OFFLINE" else "UNKNOWN_CAMERA_ID",
+                errorMessage = if (noCameras) {
+                    "摄像头离线：未检测到任何可用摄像头（配置 ID：$configuredCameraId）"
+                } else {
+                    "未知摄像头 ID $configuredCameraId，当前可用 ID：${availableCameraIds.joinToString(",")}"
+                },
+            )
+        }
+        val yuvSupportedSizes = try {
+            val characteristics = cameraManager.getCameraCharacteristics(configuredCameraId)
+            val streamMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            streamMap?.getOutputSizes(ImageFormat.YUV_420_888).orEmpty()
+                .sortedWith(
+                    compareByDescending<android.util.Size> { size ->
+                        size.width.toLong() * size.height.toLong()
+                    }.thenByDescending { size -> size.width },
+                )
+                .map { size -> CameraOutputSize(size.width, size.height) }
+                .distinct()
+        } catch (error: Throwable) {
+            return CameraCapabilitySnapshot(
+                configuredCameraId = configuredCameraId,
+                availableCameraIds = availableCameraIds,
+                available = true,
+                yuvSupportedSizes = emptyList(),
+                errorCode = cameraAccessFailureCode(error),
+                errorMessage = describeCameraAccessFailure(configuredCameraId, error),
+            )
+        }
+        return CameraCapabilitySnapshot(
+            configuredCameraId = configuredCameraId,
+            availableCameraIds = availableCameraIds,
+            available = true,
+            yuvSupportedSizes = yuvSupportedSizes,
+            errorCode = if (yuvSupportedSizes.isEmpty()) "YUV_OUTPUT_UNAVAILABLE" else "",
+            errorMessage = if (yuvSupportedSizes.isEmpty()) {
+                "摄像头 ID $configuredCameraId 未报告 YUV_420_888 输出尺寸"
+            } else {
+                ""
+            },
+        )
+    }
+
+    private fun configuredCameraIdForRole(role: String): String {
+        return when (role) {
+            ROLE_FACE_RECOGNITION -> FACE_RECOGNITION_CAMERA_ID
+            ROLE_OUTSIDE_ENVIRONMENT -> OUTSIDE_ENVIRONMENT_CAMERA_ID
+            ROLE_OPERATION_AREA -> OPERATION_AREA_CAMERA_ID
+            ROLE_CERTIFICATE_CAPTURE -> CERTIFICATE_CAPTURE_CAMERA_ID
+            else -> throw IllegalArgumentException("unsupported camera role: $role")
+        }
+    }
+
+    private fun configuredProfilesForRole(role: String): List<StreamProfile> {
+        return when (role) {
+            ROLE_OUTSIDE_ENVIRONMENT -> STREAM_PROFILES
+            ROLE_OPERATION_AREA -> listOf(DEFAULT_STREAM_PROFILE)
+            ROLE_FACE_RECOGNITION, ROLE_CERTIFICATE_CAPTURE -> emptyList()
+            else -> throw IllegalArgumentException("unsupported camera role: $role")
+        }
+    }
+
     private fun createH265Stream(bridge: RkMppBridge, statusListener: (String) -> Unit): H265RtspStream {
         return if (shouldUseRkMppH265()) {
             RkMppH265Stream(activity.applicationContext, bridge, statusListener)
@@ -1216,24 +1754,163 @@ class KioskManager(private val activity: Activity) {
         return if (shouldUseRkMppH265()) "rkmpp" else "mediacodec"
     }
 
+    private fun recordStreamFailure(
+        role: String,
+        code: String,
+        message: String,
+        stage: String,
+        replaceExisting: Boolean = false,
+    ) {
+        when (role) {
+            ROLE_OUTSIDE_ENVIRONMENT -> {
+                if (replaceExisting || outsideEnvironmentLastErrorMessage.isBlank()) {
+                    outsideEnvironmentLastErrorCode = code
+                    outsideEnvironmentLastErrorMessage = message
+                    outsideEnvironmentFailureStage = stage
+                }
+            }
+            ROLE_OPERATION_AREA -> {
+                if (replaceExisting || operationAreaLastErrorMessage.isBlank()) {
+                    operationAreaLastErrorCode = code
+                    operationAreaLastErrorMessage = message
+                    operationAreaFailureStage = stage
+                }
+            }
+        }
+    }
+
+    private fun clearStreamFailure(role: String) {
+        when (role) {
+            ROLE_OUTSIDE_ENVIRONMENT -> {
+                outsideEnvironmentLastErrorCode = ""
+                outsideEnvironmentLastErrorMessage = ""
+                outsideEnvironmentFailureStage = ""
+            }
+            ROLE_OPERATION_AREA -> {
+                operationAreaLastErrorCode = ""
+                operationAreaLastErrorMessage = ""
+                operationAreaFailureStage = ""
+            }
+        }
+    }
+
+    private fun streamFailureCode(status: String): String {
+        return when {
+            status.contains("UNSUPPORTED_STREAM_SIZE", ignoreCase = true) || status.contains("分辨率不支持") ||
+                status.contains("image size mismatch", ignoreCase = true) || status.contains("尺寸不匹配") -> "UNSUPPORTED_STREAM_SIZE"
+            status.contains("UNSUPPORTED_STREAM_COMBINATION", ignoreCase = true) || status.contains("会话配置失败") -> "UNSUPPORTED_STREAM_COMBINATION"
+            status.contains("YUV_OUTPUT_UNAVAILABLE", ignoreCase = true) || status.contains("未报告 YUV_420_888") -> "YUV_OUTPUT_UNAVAILABLE"
+            status.contains("MAX_CAMERAS_IN_USE", ignoreCase = true) -> "MAX_CAMERAS_IN_USE"
+            status.contains("CAMERA_IN_USE", ignoreCase = true) || status.contains("被占用") -> "CAMERA_IN_USE"
+            status.contains("UNKNOWN_CAMERA_ID", ignoreCase = true) || status.contains("未知摄像头") -> "UNKNOWN_CAMERA_ID"
+            status.contains("CAMERA_DISCONNECTED", ignoreCase = true) || status.contains("离线") || status.contains("断开") -> "CAMERA_DISCONNECTED"
+            status.contains("CAMERA_DISABLED", ignoreCase = true) || status.contains("系统策略禁用") -> "CAMERA_DISABLED"
+            status.contains("CAMERA_PERMISSION_DENIED", ignoreCase = true) || status.contains("缺少摄像头权限") -> "CAMERA_PERMISSION_DENIED"
+            status.contains("CAMERA_DEVICE", ignoreCase = true) -> "CAMERA_DEVICE"
+            status.contains("CAMERA_SERVICE", ignoreCase = true) -> "CAMERA_SERVICE"
+            status.contains("CAMERA_ERROR", ignoreCase = true) || status.contains("摄像头错误") -> "CAMERA_ERROR"
+            status.containsRtspClientErrorCode() -> "RTSP_CLIENT_ERROR"
+            status.contains("RTSP host is empty", ignoreCase = true) ||
+                status.contains("URI syntax", ignoreCase = true) ||
+                status.contains("URISyntaxException", ignoreCase = true) ||
+                status.contains("Illegal character in", ignoreCase = true) -> "INVALID_RTSP_URL"
+            status.contains("RTSP", ignoreCase = true) || status.contains("Broken pipe", ignoreCase = true) -> "RTSP_ERROR"
+            status.contains("编码") || status.contains("RKMPP", ignoreCase = true) -> "ENCODER_ERROR"
+            else -> "STREAM_FAILED"
+        }
+    }
+
+    private fun streamFailureStage(status: String): String {
+        return when {
+            status.contains("摄像头") || status.contains("CAMERA_", ignoreCase = true) -> FAILURE_STAGE_CAMERA_RUNTIME
+            status.contains("RTSP", ignoreCase = true) || status.contains("Broken pipe", ignoreCase = true) -> FAILURE_STAGE_RTSP
+            status.contains("编码") || status.contains("RKMPP", ignoreCase = true) -> FAILURE_STAGE_ENCODER
+            else -> FAILURE_STAGE_STREAM_RUNTIME
+        }
+    }
+
+    private fun ensureFailureStatus(reason: String): String {
+        return if (reason.contains("失败") || reason.contains("错误")) reason else "推流失败：$reason"
+    }
+
+    private fun String.isAnyStreamFailure(): Boolean {
+        return isRecoverableStreamFailure() || contains("失败") || contains("错误") ||
+            contains("被占用") || contains("离线") || contains("未知摄像头") ||
+            contains("缺少摄像头权限") || contains("系统策略禁用")
+    }
+
     private fun String.isRecoverableStreamFailure(): Boolean {
-        return contains("推流失败") ||
-            contains("发送失败") ||
-            contains("异步发送失败") ||
-            contains("摄像头断开") ||
-            contains("摄像头错误") ||
+        if (contains("重连失败") || contains("达到最大次数")) {
+            return false
+        }
+        val failureCode = streamFailureCode(this)
+        if (!isFailureCodeRecoverable(failureCode)) {
+            return false
+        }
+        return contains("失败") ||
+            contains("错误") ||
+            contains("被占用") ||
+            contains("离线") ||
+            contains("断开") ||
+            contains("异常") ||
             contains("Broken pipe", ignoreCase = true) ||
             contains("failed", ignoreCase = true) ||
             contains("error", ignoreCase = true)
     }
 
+    private fun isFailureCodeRecoverable(errorCode: String): Boolean {
+        return when (errorCode) {
+            "UNSUPPORTED_STREAM_SIZE",
+            "UNSUPPORTED_STREAM_COMBINATION",
+            "YUV_OUTPUT_UNAVAILABLE",
+            "UNKNOWN_CAMERA_ID",
+            "CAMERA_PERMISSION_DENIED",
+            "CAMERA_DISABLED",
+            "CAMERA_UNAVAILABLE",
+            "RTSP_CLIENT_ERROR",
+            "INVALID_RTSP_URL" -> false
+            else -> true
+        }
+    }
+
+    private fun isStreamFailureRecoverable(status: String, lastErrorCode: String): Boolean {
+        if (status.contains("重连失败") || status.contains("达到最大次数")) {
+            return false
+        }
+        if (lastErrorCode.isNotBlank() && !isFailureCodeRecoverable(lastErrorCode)) {
+            return false
+        }
+        if (status.isRecoverableStreamFailure()) {
+            return true
+        }
+        return status.contains("重连") && lastErrorCode.isNotBlank() &&
+            isFailureCodeRecoverable(lastErrorCode)
+    }
+
+    private fun String.containsRtspClientErrorCode(): Boolean {
+        val markerIndex = indexOf("code=", ignoreCase = true)
+        if (markerIndex < 0) {
+            return false
+        }
+        val code = substring(markerIndex + "code=".length)
+            .takeWhile(Char::isDigit)
+            .toIntOrNull()
+        return code != null && code in 400..499
+    }
+
     private fun String.isSustainedStreamProgress(): Boolean {
-        return contains("pushed=") && !isRecoverableStreamFailure()
+        val pushedFrames = Regex("""\bpushed=(\d+)""")
+            .find(this)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toLongOrNull()
+        return pushedFrames != null && pushedFrames > 0L && !isRecoverableStreamFailure()
     }
 
     private fun streamStateName(status: String): String {
         return when {
             status.contains("未配置") || status.contains("未指定") -> STREAM_STATE_UNCONFIGURED
+            status.contains("重连失败") || status.contains("达到最大次数") -> STREAM_STATE_FAILED
             status.contains("重连") || status.contains("reconnect", ignoreCase = true) -> STREAM_STATE_RECONNECTING
             status.isRecoverableStreamFailure() || status.contains("失败") || status.contains("错误") -> STREAM_STATE_FAILED
             status.contains("启动中") || status.contains("打开中") -> STREAM_STATE_STARTING
@@ -1367,6 +2044,27 @@ class KioskManager(private val activity: Activity) {
         }
     }
 
+    private data class CameraOutputSize(
+        val width: Int,
+        val height: Int,
+    )
+
+    private data class CameraCapabilitySnapshot(
+        val configuredCameraId: String,
+        val availableCameraIds: List<String>,
+        val available: Boolean,
+        val yuvSupportedSizes: List<CameraOutputSize>,
+        val errorCode: String,
+        val errorMessage: String,
+    )
+
+    private data class CameraPreflightResult(
+        val allowed: Boolean,
+        val recoverable: Boolean,
+        val errorCode: String,
+        val failureStatus: String,
+    )
+
     companion object {
         private data class StreamProfile(
             val name: String,
@@ -1399,10 +2097,20 @@ class KioskManager(private val activity: Activity) {
         private const val STREAM_CONTROL_CLIENT_READ_TIMEOUT_MS = 3_000
         private const val DOWNLOADS_LOG_PATH = "Download/SmartCabinetLogs/smart_cabinet_rtsp_h265.log"
         private const val OUTSIDE_ENVIRONMENT_STREAM_MODE = "dual_active_profiles"
+        private const val ROLE_FACE_RECOGNITION = "faceRecognition"
         private const val ROLE_OUTSIDE_ENVIRONMENT = "outsideEnvironment"
         private const val ROLE_OPERATION_AREA = "operationArea"
+        private const val ROLE_CERTIFICATE_CAPTURE = "certificateCapture"
+        private const val FACE_RECOGNITION_CAMERA_ID = "0"
         private const val OUTSIDE_ENVIRONMENT_CAMERA_ID = "1"
         private const val OPERATION_AREA_CAMERA_ID = "2"
+        private const val CERTIFICATE_CAPTURE_CAMERA_ID = "3"
+        private const val FAILURE_STAGE_CAMERA_PREFLIGHT = "camera_preflight"
+        private const val FAILURE_STAGE_CAMERA_RUNTIME = "camera_runtime"
+        private const val FAILURE_STAGE_STREAM_START = "stream_start"
+        private const val FAILURE_STAGE_STREAM_RUNTIME = "stream_runtime"
+        private const val FAILURE_STAGE_ENCODER = "encoder"
+        private const val FAILURE_STAGE_RTSP = "rtsp"
         private const val STREAM_STATE_STOPPED = "stopped"
         private const val STREAM_STATE_STARTING = "starting"
         private const val STREAM_STATE_STREAMING = "streaming"

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
+import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
@@ -50,14 +51,18 @@ class RkMppH265Stream(
     private val streamGeneration = AtomicLong(0L)
     override var currentCameraId: String? = null
         private set
+    @Volatile
+    override var startFailureReason: String? = null
+        private set
 
     override fun start(cameraId: String, url: String, width: Int, height: Int, fps: Int, bitrate: Int, iframeInterval: Int): Boolean {
+        startFailureReason = null
         if (streaming.get()) {
             statusListener("RKMPP H265 推流中")
             return true
         }
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            statusListener("缺少摄像头权限")
+            reportStartFailure("RKMPP H265 启动失败：缺少摄像头权限")
             return false
         }
 
@@ -72,13 +77,13 @@ class RkMppH265Stream(
             statusListener("正在初始化 RKMPP 依赖库")
             if (!bridge.initialize(context)) {
                 currentCameraId = null
-                statusListener("RKMPP 依赖库初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
+                reportStartFailure("RKMPP H265 启动失败：依赖库初始化失败：${bridge.lastError().ifBlank { "未知错误" }}")
                 return false
             }
 
             statusListener("正在初始化 RKMPP：${bridge.rkMppStatus()}")
             if (!bridge.startRkMppH265(width, height, fps, bitrate, iframeInterval)) {
-                statusListener("RKMPP H265 初始化失败：${bridge.lastError().ifBlank { bridge.rkMppStatus() }}")
+                reportStartFailure("RKMPP H265 初始化失败：${bridge.lastError().ifBlank { bridge.rkMppStatus() }}")
                 stop()
                 return false
             }
@@ -95,7 +100,12 @@ class RkMppH265Stream(
             true
         }.getOrElse { error ->
             Log.e(TAG, "RKMPP H265 stream start failed", error)
-            statusListener("RKMPP H265 启动失败：${error.message ?: error::class.java.simpleName}")
+            val detail = when (error) {
+                is CameraAccessException, is IllegalArgumentException, is SecurityException ->
+                    describeCameraAccessFailure(cameraId, error)
+                else -> error.message ?: error::class.java.simpleName
+            }
+            reportStartFailure("RKMPP H265 启动失败：$detail")
             stop()
             false
         }
@@ -236,7 +246,14 @@ class RkMppH265Stream(
         if (!nextPublisher.canStart(codecConfig)) {
             return false
         }
-        nextPublisher.start(rtspUrl, codecConfig)
+        try {
+            nextPublisher.start(rtspUrl, codecConfig)
+        } catch (error: Throwable) {
+            throw IllegalStateException(
+                "RTSP 启动失败：${error.message ?: error::class.java.simpleName}",
+                error,
+            )
+        }
         if (!isGenerationActive(generation)) {
             nextPublisher.stop()
             return false
@@ -291,7 +308,7 @@ class RkMppH265Stream(
                         camera.close()
                         if (isGenerationActive(generation)) {
                             stopAfterRuntimeFailure(
-                                "RKMPP H265 摄像头启动失败：${error.message ?: error::class.java.simpleName}",
+                                "RKMPP H265 推流失败：摄像头启动失败：${error.message ?: error::class.java.simpleName}",
                                 error,
                             )
                         }
@@ -306,7 +323,7 @@ class RkMppH265Stream(
                     if (cameraDevice === camera) {
                         cameraDevice = null
                     }
-                    stopAfterRuntimeFailure("RKMPP H265 摄像头断开")
+                    stopAfterRuntimeFailure("RKMPP H265 推流失败：${describeCameraDisconnected(cameraId)}")
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
@@ -317,7 +334,7 @@ class RkMppH265Stream(
                     if (cameraDevice === camera) {
                         cameraDevice = null
                     }
-                    stopAfterRuntimeFailure("RKMPP H265 摄像头错误：$error")
+                    stopAfterRuntimeFailure("RKMPP H265 推流失败：[${cameraDeviceFailureCode(error)}] ${describeCameraDeviceFailure(cameraId, error)}")
                 }
             },
             workerHandler,
@@ -356,7 +373,7 @@ class RkMppH265Stream(
                         session.close()
                         if (isGenerationActive(generation)) {
                             stopAfterRuntimeFailure(
-                                "RKMPP H265 摄像头会话启动失败：${error.message ?: error::class.java.simpleName}",
+                                "RKMPP H265 推流失败：摄像头会话启动失败：${error.message ?: error::class.java.simpleName}",
                                 error,
                             )
                         }
@@ -368,7 +385,7 @@ class RkMppH265Stream(
                     if (!isGenerationActive(generation)) {
                         return
                     }
-                    stopAfterRuntimeFailure("RKMPP H265 摄像头会话配置失败")
+                    stopAfterRuntimeFailure("RKMPP H265 推流失败：摄像头会话配置失败")
                 }
             },
             workerHandler,
@@ -408,6 +425,13 @@ class RkMppH265Stream(
 
     private fun isGenerationActive(generation: Long): Boolean {
         return streaming.get() && streamGeneration.get() == generation
+    }
+
+    private fun reportStartFailure(status: String) {
+        if (startFailureReason.isNullOrBlank()) {
+            startFailureReason = status
+        }
+        statusListener(status)
     }
 
     private fun shouldReportProgress(frameCount: Int): Boolean {

@@ -4,7 +4,6 @@ import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
-import 'package:smart_cabinet/src/app/routing/app_routes.dart';
 import 'package:smart_cabinet/src/features/home/domain/entities/home.dart';
 import 'package:smart_cabinet/src/features/home/presentation/widgets/home_widgets.dart';
 
@@ -17,10 +16,13 @@ import 'package:smart_cabinet/src/features/home/presentation/widgets/home_widget
 ///
 /// 负责组织顶部柜体信息与 banner、主体功能卡片以及底部状态栏。
 class HomeDashboard extends StatelessWidget {
+  /// 创建首页仪表盘并接收两个登录入口动作。
   const HomeDashboard({
     required this.homeData,
     super.key,
     required this.onCabinetModelTap,
+    required this.onFaceLogin,
+    required this.onAccountLogin,
   });
 
   /// 首页展示数据。
@@ -28,6 +30,12 @@ class HomeDashboard extends StatelessWidget {
 
   /// 点击左上角柜体模型时执行的隐藏入口动作。
   final VoidCallback onCabinetModelTap;
+
+  /// 点击人脸登录入口时执行的动作。
+  final VoidCallback onFaceLogin;
+
+  /// 点击账号登录入口时执行的动作。
+  final VoidCallback onAccountLogin;
 
   @override
   Widget build(BuildContext context) {
@@ -58,15 +66,15 @@ class HomeDashboard extends StatelessWidget {
               children: [
                 _StorageStatsCard(homeData: homeData),
                 const SizedBox(width: 16),
-                Expanded(
-                  child: _AccessEntryCard(
-                    onTap: () => Navigator.of(
-                      context,
-                    ).pushNamed(AppRoutes.foundationHome),
+                const Expanded(child: _TaskBackgroundCard()),
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 360,
+                  child: _LoginEntryCard(
+                    onFaceLogin: onFaceLogin,
+                    onAccountLogin: onAccountLogin,
                   ),
                 ),
-                const SizedBox(width: 16),
-                const SizedBox(width: 213, child: _InspectionCard()),
               ],
             ),
           ),
@@ -586,12 +594,46 @@ class _StatRow extends StatelessWidget {
   }
 }
 
-/// 存取件主入口。
-class _AccessEntryCard extends StatelessWidget {
-  const _AccessEntryCard({required this.onTap});
+/// 首页中部的任务背景卡片。
+///
+/// 当前仅展示静态背景图，不提供任务摘要或任务直达入口。
+class _TaskBackgroundCard extends StatelessWidget {
+  const _TaskBackgroundCard();
 
-  /// 点击主入口后进入存取件业务首页。
-  final VoidCallback onTap;
+  /// 首页任务区域暂用的背景图片资源。
+  static const String _backgroundAsset = 'assets/images/智能柜启动.png';
+
+  @override
+  Widget build(BuildContext context) {
+    return HomeDashboardCard(
+      width: double.infinity,
+      padding: EdgeInsets.zero,
+      child: SizedBox.expand(
+        child: Image.asset(
+          _backgroundAsset,
+          key: const ValueKey('home_task_background_image'),
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+          filterQuality: FilterQuality.medium,
+          excludeFromSemantics: true,
+        ),
+      ),
+    );
+  }
+}
+
+/// 首页右侧的登录入口卡片。
+class _LoginEntryCard extends StatelessWidget {
+  const _LoginEntryCard({
+    required this.onFaceLogin,
+    required this.onAccountLogin,
+  });
+
+  /// 点击人脸登录按钮时触发。
+  final VoidCallback onFaceLogin;
+
+  /// 点击账号登录按钮时触发。
+  final VoidCallback onAccountLogin;
 
   @override
   Widget build(BuildContext context) {
@@ -601,123 +643,16 @@ class _AccessEntryCard extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.zero,
       borderColor: AppTheme.primaryColor,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Stack(
-            children: [
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 78,
-                      height: 78,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withValues(alpha: .08),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(
-                        Icons.move_to_inbox_outlined,
-                        color: AppTheme.primaryColor,
-                        size: 42,
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    Text(
-                      l10n.t('access', '存取件'),
-                      style: const TextStyle(
-                        color: AppTheme.textPrimaryColor,
-                        fontSize: 38,
-                        height: 1,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'DEPOSIT & PICKUP',
-                      style: TextStyle(
-                        color: AppTheme.primaryColor,
-                        fontSize: 13,
-                        height: 1,
-                        letterSpacing: 1.3,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    Text(
-                      l10n.t('accessDescription', '进入存件 / 取件业务入口'),
-                      style: const TextStyle(
-                        color: AppTheme.textSecondaryColor,
-                        fontSize: 15,
-                        height: 1,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    Container(
-                      height: 40,
-                      padding: const EdgeInsets.symmetric(horizontal: 22),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withValues(alpha: .06),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: AppTheme.primaryColor.withValues(alpha: .16),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            l10n.t('start', '开始办理'),
-                            style: const TextStyle(
-                              color: AppTheme.primaryColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(width: 7),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            color: AppTheme.primaryColor,
-                            size: 19,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFF7FCFB), Color(0xFFE4F2F0)],
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// 飞检操作入口。
-class _InspectionCard extends StatelessWidget {
-  const _InspectionCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-
-    return HomeDashboardCard(
-      width: 132,
-      padding: EdgeInsets.zero,
-      borderColor: AppTheme.primaryColor,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () => Navigator.of(
-            context,
-          ).pushNamed(AppRoutes.flightInspectionVerification),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
           child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -726,33 +661,145 @@ class _InspectionCard extends StatelessWidget {
                   width: 58,
                   height: 58,
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: .08),
-                    borderRadius: BorderRadius.circular(18),
+                    color: Colors.white.withValues(alpha: .9),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.primaryBorderColor),
                   ),
                   child: const Icon(
-                    Icons.fact_check_outlined,
+                    Icons.verified_user_outlined,
                     color: AppTheme.primaryColor,
-                    size: 32,
+                    size: 30,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 14),
                 Text(
-                  l10n.t('inspection', '飞检操作'),
-                  textAlign: TextAlign.center,
+                  l10n.t('homeIdentityLoginTitle', '身份登录'),
                   style: const TextStyle(
                     color: AppTheme.textPrimaryColor,
-                    fontSize: 22,
-                    height: 1.15,
+                    fontSize: 24,
+                    height: 1,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
+                const SizedBox(height: 10),
+                Text(
+                  l10n.t('homeIdentityLoginHint', '先登录，再根据任务进行柜机操作'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondaryColor,
+                    fontSize: 13,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: 286,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _LoginActionButton(
+                          key: const ValueKey('home_face_login_action'),
+                          icon: Icons.face_retouching_natural_rounded,
+                          label: l10n.t('homeFaceLogin', '人脸登录'),
+                          onPressed: onFaceLogin,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _LoginActionButton(
+                          key: const ValueKey('home_account_login_action'),
+                          icon: Icons.account_circle_outlined,
+                          label: l10n.t('homeAccountLogin', '账号登录'),
+                          onPressed: onAccountLogin,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.security_rounded,
+                      color: AppTheme.textSecondaryColor,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        l10n.t(
+                          'homeAllThreeFactorsHint',
+                          '人脸 / 指纹 / NFC，三项认证均需完成',
+                        ),
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppTheme.textSecondaryColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 首页登录卡片中的大触控按钮。
+class _LoginActionButton extends StatelessWidget {
+  const _LoginActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// 按钮图标。
+  final IconData icon;
+
+  /// 按钮标题。
+  final String label;
+
+  /// 点击按钮时触发的动作。
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 116,
+      child: Material(
+        color: Colors.white.withValues(alpha: .94),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.primaryBorderColor),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: AppTheme.primaryColor, size: 34),
                 const SizedBox(height: 12),
                 Text(
-                  l10n.t('tapStart', '点击开始 →'),
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(0xFFA7B0CC),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimaryColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ],

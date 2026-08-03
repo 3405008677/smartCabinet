@@ -4,19 +4,13 @@ import 'package:smart_cabinet/src/app/routing/app_routes.dart';
 
 import 'package:smart_cabinet/src/features/admin/presentation/pages/admin_console_page.dart';
 import 'package:smart_cabinet/src/features/admin/presentation/pages/admin_verification_page.dart';
-import 'package:smart_cabinet/src/features/flight_inspection/presentation/pages/flight_inspection_task_page.dart';
-import 'package:smart_cabinet/src/features/flight_inspection/presentation/pages/flight_inspection_verification_page.dart';
 import 'package:smart_cabinet/src/features/home/presentation/pages/home_page.dart';
-import 'package:smart_cabinet/src/features/pickup/presentation/pages/cabinet_door_info_page.dart';
-import 'package:smart_cabinet/src/features/dropoff/presentation/pages/dropoff_confirm_opening_page.dart';
-import 'package:smart_cabinet/src/features/dropoff/presentation/pages/dropoff_file_verification_page.dart';
-import 'package:smart_cabinet/src/features/dropoff/presentation/pages/dropoff_open_cabinet_page.dart';
-import 'package:smart_cabinet/src/features/dropoff/presentation/pages/dropoff_person_verification_page.dart';
-import 'package:smart_cabinet/src/features/dropoff/presentation/pages/dropoff_success_page.dart';
-import 'package:smart_cabinet/src/features/storage/presentation/pages/storage_home_page.dart';
-import 'package:smart_cabinet/src/features/pickup/presentation/pages/open_cabinet_door_page.dart';
-import 'package:smart_cabinet/src/features/pickup/presentation/pages/pickup_verification_page.dart';
-import 'package:smart_cabinet/src/features/pickup/presentation/pages/verification_loading_page.dart';
+import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_account.dart';
+import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_identity_navigation.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/pages/identity_enrollment_page.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/pages/operator_verification_page.dart';
+import 'package:smart_cabinet/src/features/task_center/presentation/pages/task_center_page.dart';
+import 'package:smart_cabinet/src/features/task_center/presentation/pages/task_execution_page.dart';
 
 /// 应用路由生成器。
 ///
@@ -33,43 +27,39 @@ class AppRouter {
       /// 新首页。settings.name 为 null 时也回到新首页，提升容错性。
       AppRoutes.home || null => const SmartCabinetHomePage(),
 
-      /// 旧版取/放件入口首页。
-      AppRoutes.foundationHome => const FoundationHomePage(),
+      /// 操作员人脸、指纹、NFC 三项全部认证页。
+      AppRoutes.operatorVerification => OperatorVerificationPage(
+        arguments: settings.arguments is OperatorVerificationArguments
+            ? settings.arguments! as OperatorVerificationArguments
+            : const OperatorVerificationArguments(),
+      ),
 
-      /// 取件验证页。
-      AppRoutes.pickupVerification => const PickupVerificationPage(),
+      /// 账号资料缺失或异常时的人脸、指纹录入页。
+      AppRoutes.identityEnrollment
+          when settings.arguments is IdentityEnrollmentArguments =>
+        IdentityEnrollmentPage(
+          arguments: settings.arguments! as IdentityEnrollmentArguments,
+        ),
 
-      /// 安全认证加载页。
-      AppRoutes.verificationLoading => const VerificationLoadingPage(),
+      /// 身份认证通过后的任务工作台。
+      AppRoutes.taskCenter
+          when settings.arguments is TaskCenterArguments &&
+              (settings.arguments! as TaskCenterArguments)
+                  .account
+                  .verifiedFactors
+                  .containsAll(requiredOperatorIdentityFactors) =>
+        TaskCenterPage(arguments: settings.arguments! as TaskCenterArguments),
 
-      /// 柜门信息页。
-      AppRoutes.cabinetDoorInfo => const CabinetDoorInfoPage(),
-
-      /// 打开柜门/取件成功页。
-      AppRoutes.openCabinetDoor => const OpenCabinetDoorPage(),
-
-      /// 放件人员认证页。
-      AppRoutes.dropoffPersonVerification =>
-        const DropoffPersonVerificationPage(),
-
-      /// 放件文件认证页。
-      AppRoutes.dropoffFileVerification => const DropoffFileVerificationPage(),
-
-      /// 放件信息确认倒计时页。
-      AppRoutes.dropoffConfirmOpening => const DropoffConfirmOpeningPage(),
-
-      /// 放件柜门打开页。
-      AppRoutes.dropoffOpenCabinet => const DropoffOpenCabinetPage(),
-
-      /// 放件成功页。
-      AppRoutes.dropoffSuccess => const DropoffSuccessPage(),
-
-      /// 飞检人员认证页。
-      AppRoutes.flightInspectionVerification =>
-        const FlightInspectionVerificationPage(),
-
-      /// 飞检柜门任务页。
-      AppRoutes.flightInspectionTasks => const FlightInspectionTaskPage(),
+      /// 存证、取证、借证、还证和盘点共用的任务执行页。
+      AppRoutes.taskExecution
+          when settings.arguments is TaskExecutionArguments &&
+              (settings.arguments! as TaskExecutionArguments)
+                  .account
+                  .verifiedFactors
+                  .containsAll(requiredOperatorIdentityFactors) =>
+        TaskExecutionPage(
+          arguments: settings.arguments! as TaskExecutionArguments,
+        ),
 
       /// 管理员身份校验页。
       AppRoutes.adminVerification => const AdminVerificationPage(),

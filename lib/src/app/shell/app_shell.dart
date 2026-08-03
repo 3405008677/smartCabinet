@@ -344,7 +344,7 @@ class _GlobalFooter extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          const Align(
+          Align(
             alignment: Alignment.centerLeft,
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -356,7 +356,7 @@ class _GlobalFooter extends StatelessWidget {
                 ),
                 SizedBox(width: 9),
                 Text(
-                  '银行级加密保护',
+                  context.l10n.t('terminalLocalSecurityBoundary', '本地安全与权限控制'),
                   style: TextStyle(
                     color: AppTheme.textSecondaryColor,
                     fontSize: 12,
@@ -369,10 +369,14 @@ class _GlobalFooter extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const _StatusDot(),
+              const Icon(
+                Icons.info_outline_rounded,
+                color: AppTheme.textSecondaryColor,
+                size: 16,
+              ),
               const SizedBox(width: 9),
               Text(
-                '所有系统正常运行',
+                context.l10n.t('terminalDeviceStatusHint', '设备状态请以检测结果为准'),
                 style: TextStyle(
                   color: AppTheme.textSecondaryColor,
                   fontSize: 12,
@@ -402,23 +406,6 @@ class _GlobalFooter extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// 绿色状态圆点。
-class _StatusDot extends StatelessWidget {
-  const _StatusDot();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: const BoxDecoration(
-        color: Color(0xFF6FC76A),
-        shape: BoxShape.circle,
       ),
     );
   }

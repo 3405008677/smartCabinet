@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:smart_cabinet/src/app/localization/values/admin_localizations.dart';
-import 'package:smart_cabinet/src/app/localization/values/dropoff_localizations.dart';
-import 'package:smart_cabinet/src/app/localization/values/foundation_localizations.dart';
 import 'package:smart_cabinet/src/app/localization/values/home_localizations.dart';
-import 'package:smart_cabinet/src/app/localization/values/inspection_localizations.dart';
-import 'package:smart_cabinet/src/app/localization/values/pickup_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/identity_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/operator_workflow_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/task_inventory_localizations.dart';
 
 /// 应用支持的界面语言。
 enum AppLanguage {
@@ -75,10 +74,9 @@ class AppLocalizations {
 
   static final Map<String, Map<AppLanguage, String>> _values = {
     ...homeLocalizations,
-    ...foundationLocalizations,
-    ...pickupLocalizations,
-    ...dropoffLocalizations,
-    ...inspectionLocalizations,
+    ...identityLocalizations,
+    ...operatorWorkflowLocalizations,
+    ...taskInventoryLocalizations,
     ...adminLocalizations,
   };
 

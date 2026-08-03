@@ -74,6 +74,16 @@ class MainActivity : FlutterActivity() {
                 "readOperationAreaStreamStatus" -> result.success(
                     kioskManager.readOperationAreaStreamStatus(),
                 )
+                "readCameraStreamCapability" -> {
+                    val role = call.argument<String>("role")
+                    if (role.isNullOrBlank()) {
+                        result.error("invalid_camera_role", "role is empty", null)
+                    } else {
+                        runKioskReadMethod("readCameraStreamCapability", result) {
+                            kioskManager.readCameraStreamCapability(role)
+                        }
+                    }
+                }
                 "readRkMppStatus" -> result.success(kioskManager.readRkMppStatus())
                 "recordErrorLog" -> {
                     kioskManager.recordErrorLog(
@@ -94,8 +104,10 @@ class MainActivity : FlutterActivity() {
                     if (role.isNullOrBlank() || profiles.isEmpty()) {
                         result.error("invalid_camera_stream", "role or profiles is empty", null)
                     } else {
-                        kioskManager.startCameraStream(role, profiles)
-                        result.success(null)
+                        runKioskMethod(result) {
+                            kioskManager.startCameraStream(role, profiles)
+                            null
+                        }
                     }
                 }
                 "stopCameraStream" -> {
@@ -104,8 +116,20 @@ class MainActivity : FlutterActivity() {
                     if (role.isNullOrBlank()) {
                         result.error("invalid_camera_stream", "role is empty", null)
                     } else {
-                        kioskManager.stopCameraStream(role, profiles)
-                        result.success(null)
+                        runKioskMethod(result) {
+                            kioskManager.stopCameraStream(role, profiles)
+                            null
+                        }
+                    }
+                }
+                "retryCameraStream" -> {
+                    val role = call.argument<String>("role")
+                    if (role.isNullOrBlank()) {
+                        result.error("invalid_camera_stream", "role is empty", null)
+                    } else {
+                        runKioskMethod(result) {
+                            kioskManager.retryCameraStream(role)
+                        }
                     }
                 }
                 else -> result.notImplemented()

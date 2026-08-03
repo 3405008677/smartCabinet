@@ -25,6 +25,7 @@ class FaceVerificationCard extends StatefulWidget {
     this.accentColor,
     this.stepNumber,
     this.allowFallbackWithoutCamera = false,
+    this.simulateVerification = false,
     this.compact = false,
     this.showHeader = true,
   });
@@ -51,6 +52,9 @@ class FaceVerificationCard extends StatefulWidget {
 
   /// 无摄像头或权限失败时是否允许走模拟校验。
   final bool allowFallbackWithoutCamera;
+
+  /// 是否完全跳过摄像头和后端，使用可控的测试认证流程。
+  final bool simulateVerification;
 
   /// 是否使用紧凑模式。
   final bool compact;
@@ -100,7 +104,10 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
     _lifecycleActive =
         lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
-    if (_lifecycleActive) {
+    if (widget.simulateVerification) {
+      _status = FaceVerificationStatus.ready;
+      _message = '测试模式：点击确认完成人脸模拟认证';
+    } else if (_lifecycleActive) {
       unawaited(_initializeCamera());
     }
   }
@@ -111,9 +118,14 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     if (widget.verified && !oldWidget.verified) {
       unawaited(_releaseControllers(invalidate: true));
       _status = FaceVerificationStatus.success;
-      _message = '人脸识别通过，照片已提交后端校验';
+      _message = widget.simulateVerification
+          ? '测试模式：人脸模拟认证已完成'
+          : '人脸识别通过，照片已提交后端校验';
       _recoveryAdvice = null;
-    } else if (!widget.verified && oldWidget.verified && _lifecycleActive) {
+    } else if (!widget.verified &&
+        oldWidget.verified &&
+        _lifecycleActive &&
+        !widget.simulateVerification) {
       unawaited(_initializeCamera());
     }
   }
@@ -126,7 +138,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     }
     _lifecycleActive = lifecycleActive;
     if (lifecycleActive) {
-      if (!widget.verified) {
+      if (!widget.verified && !widget.simulateVerification) {
         unawaited(_initializeCamera());
       }
       return;
@@ -326,8 +338,23 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     String? pendingImagePath;
     setState(() {
       _status = FaceVerificationStatus.verifying;
-      _message = '正在拍照并提交后端校验...';
+      _message = widget.simulateVerification
+          ? '测试模式：正在完成人脸模拟认证...'
+          : '正在拍照并提交后端校验...';
     });
+
+    if (widget.simulateVerification) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (!mounted || widget.verified) {
+        return;
+      }
+      setState(() {
+        _status = FaceVerificationStatus.success;
+        _message = '测试模式：人脸模拟认证已完成';
+      });
+      widget.onVerified();
+      return;
+    }
 
     try {
       final controller = _controller;
@@ -368,7 +395,9 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
       }
       setState(() {
         _status = FaceVerificationStatus.success;
-        _message = '人脸识别通过，照片已提交后端校验';
+        _message = widget.simulateVerification
+            ? '测试模式：人脸模拟认证已完成'
+            : '人脸识别通过，照片已提交后端校验';
       });
       widget.onVerified();
     } catch (error) {
@@ -400,6 +429,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
       return false;
     }
     return _controller?.value.isInitialized == true ||
+        widget.simulateVerification ||
         widget.allowFallbackWithoutCamera;
   }
 
@@ -423,10 +453,24 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
       '摄像头已启动，请对准面部后点击确认',
     );
 
+    final simulationReadyText = l10n.t(
+      'sharedFaceSimulationReady',
+      '测试模式：点击确认完成人脸模拟认证',
+    );
+
+    final simulationSucceededText = l10n.t(
+      'sharedFaceSimulationSucceeded',
+      '测试模式：人脸模拟认证已完成',
+    );
+
     final displayMessage = switch (_status) {
       FaceVerificationStatus.initializing => cameraStartingText,
-      FaceVerificationStatus.ready => cameraReadyText,
-      FaceVerificationStatus.success => verifiedSubmittedText,
+      FaceVerificationStatus.ready =>
+        widget.simulateVerification ? simulationReadyText : cameraReadyText,
+      FaceVerificationStatus.success =>
+        widget.simulateVerification
+            ? simulationSucceededText
+            : verifiedSubmittedText,
       _ => _message,
     };
 
@@ -669,6 +713,8 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
                     ? l10n.t('sharedVerified', '已通过')
                     : _status == FaceVerificationStatus.verifying
                     ? l10n.t('sharedFaceVerifying', '校验中...')
+                    : widget.simulateVerification
+                    ? l10n.t('sharedFaceConfirmSimulation', '确认模拟认证')
                     : l10n.t('sharedFaceConfirmCapture', '确认并拍照校验'),
               ),
             ),

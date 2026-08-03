@@ -185,13 +185,13 @@ class _StreamFailureOverlayState extends State<StreamFailureOverlay>
     required CameraStreamStatus operationStatus,
   }) {
     if (outsideStatus.needsUserAttention) {
-      return '柜外环境推流异常：${outsideStatus.status}';
+      return '柜外环境推流异常：${outsideStatus.displayStatus}';
     }
     if (operationStatus.isUnconfigured) {
       return null;
     }
     if (operationStatus.needsUserAttention) {
-      return '操作区推流异常：${operationStatus.status}';
+      return '操作区推流异常：${operationStatus.displayStatus}';
     }
     return null;
   }

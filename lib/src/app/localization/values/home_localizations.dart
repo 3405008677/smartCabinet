@@ -103,36 +103,6 @@ const homeLocalizations = {
     AppLanguage.english: 'Occupancy',
     AppLanguage.japanese: '使用率',
   },
-  'access': {
-    AppLanguage.simplifiedChinese: '存取件',
-    AppLanguage.traditionalChinese: '存取件',
-    AppLanguage.english: 'Access',
-    AppLanguage.japanese: '入出庫',
-  },
-  'accessDescription': {
-    AppLanguage.simplifiedChinese: '进入存件 / 取件业务入口',
-    AppLanguage.traditionalChinese: '進入存件 / 取件業務入口',
-    AppLanguage.english: 'Start drop-off or pickup workflow',
-    AppLanguage.japanese: '保管 / 受取業務を開始',
-  },
-  'start': {
-    AppLanguage.simplifiedChinese: '开始办理',
-    AppLanguage.traditionalChinese: '開始辦理',
-    AppLanguage.english: 'Start',
-    AppLanguage.japanese: '開始',
-  },
-  'inspection': {
-    AppLanguage.simplifiedChinese: '飞检操作',
-    AppLanguage.traditionalChinese: '飛檢操作',
-    AppLanguage.english: 'Inspection',
-    AppLanguage.japanese: '抜取検査',
-  },
-  'tapStart': {
-    AppLanguage.simplifiedChinese: '点击开始 →',
-    AppLanguage.traditionalChinese: '點擊開始 →',
-    AppLanguage.english: 'Tap to start →',
-    AppLanguage.japanese: 'タップして開始 →',
-  },
   'adminMode': {
     AppLanguage.simplifiedChinese: '管理员模式',
     AppLanguage.traditionalChinese: '管理員模式',
@@ -187,5 +157,17 @@ const homeLocalizations = {
     AppLanguage.traditionalChinese: '關閉',
     AppLanguage.english: 'Close',
     AppLanguage.japanese: '閉じる',
+  },
+  'terminalLocalSecurityBoundary': {
+    AppLanguage.simplifiedChinese: '本地安全与权限控制',
+    AppLanguage.traditionalChinese: '本機安全與權限控制',
+    AppLanguage.english: 'Local Security and Access Control',
+    AppLanguage.japanese: 'ローカルセキュリティと権限制御',
+  },
+  'terminalDeviceStatusHint': {
+    AppLanguage.simplifiedChinese: '设备状态请以检测结果为准',
+    AppLanguage.traditionalChinese: '設備狀態請以檢測結果為準',
+    AppLanguage.english: 'Refer to diagnostics for device status',
+    AppLanguage.japanese: '機器状態は診断結果を確認してください',
   },
 };

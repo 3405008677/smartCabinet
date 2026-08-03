@@ -35,4 +35,9 @@ abstract interface class KioskDevice {
     CabinetCameraRole role, {
     List<String>? profiles,
   });
+
+  /// 原子地保留当前启用清晰度并重试指定角色的原生推流。
+  ///
+  /// 返回实际被重试的清晰度；没有可重试配置时抛出平台异常。
+  Future<List<String>> retryCameraStream(CabinetCameraRole role);
 }

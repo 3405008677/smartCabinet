@@ -59,4 +59,26 @@ void main() {
       'profiles': ['1080p'],
     });
   });
+
+  test('retries camera stream atomically by role', () async {
+    final calls = <MethodCall>[];
+    const device = MethodChannelKioskDevice();
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(kioskChannel, (call) async {
+          calls.add(call);
+          return <String>['720p', '1080p'];
+        });
+
+    final profiles = await device.retryCameraStream(
+      CabinetCameraRole.outsideEnvironment,
+    );
+
+    expect(profiles, ['720p', '1080p']);
+    expect(calls, hasLength(1));
+    expect(calls.single.method, 'retryCameraStream');
+    expect(calls.single.arguments, <String, Object?>{
+      'role': 'outsideEnvironment',
+    });
+  });
 }

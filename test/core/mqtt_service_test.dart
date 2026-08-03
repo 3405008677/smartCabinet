@@ -9,7 +9,7 @@ void main() {
   test('builds default mqtt connection options', () {
     const options = SmartCabinetMqttOptions.defaults;
 
-    expect(options.host, '192.168.2.17');
+    expect(options.host, '192.168.2.222');
     expect(options.port, 1883);
     expect(options.clientId, 'smart-cabinet-b1cf98b759900d71');
     expect(options.deviceId, 'b1cf98b759900d71');
@@ -144,4 +144,9 @@ class _FakeKioskDevice implements KioskDevice {
     CabinetCameraRole role, {
     List<String>? profiles,
   }) async {}
+
+  @override
+  Future<List<String>> retryCameraStream(CabinetCameraRole role) async {
+    return const <String>[];
+  }
 }

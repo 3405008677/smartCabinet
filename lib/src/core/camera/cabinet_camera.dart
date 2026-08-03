@@ -1,6 +1,10 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 
+import 'camera_stream_capability.dart';
+
+export 'camera_stream_capability.dart';
+
 /// 智能柜摄像头业务角色。
 enum CabinetCameraRole {
   /// 人脸识别摄像头。
@@ -162,11 +166,17 @@ class CameraStreamStatus {
     required this.url,
     required this.cameraId,
     this.profile = '',
+    this.enabledProfiles = const [],
+    this.streamingProfiles = const [],
+    this.allProfilesStreaming,
     this.streamMode = '',
     this.role,
     this.state = CameraStreamState.unknown,
     this.recoverable = false,
     this.reconnectAttempts = 0,
+    this.lastErrorCode = '',
+    this.lastErrorMessage = '',
+    this.failureStage = '',
   });
 
   /// 当前推流状态文案。
@@ -180,6 +190,15 @@ class CameraStreamStatus {
 
   /// 当前正在推流的清晰度。
   final String profile;
+
+  /// 当前仍希望保持推流的清晰度，用于人工重试。
+  final List<String> enabledProfiles;
+
+  /// 当前已分别确认产生持续推流帧的清晰度。
+  final List<String> streamingProfiles;
+
+  /// 所有启用清晰度是否都已确认持续推流；旧版原生未返回时为 null。
+  final bool? allProfilesStreaming;
 
   /// 当前推流能力模式，例如单路按需或多路并发。
   final String streamMode;
@@ -196,16 +215,41 @@ class CameraStreamStatus {
   /// 已重连次数。
   final int reconnectAttempts;
 
+  /// 最近一次启动或运行失败的稳定错误码。
+  final String lastErrorCode;
+
+  /// 最近一次启动或运行失败的可读说明。
+  final String lastErrorMessage;
+
+  /// 最近一次失败所在阶段，例如摄像头打开、编码或 RTSP。
+  final String failureStage;
+
   /// 当前状态是否表示推流失败或正在重连。
   bool get needsUserAttention {
+    if (isStreaming) {
+      return false;
+    }
     return state == CameraStreamState.failed ||
         state == CameraStreamState.reconnecting ||
         recoverable ||
+        lastErrorCode.isNotEmpty ||
+        lastErrorMessage.isNotEmpty ||
         isFailureStatus(status);
   }
 
   /// 当前角色是否未配置。
   bool get isUnconfigured => state == CameraStreamState.unconfigured;
+
+  /// 当前是否已经确认有视频帧持续推送。
+  bool get isStreaming =>
+      state == CameraStreamState.streaming && allProfilesStreaming != false;
+
+  /// 优先返回不会被后续异步状态覆盖的结构化错误说明。
+  String get displayStatus {
+    return needsUserAttention && lastErrorMessage.isNotEmpty
+        ? lastErrorMessage
+        : status;
+  }
 
   /// 判断状态文案是否表示推流失败或重连中。
   static bool isFailureStatus(String status) {
@@ -226,6 +270,9 @@ class CameraStreamStatus {
       url: map['url']?.toString() ?? '',
       cameraId: map['cameraId']?.toString() ?? '',
       profile: map['profile']?.toString() ?? '',
+      enabledProfiles: _parseProfiles(map['enabledProfiles']),
+      streamingProfiles: _parseProfiles(map['streamingProfiles']),
+      allProfilesStreaming: _parseNullableBool(map['allProfilesStreaming']),
       streamMode: map['streamMode']?.toString() ?? '',
       role: _parseRole(map['role']?.toString()),
       state: _parseState(map['state']?.toString(), status),
@@ -234,7 +281,36 @@ class CameraStreamStatus {
           map['recoverable']?.toString().toLowerCase() == 'true',
       reconnectAttempts:
           int.tryParse(map['reconnectAttempts']?.toString() ?? '') ?? 0,
+      lastErrorCode: map['lastErrorCode']?.toString() ?? '',
+      lastErrorMessage: map['lastErrorMessage']?.toString() ?? '',
+      failureStage: map['failureStage']?.toString() ?? '',
     );
+  }
+
+  static List<String> _parseProfiles(Object? value) {
+    final source = value is Iterable
+        ? value.map((item) => item.toString())
+        : value?.toString().split(',') ?? const <String>[];
+    return List<String>.unmodifiable(
+      source.map((item) => item.trim()).where((item) => item.isNotEmpty),
+    );
+  }
+
+  static bool? _parseNullableBool(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is bool) {
+      return value;
+    }
+    final normalized = value.toString().trim().toLowerCase();
+    if (normalized == 'true') {
+      return true;
+    }
+    if (normalized == 'false') {
+      return false;
+    }
+    return null;
   }
 
   static CabinetCameraRole? _parseRole(String? value) {
@@ -298,6 +374,10 @@ class CabinetCameraService {
 
   /// 测试环境覆盖的操作区推流状态。
   static CameraStreamStatus? _debugOperationAreaStreamStatus;
+
+  /// 测试环境覆盖的 Camera2 推流能力。
+  static Map<CabinetCameraRole, CameraStreamCapability>?
+  _debugStreamCapabilities;
 
   /// 启动阶段缓存的真实摄像头列表。
   static List<CabinetCameraDevice>? _cachedCameras;
@@ -391,6 +471,43 @@ class CabinetCameraService {
     );
   }
 
+  /// 按业务角色读取 Camera2 推流能力，不会打开或改变预览摄像头。
+  Future<CameraStreamCapability> readCameraStreamCapability(
+    CabinetCameraRole role,
+  ) async {
+    final debugCapability = _debugStreamCapabilities?[role];
+    if (debugCapability != null) {
+      return debugCapability;
+    }
+    final debugCameras = _debugCameras;
+    if (debugCameras != null) {
+      final binding = CabinetCameraConfig.bindingFor(role);
+      final configuredCameraId = _normalizeCameraId(
+        binding.androidCameraId ?? binding.flutterCameraId ?? '',
+      );
+      final availableCameraIds = debugCameras
+          .map((camera) => _normalizeCameraId(camera.name))
+          .toSet()
+          .toList(growable: false);
+      return CameraStreamCapability(
+        configuredCameraId: configuredCameraId,
+        availableCameraIds: availableCameraIds,
+        available: availableCameraIds.contains(configuredCameraId),
+        supportedYuvSizes: const [],
+        configuredProfiles: const [],
+      );
+    }
+    final rawCapability = await _channel.invokeMapMethod<String, Object?>(
+      'readCameraStreamCapability',
+      {'role': role.name},
+    );
+    return CameraStreamCapability.fromMap(
+      rawCapability == null
+          ? const <String, Object?>{}
+          : Map<String, Object?>.of(rawCapability),
+    );
+  }
+
   /// 选择人脸识别应使用的摄像头。
   Future<CameraDescription?> resolveFaceRecognitionCamera() async {
     final cameras = await loadAvailableCameras();
@@ -421,10 +538,14 @@ class CabinetCameraService {
     required List<CameraDescription> cameras,
     CameraStreamStatus? outsideEnvironmentStreamStatus,
     CameraStreamStatus? operationAreaStreamStatus,
+    Map<CabinetCameraRole, CameraStreamCapability>? streamCapabilities,
   }) {
     _debugCameras = cameras;
     _debugOutsideEnvironmentStreamStatus = outsideEnvironmentStreamStatus;
     _debugOperationAreaStreamStatus = operationAreaStreamStatus;
+    _debugStreamCapabilities = streamCapabilities == null
+        ? null
+        : Map.unmodifiable(streamCapabilities);
   }
 
   /// 清理测试摄像头覆盖数据。
@@ -432,6 +553,7 @@ class CabinetCameraService {
     _debugCameras = null;
     _debugOutsideEnvironmentStreamStatus = null;
     _debugOperationAreaStreamStatus = null;
+    _debugStreamCapabilities = null;
     _cachedCameras = null;
   }
 

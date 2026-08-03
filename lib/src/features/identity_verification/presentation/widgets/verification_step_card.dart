@@ -2,6 +2,42 @@ import 'package:flutter/material.dart';
 
 import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 
+/// 管理员与普通操作员身份校验页共用的内容边距。
+const EdgeInsets identityVerificationContentPadding = EdgeInsets.fromLTRB(
+  24,
+  20,
+  24,
+  14,
+);
+
+/// 身份校验步骤卡片共用宽度。
+const double identityVerificationCardWidth = 295;
+
+/// 身份校验步骤卡片共用高度，适配 1280×800 柜机屏幕。
+const double identityVerificationCardHeight = 500;
+
+/// 身份校验页共用标题样式。
+const TextStyle identityVerificationHeadingStyle = TextStyle(
+  color: AppTheme.textPrimaryColor,
+  fontSize: 32,
+  height: 1,
+  fontWeight: FontWeight.w900,
+);
+
+/// 身份校验页共用说明样式。
+const TextStyle identityVerificationDescriptionStyle = TextStyle(
+  color: AppTheme.textSecondaryColor,
+  fontSize: 14,
+  fontWeight: FontWeight.w700,
+);
+
+/// 身份校验页共用进度样式。
+const TextStyle identityVerificationProgressStyle = TextStyle(
+  color: AppTheme.primaryColor,
+  fontSize: 15,
+  fontWeight: FontWeight.w800,
+);
+
 /// 认证步骤统一外壳卡片。
 ///
 /// 用于给人脸、指纹、NFC、取件码等步骤提供统一的外层边框和头部样式。

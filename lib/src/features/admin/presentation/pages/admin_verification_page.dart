@@ -6,6 +6,7 @@ import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
 import 'package:smart_cabinet/src/app/shell/app_shell.dart';
+import 'package:smart_cabinet/src/core/config/app_config.dart';
 import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/face_verification_card.dart';
 import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/verification_progress_footer.dart';
 import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/sensor_verification_card.dart';
@@ -67,20 +68,14 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
             child: CustomPaint(
               painter: const _AdminDotGridPainter(),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 26, 24, 18),
+                padding: identityVerificationContentPadding,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
                       l10n.t('adminVerificationHeading', '请完成管理员安全身份认证'),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimaryColor,
-                        fontSize: 34,
-                        height: 1,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: .8,
-                      ),
+                      style: identityVerificationHeadingStyle,
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -89,11 +84,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                         '登录权限已通过，请继续完成人脸、指纹与 NFC 三项校验',
                       ),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: AppTheme.textSecondaryColor,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: identityVerificationDescriptionStyle,
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -101,31 +92,29 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                           .t('adminVerificationProgress', '已完成 {count} / 3 项认证')
                           .replaceAll('{count}', '$_verifiedCount'),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: AppTheme.primaryColor,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: identityVerificationProgressStyle,
                     ),
-                    const SizedBox(height: 26),
+                    const SizedBox(height: 14),
                     Expanded(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           VerificationStepCard(
                             index: 1,
-                            title: l10n.t('pickupFaceTitle', '人脸识别'),
+                            title: l10n.t('identityFaceTitle', '人脸识别'),
                             icon: Icons.center_focus_strong_rounded,
                             accentColor: AppTheme.primaryColor,
                             verified: _verification.face,
-                            width: 295,
-                            height: 619,
+                            width: identityVerificationCardWidth,
+                            height: identityVerificationCardHeight,
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
                               child: FaceVerificationCard(
                                 verified: _verification.face,
                                 accentColor: AppTheme.primaryColor,
                                 allowFallbackWithoutCamera: true,
+                                simulateVerification:
+                                    AppConfig.current.isTestMode,
                                 compact: true,
                                 showHeader: false,
                                 onVerified: () => _updateVerification(
@@ -137,25 +126,28 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                           const SizedBox(width: 16),
                           VerificationStepCard(
                             index: 2,
-                            title: l10n.t('pickupFingerprintTitle', '指纹识别'),
+                            title: l10n.t('identityFingerprintTitle', '指纹识别'),
                             icon: Icons.fingerprint_rounded,
                             accentColor: AppTheme.primaryColor,
                             verified: _verification.fingerprint,
-                            width: 295,
-                            height: 619,
+                            width: identityVerificationCardWidth,
+                            height: identityVerificationCardHeight,
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
                               child: SensorVerificationCard(
-                                title: l10n.t('pickupFingerprintTitle', '指纹识别'),
+                                title: l10n.t(
+                                  'identityFingerprintTitle',
+                                  '指纹识别',
+                                ),
                                 subtitle: 'Fingerprint Scan',
                                 icon: Icons.fingerprint_rounded,
                                 verified: _verification.fingerprint,
                                 actionText: l10n.t(
-                                  'pickupConfirmFingerprint',
+                                  'identityConfirmFingerprint',
                                   '确认指纹识别',
                                 ),
                                 verifiedText: l10n.t(
-                                  'pickupFingerprintDone',
+                                  'identityFingerprintDone',
                                   '指纹识别已完成',
                                 ),
                                 accentColor: AppTheme.primaryColor,
@@ -170,25 +162,25 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                           const SizedBox(width: 16),
                           VerificationStepCard(
                             index: 3,
-                            title: l10n.t('pickupNfcTitle', 'NFC识别'),
+                            title: l10n.t('identityNfcTitle', 'NFC识别'),
                             icon: Icons.contactless_rounded,
                             accentColor: AppTheme.primaryColor,
                             verified: _verification.nfc,
-                            width: 295,
-                            height: 619,
+                            width: identityVerificationCardWidth,
+                            height: identityVerificationCardHeight,
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
                               child: SensorVerificationCard(
-                                title: l10n.t('pickupNfcTitle', 'NFC识别'),
+                                title: l10n.t('identityNfcTitle', 'NFC识别'),
                                 subtitle: 'NFC Card Scan',
                                 icon: Icons.contactless_rounded,
                                 verified: _verification.nfc,
                                 actionText: l10n.t(
-                                  'pickupConfirmNfc',
+                                  'identityConfirmNfc',
                                   '确认NFC识别',
                                 ),
                                 verifiedText: l10n.t(
-                                  'pickupNfcDone',
+                                  'identityNfcDone',
                                   'NFC识别已完成',
                                 ),
                                 accentColor: AppTheme.primaryColor,

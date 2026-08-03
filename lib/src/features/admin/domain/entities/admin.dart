@@ -50,14 +50,14 @@ class AdminDeviceStatus {
   /// 页面首帧兜底展示数据。
   factory AdminDeviceStatus.fallback() {
     return const AdminDeviceStatus(
-      cabinetCode: 'CAB-A01',
-      region: 'A · B 区',
-      wifiName: 'SmartCabinet-5G',
-      rj45Status: '未连接',
-      nfcStatus: '正常 · 读卡器在线',
-      fingerprintStatus: '正常 · 指纹模块在线',
-      cabinetBoardStatus: '正常 · 12 路柜控板已连接',
-      scannerStatus: '正常 · 扫码器待命',
+      cabinetCode: '正在读取',
+      region: '正在读取',
+      wifiName: '正在检测',
+      rj45Status: '正在检测',
+      nfcStatus: '正在检测',
+      fingerprintStatus: '正在检测',
+      cabinetBoardStatus: '待接入',
+      scannerStatus: '待接入',
     );
   }
 

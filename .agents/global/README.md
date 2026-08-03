@@ -1,0 +1,29 @@
+# 全局规则
+
+除非用户明确覆盖，这里的规则对所有 AI 协作者都具有强制性。本目录规则已经按当前 `smartCabinet` Flutter 智能柜终端项目适配，不能直接套用其他项目的 Web、Electron、后端、普通手机端或纯原生 Android 目录约定。
+
+## 规则文件
+
+- `architecture.md`：仓库结构、登录优先主流程、身份与任务授权、机构箱格隔离、单柜门互锁、Flutter Feature-first 分层和 Android/RKMPP 原生边界。
+- `code-style.md`：Dart/Flutter、身份会话、任务状态机、柜门安全、Riverpod、数据层、多语言、Kotlin/C++、编辑与验证要求。
+
+## 当前业务基线
+
+- 公开主线固定为 `home -> identity_verification -> task_center`：首页不提供匿名业务操作入口。
+- 正式模式下账号密码只确定账号，普通任务权限要求人脸、指纹与 NFC 三项认证全部完成；同步和异常复核场景同样不得省略任一项。`AppConfig.current.isTestMode` 仅允许账号登录建立测试旁路，人脸登录仍须三项全验，正式部署前必须关闭。 测试模式的人脸卡片必须明确标注模拟认证，不启动摄像头、不等待后端；管理员与普通操作员校验页共用同一套三栏布局规格。
+- 存证、取证、借证、还证和盘点统一在 `task_center` 中按顺序执行，任务与箱格都按 `organizationId` 隔离。
+- 开门同时受 Repository 业务授权、按开门周期唯一操作 ID 隔离的应用级 `CabinetDoorGuard` 和未来真实柜控板约束；当前内存互锁不能冒充物理门磁或平台租约。
+- 已删除的 `features/storage`、`features/pickup`、`features/dropoff`、`features/flight_inspection` 不再恢复；名称相近的 `core/storage` 继续作为本地存储基础设施使用。
+
+## 执行原则
+
+- 优先选择最小且正确的改动。
+- 除非用户要求结构调整，否则保持现有架构和 Flutter/Android 边界稳定。
+- 修改前先确认目标属于 `app`、`core`、`features`、`shared`、Android 平台层还是 JNI 原生层。
+- 如果用户需求与规则冲突，先澄清再继续执行。
+- 未经用户明确授权，不执行会改变 Git 暂存区、提交历史或远端状态的操作。
+- 不使用 `git worktree` 或 linked worktree 修改本仓库。
+- 不把本机打包路径、服务端进程号或现场采样值当作跨环境固定配置。
+- UI 隐藏、路由参数和演示数据不能替代 Repository、平台授权或设备层安全门禁。
+- 业务安全规则的失败路径不得推进状态；真实硬件未接入时必须明确当前仅为模拟或进程内保障。
+- 业务结构或安全边界变化时同步维护 `AGENTS.md`、`README.md` 和本目录规则。

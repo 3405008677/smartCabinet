@@ -19,8 +19,7 @@ class HomeRepositoryImpl implements HomeRepository {
 
   /// 将首页 DTO 转为页面模型。
   ///
-  /// 这里把首页统计区和底部摘要区分别转换为更明确的子模型，
-  /// 避免页面直接从动态 Map 中取值。
+  /// 这里把首页统计区转换为强类型模型，避免页面直接从动态 Map 中取值。
   HomeData _mapHomeDtoToModel(HomeResponseDto dto) {
     return HomeData(
       cabinetCode: dto.cabinetCode,
@@ -28,7 +27,6 @@ class HomeRepositoryImpl implements HomeRepository {
       status: dto.status,
       headline: dto.headline,
       stats: HomeStats.fromMap(dto.stats),
-      footer: HomeFooter.fromMap(dto.footer),
     );
   }
 }

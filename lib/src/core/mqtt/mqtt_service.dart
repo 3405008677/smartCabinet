@@ -24,7 +24,7 @@ class SmartCabinetMqttOptions {
 
   /// 默认 MQTT 连接配置。
   static const defaults = SmartCabinetMqttOptions(
-    host: '192.168.2.17',
+    host: '192.168.2.222',
     port: 1883,
     clientId: 'smart-cabinet-b1cf98b759900d71',
     clean: true,
