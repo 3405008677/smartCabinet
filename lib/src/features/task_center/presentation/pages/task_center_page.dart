@@ -7,11 +7,13 @@ import 'package:smart_cabinet/src/app/routing/app_routes.dart';
 import 'package:smart_cabinet/src/app/shell/app_shell.dart';
 import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 import 'package:smart_cabinet/src/core/device/cabinet_door_guard.dart';
+import 'package:smart_cabinet/src/features/identity_verification/data/repositories/operator_identity_repository_impl.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_account.dart';
 import 'package:smart_cabinet/src/features/task_center/data/repositories/task_center_repository_impl.dart';
 import 'package:smart_cabinet/src/features/task_center/domain/entities/cabinet_task.dart';
 import 'package:smart_cabinet/src/features/task_center/domain/repositories/task_center_repository.dart';
 import 'package:smart_cabinet/src/features/task_center/presentation/pages/task_execution_page.dart';
+import 'package:smart_cabinet/src/features/task_center/presentation/task_center_localization.dart';
 
 /// 打开任务工作台所需的路由参数。
 class TaskCenterArguments {
@@ -44,10 +46,9 @@ class TaskCenterPage extends StatefulWidget {
   State<TaskCenterPage> createState() => _TaskCenterPageState();
 }
 
-/// 任务工作台页面状态，负责加载机构任务并管理安全退出倒计时。
-/// 管理任务列表加载、任务导航及无任务安全退出倒计时。
+/// 管理机构任务加载、单任务导航及登录会话无操作退出倒计时。
 class _TaskCenterPageState extends State<TaskCenterPage> {
-  static const int _idleTimeoutSeconds = 10;
+  static const int _inactivityTimeoutSeconds = 100;
 
   late final TaskCenterRepository _repository =
       widget.arguments.repository ?? taskCenterRepository;
@@ -56,23 +57,26 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
 
   List<CabinetTask> _tasks = const [];
   bool _loading = true;
+
+  /// 任务跳转的页面级防重入锁，返回工作台并刷新后才解除。
   bool _navigationInProgress = false;
   Object? _error;
-  Timer? _idleTicker;
-  int _idleSeconds = _idleTimeoutSeconds;
-  bool _idleCountdownVisible = false;
+  Timer? _inactivityTicker;
+  int _inactivitySeconds = _inactivityTimeoutSeconds;
+
+  /// 任务列表加载代次，防止较早刷新覆盖最近一次返回结果。
   int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    _restartInactivityTimer();
     unawaited(_loadTasks());
   }
 
   /// 从仓库刷新当前机构的未完成任务。
   Future<void> _loadTasks() async {
     final generation = ++_loadGeneration;
-    _cancelIdleTicker();
     if (mounted) {
       setState(() {
         _loading = true;
@@ -89,9 +93,6 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
         _loading = false;
         _navigationInProgress = false;
       });
-      if (tasks.isEmpty) {
-        _startIdleTicker();
-      }
     } catch (error) {
       if (!mounted || generation != _loadGeneration) {
         return;
@@ -104,54 +105,46 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
     }
   }
 
-  /// 在无任务场景持续检查退出倒计时的安全条件。
-  void _startIdleTicker() {
-    if (_idleTicker != null || _tasks.isNotEmpty || _error != null) {
+  /// 重新开始 100 秒无操作倒计时。
+  void _restartInactivityTimer() {
+    if (!mounted || _navigationInProgress) {
       return;
     }
-    _idleSeconds = _idleTimeoutSeconds;
-    _idleCountdownVisible = _canCountDownToLogout;
-    _idleTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) {
+    _inactivityTicker?.cancel();
+    if (_inactivitySeconds == _inactivityTimeoutSeconds) {
+      _inactivitySeconds = _inactivityTimeoutSeconds;
+    } else {
+      setState(() => _inactivitySeconds = _inactivityTimeoutSeconds);
+    }
+    _inactivityTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _navigationInProgress) {
         return;
       }
-      if (!_canCountDownToLogout) {
-        if (_idleCountdownVisible || _idleSeconds != _idleTimeoutSeconds) {
-          setState(() {
-            _idleCountdownVisible = false;
-            _idleSeconds = _idleTimeoutSeconds;
-          });
+      if (!_canLogoutForInactivity) {
+        if (_inactivitySeconds != _inactivityTimeoutSeconds) {
+          setState(() => _inactivitySeconds = _inactivityTimeoutSeconds);
         }
         return;
       }
-
-      if (!_idleCountdownVisible) {
-        setState(() => _idleCountdownVisible = true);
-        return;
-      }
-      if (_idleSeconds <= 1) {
+      if (_inactivitySeconds <= 1) {
         _returnHome();
         return;
       }
-      setState(() => _idleSeconds -= 1);
+      setState(() => _inactivitySeconds -= 1);
     });
   }
 
-  /// 当前是否满足“无任务、无进行动作且所有柜门关闭”的退出条件。
-  bool get _canCountDownToLogout {
-    return !_loading &&
-        !_navigationInProgress &&
-        _tasks.isEmpty &&
+  /// 当前是否满足无进行中柜门动作且所有柜门关闭的安全退出条件。
+  bool get _canLogoutForInactivity {
+    return !_navigationInProgress &&
         _doorGuard.allDoorsClosed &&
         !_doorGuard.hasActiveOperation;
   }
 
-  /// 取消无任务退出计时器并重置展示状态。
-  void _cancelIdleTicker() {
-    _idleTicker?.cancel();
-    _idleTicker = null;
-    _idleSeconds = _idleTimeoutSeconds;
-    _idleCountdownVisible = false;
+  /// 停止无操作倒计时。
+  void _cancelInactivityTicker() {
+    _inactivityTicker?.cancel();
+    _inactivityTicker = null;
   }
 
   /// 打开指定任务并在返回后刷新工作台。
@@ -172,7 +165,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
       );
       return;
     }
-    _cancelIdleTicker();
+    _cancelInactivityTicker();
     setState(() => _navigationInProgress = true);
     await Navigator.of(context).pushNamed(
       AppRoutes.taskExecution,
@@ -186,6 +179,8 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
     if (!mounted) {
       return;
     }
+    setState(() => _navigationInProgress = false);
+    _restartInactivityTimer();
     await _loadTasks();
   }
 
@@ -206,7 +201,8 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
       return;
     }
     _navigationInProgress = true;
-    _cancelIdleTicker();
+    _cancelInactivityTicker();
+    operatorIdentityRepository.clearSession();
     Navigator.of(
       context,
     ).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
@@ -215,7 +211,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
   @override
   void dispose() {
     _loadGeneration += 1;
-    _cancelIdleTicker();
+    _cancelInactivityTicker();
     super.dispose();
   }
 
@@ -224,7 +220,7 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
     final l10n = context.l10n;
     final verifiedCount = widget.arguments.account.verifiedFactors.length;
 
-    return TerminalShell(
+    final shell = TerminalShell(
       topBarLeading: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -244,10 +240,20 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
           ),
         ],
       ),
-      topRightBadge: FlowStatusBadge(
-        text: l10n
-            .t('taskCenterAuthenticatedBadge', '身份认证已通过 · {count} 项因子')
-            .replaceAll('{count}', '$verifiedCount'),
+      topRightBadge: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FlowStatusBadge(
+            text: l10n
+                .t('taskCenterAuthenticatedBadge', '身份认证已通过 · {count} 项因子')
+                .replaceAll('{count}', '$verifiedCount'),
+          ),
+          const SizedBox(width: 10),
+          InactivityCountdownBadge(
+            key: const ValueKey('task_center_inactivity_countdown'),
+            seconds: _inactivitySeconds,
+          ),
+        ],
       ),
       child: Container(
         color: AppTheme.scaffoldBackgroundColor,
@@ -266,6 +272,18 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
             Expanded(child: _buildTaskArea(context)),
           ],
         ),
+      ),
+    );
+    return Focus(
+      onKeyEvent: (_, _) {
+        _restartInactivityTimer();
+        return KeyEventResult.ignored;
+      },
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _restartInactivityTimer(),
+        onPointerSignal: (_) => _restartInactivityTimer(),
+        child: shell,
       ),
     );
   }
@@ -322,8 +340,8 @@ class _TaskCenterPageState extends State<TaskCenterPage> {
         const SizedBox(height: 20),
         if (_tasks.isEmpty)
           _NoTaskPanel(
-            countdownVisible: _idleCountdownVisible,
-            seconds: _idleSeconds,
+            countdownVisible: _canLogoutForInactivity,
+            seconds: _inactivitySeconds,
             doorSafe: _doorGuard.allDoorsClosed,
           )
         else
@@ -415,7 +433,7 @@ class _OperatorPanel extends StatelessWidget {
           ),
           _OperatorInfoLine(
             label: l10n.t('taskCenterPosition', '职位'),
-            value: account.position,
+            value: localizedOperatorPosition(context, account.position),
           ),
           _OperatorInfoLine(
             label: l10n.t('taskCenterPhoneNumber', '手机号'),
@@ -423,7 +441,7 @@ class _OperatorPanel extends StatelessWidget {
           ),
           _OperatorInfoLine(
             label: l10n.t('taskCenterGender', '性别'),
-            value: account.gender,
+            value: localizedOperatorGender(context, account.gender),
           ),
           _OperatorInfoLine(
             label: l10n.t('taskCenterAge', '年龄'),
@@ -544,7 +562,7 @@ class _TaskTypeCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            _taskTypeTitle(context, type),
+            localizedTaskTypeTitle(context, type),
             style: const TextStyle(
               color: AppTheme.textPrimaryColor,
               fontSize: 20,
@@ -554,7 +572,9 @@ class _TaskTypeCard extends StatelessWidget {
           const SizedBox(height: 6),
           Expanded(
             child: Text(
-              task?.title ?? l10n.t('taskCenterNoTaskOfType', '暂无此类任务'),
+              task == null
+                  ? l10n.t('taskCenterNoTaskOfType', '暂无此类任务')
+                  : localizedTaskTitle(context, task),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -655,7 +675,7 @@ class _TaskCenterError extends StatelessWidget {
           Text(
             l10n
                 .t('taskCenterLoadFailed', '任务加载失败：{error}')
-                .replaceAll('{error}', '$error'),
+                .replaceAll('{error}', localizedTaskError(context, error)),
           ),
           const SizedBox(height: 12),
           ElevatedButton(
@@ -666,18 +686,6 @@ class _TaskCenterError extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 返回任务类型的界面标题。
-String _taskTypeTitle(BuildContext context, TaskType type) {
-  final l10n = context.l10n;
-  return switch (type) {
-    TaskType.storeEvidence => l10n.t('taskTypeStoreEvidence', '存证'),
-    TaskType.retrieveEvidence => l10n.t('taskTypeRetrieveEvidence', '取证'),
-    TaskType.borrowEvidence => l10n.t('taskTypeBorrowEvidence', '借证'),
-    TaskType.returnEvidence => l10n.t('taskTypeReturnEvidence', '还证'),
-    TaskType.inventory => l10n.t('taskTypeInventory', '盘点'),
-  };
 }
 
 /// 返回任务类型图标。

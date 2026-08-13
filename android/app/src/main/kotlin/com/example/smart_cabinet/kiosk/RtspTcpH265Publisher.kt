@@ -1,6 +1,9 @@
 package com.example.smart_cabinet.kiosk
 
 import android.util.Base64
+import com.example.smart_cabinet.logging.NativeCommunicationDirection
+import com.example.smart_cabinet.logging.NativeCommunicationLogStore
+import com.example.smart_cabinet.logging.NativeCommunicationTargetType
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
@@ -10,12 +13,19 @@ import java.net.Socket
 import java.util.ArrayDeque
 import kotlin.random.Random
 
+/**
+ * 通过单一 TCP 连接完成 RTSP 发布和 RTP interleaved 传输的 H265 发送器。
+ *
+ * [start] 在调用线程同步完成 OPTIONS/ANNOUNCE/SETUP/RECORD，只有握手成功才启动
+ * 后台发送线程；[sendFrame] 仅入有界队列，不让摄像头/编码线程承担网络阻塞。
+ */
 class RtspTcpH265Publisher(
     private val statusListener: (String) -> Unit,
 ) {
     private var socket: Socket? = null
     private var input: BufferedInputStream? = null
     private var output: BufferedOutputStream? = null
+    // 连接建立和 stop 可能并发；该锁只保护 socket/流的原子换代，不包围阻塞 I/O。
     private val transportLock = Any()
     private var cSeq = 1
     private var session = ""
@@ -23,6 +33,7 @@ class RtspTcpH265Publisher(
     private val ssrc = Random.nextInt()
     private var firstPresentationTimeUs: Long = -1L
     private var parameterSets: H265ParameterSets? = null
+    // 待发送帧和 senderRunning 由发送线程与编码回调共同访问，必须在同一监视器下唤醒。
     private val sendLock = Object()
     private val pendingFrames = ArrayDeque<PendingFrame>()
     @Volatile
@@ -38,6 +49,7 @@ class RtspTcpH265Publisher(
         return codecConfig?.let(::extractParameterSets)?.isComplete == true
     }
 
+    /** codecConfig 必须包含完整 VPS/SPS/PPS，否则不能生成 ANNOUNCE 所需的 SDP。 */
     fun start(url: String, codecConfig: ByteArray?) {
         if (socket?.let { current -> current.isConnected && !current.isClosed } == true) {
             return
@@ -87,7 +99,8 @@ class RtspTcpH265Publisher(
                 url = url,
                 headers = linkedMapOf("Session" to session, "Range" to "npt=0.000-"),
             )
-            statusListener("RTSP直推已开始：session=$session")
+            // Session 只用于后续 RECORD 控制，不能进入状态监听器或管理员通讯日志。
+            statusListener("RTSP直推已开始")
             startSenderThread()
         } catch (error: Throwable) {
             closeTransport(nextSocket)
@@ -97,6 +110,9 @@ class RtspTcpH265Publisher(
         }
     }
 
+    /**
+     * 队列满时淘汰最旧帧以优先保持实时性；丢帧只影响画面连续性，不反压 Camera2。
+     */
     fun sendFrame(data: ByteArray, presentationTimeUs: Long) {
         if (!senderRunning || socket?.let { current -> current.isConnected && !current.isClosed } != true) {
             return
@@ -125,6 +141,7 @@ class RtspTcpH265Publisher(
     }
 
     fun stop() {
+        // 先清运行标记并关闭 socket，以解除发送线程可能停留的 wait 或阻塞写，再限时 join。
         senderRunning = false
         synchronized(sendLock) {
             pendingFrames.clear()
@@ -175,6 +192,7 @@ class RtspTcpH265Publisher(
     }
 
     private fun sendFrameNow(frame: PendingFrame) {
+        // RTP 使用 90 kHz 时钟；以首帧 PTS 为零点可避免设备绝对时间溢出 32 位时间戳。
         if (firstPresentationTimeUs < 0) {
             firstPresentationTimeUs = frame.presentationTimeUs
         }
@@ -197,6 +215,10 @@ class RtspTcpH265Publisher(
         }
     }
 
+    /**
+     * 串行发送一条 RTSP 控制请求并等待响应。
+     * 通讯日志只保存方法、CSeq、脱敏 endpoint 和响应码，不读取或复制 SDP/Session。
+     */
     private fun request(
         method: String,
         url: String,
@@ -204,7 +226,8 @@ class RtspTcpH265Publisher(
         body: String = "",
     ): RtspResponse {
         val requestHeaders = linkedMapOf<String, String>()
-        requestHeaders["CSeq"] = (cSeq++).toString()
+        val requestCSeq = cSeq++
+        requestHeaders["CSeq"] = requestCSeq.toString()
         requestHeaders.putAll(headers)
         if (body.isNotEmpty()) {
             requestHeaders["Content-Length"] = body.toByteArray(Charsets.UTF_8).size.toString()
@@ -219,15 +242,69 @@ class RtspTcpH265Publisher(
             append(body)
         }
         val currentOutput = output ?: error("RTSP output is not ready")
-        currentOutput.write(raw.toByteArray(Charsets.UTF_8))
-        currentOutput.flush()
-        val response = readResponse()
+        val endpoint = NativeCommunicationLogStore.sanitizeEndpoint(url)
+        val requestSummary = linkedMapOf<String, Any?>(
+            "method" to method,
+            "cSeq" to requestCSeq,
+            "endpoint" to endpoint,
+        )
+        val requestTime = System.currentTimeMillis()
+        try {
+            currentOutput.write(raw.toByteArray(Charsets.UTF_8))
+            currentOutput.flush()
+            NativeCommunicationLogStore.tryRecord(
+                targetType = NativeCommunicationTargetType.SERVER,
+                direction = NativeCommunicationDirection.OUTBOUND,
+                channel = "RTSP",
+                operation = method,
+                messageBody = requestSummary,
+                result = "发送成功",
+                requestTimeEpochMs = requestTime,
+            )
+        } catch (error: Throwable) {
+            NativeCommunicationLogStore.tryRecord(
+                targetType = NativeCommunicationTargetType.SERVER,
+                direction = NativeCommunicationDirection.OUTBOUND,
+                channel = "RTSP",
+                operation = method,
+                messageBody = requestSummary,
+                result = "发送失败：${error::class.java.simpleName}",
+                requestTimeEpochMs = requestTime,
+            )
+            throw error
+        }
+        val response = try {
+            readResponse()
+        } catch (error: Throwable) {
+            NativeCommunicationLogStore.tryRecord(
+                targetType = NativeCommunicationTargetType.SERVER,
+                direction = NativeCommunicationDirection.INBOUND,
+                channel = "RTSP",
+                operation = method,
+                messageBody = requestSummary,
+                result = "接收失败：${error::class.java.simpleName}",
+            )
+            throw error
+        }
+        NativeCommunicationLogStore.tryRecord(
+            targetType = NativeCommunicationTargetType.SERVER,
+            direction = NativeCommunicationDirection.INBOUND,
+            channel = "RTSP",
+            operation = method,
+            messageBody = requestSummary + ("responseCode" to response.code),
+            result = if (response.code in 200..299) {
+                "成功：RTSP ${response.code}"
+            } else {
+                "失败：RTSP ${response.code}"
+            },
+        )
         if (response.code !in 200..299) {
             error("RTSP $method failed: code=${response.code}, text=${response.statusLine}")
         }
         return response
     }
 
+    // 对响应头和 body 设置硬上限，避免异常 RTSP 服务端导致柜机内存无界增长。
     private fun readResponse(): RtspResponse {
         val currentInput = input ?: error("RTSP input is not ready")
         val bytes = ByteArrayOutputStream()
@@ -334,6 +411,7 @@ class RtspTcpH265Publisher(
         return 0
     }
 
+    // 小 NAL 直接发送；超出 MTU 预算时按 H265 FU（type 49）拆包，marker 只落在访问单元末片。
     private fun packetizeNal(nal: ByteArray, timestamp: Int, marker: Boolean) {
         if (nal.size <= MAX_RTP_PAYLOAD) {
             writeInterleavedRtp(buildRtpPacket(nal, timestamp, marker))
@@ -384,6 +462,7 @@ class RtspTcpH265Publisher(
         currentOutput.write(packet)
     }
 
+    // expectedSocket 用于启动失败回滚，防止旧一次 start 的异常误关后续已经替换的新连接。
     private fun closeTransport(expectedSocket: Socket? = null) {
         val transport = synchronized(transportLock) {
             if (expectedSocket != null && socket !== expectedSocket) {

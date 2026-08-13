@@ -16,7 +16,13 @@ import 'package:smart_cabinet/src/features/identity_verification/domain/entities
 /// 管理员身份校验页。
 class AdminVerificationPage extends StatefulWidget {
   /// 创建管理员身份校验页。
-  const AdminVerificationPage({super.key});
+  const AdminVerificationPage({
+    this.postVerificationRoute = AppRoutes.adminConsole,
+    super.key,
+  });
+
+  /// 完成三因子认证后进入的受限管理员页面。
+  final String postVerificationRoute;
 
   @override
   State<AdminVerificationPage> createState() => _AdminVerificationPageState();
@@ -35,13 +41,17 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
   /// 是否已经触发下一步跳转。
   bool _hasNavigated = false;
 
-  /// 三项认证完成后进入管理员控制台。
+  /// 三项认证完成后进入路由层白名单允许的管理员页面。
   void _goNextIfAllVerified() {
     if (_hasNavigated || !_allVerified) {
       return;
     }
     _hasNavigated = true;
-    Navigator.of(context).pushReplacementNamed(AppRoutes.adminConsole);
+    final destination =
+        widget.postVerificationRoute == AppRoutes.adminTerminalUpgrade
+        ? AppRoutes.adminTerminalUpgrade
+        : AppRoutes.adminConsole;
+    Navigator.of(context).pushReplacementNamed(destination);
   }
 
   /// 更新验证状态并在全部完成后进入下一步。
@@ -139,7 +149,10 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                                   'identityFingerprintTitle',
                                   '指纹识别',
                                 ),
-                                subtitle: 'Fingerprint Scan',
+                                subtitle: l10n.t(
+                                  'identityFingerprintTitle',
+                                  '指纹识别',
+                                ),
                                 icon: Icons.fingerprint_rounded,
                                 verified: _verification.fingerprint,
                                 actionText: l10n.t(
@@ -172,7 +185,7 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
                               padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
                               child: SensorVerificationCard(
                                 title: l10n.t('identityNfcTitle', 'NFC识别'),
-                                subtitle: 'NFC Card Scan',
+                                subtitle: l10n.t('identityNfcTitle', 'NFC识别'),
                                 icon: Icons.contactless_rounded,
                                 verified: _verification.nfc,
                                 actionText: l10n.t(
@@ -229,6 +242,7 @@ class _AdminHeader extends StatelessWidget {
       children: [
         IconButton(
           onPressed: onBack,
+          tooltip: context.l10n.t('adminBackTooltip', '返回'),
           icon: const Icon(
             Icons.arrow_back_rounded,
             color: AppTheme.textPrimaryColor,

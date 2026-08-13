@@ -2,12 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+import 'package:smart_cabinet/src/shared/widgets/smart_cabinet_brand_panel.dart';
 
 /// 应用启动阶段展示的媒体层。
 ///
-/// 当前使用图片资源，后续如果要替换成视频，只需要保留外部调用不变，
-/// 将本组件内部的 [Image.asset] 替换为视频播放器即可。
+/// 启动视觉由代码绘制，避免图片内嵌文字绕过多语言系统。
 class StartupMedia extends StatefulWidget {
   /// 创建启动媒体层。
   const StartupMedia({required this.child, super.key});
@@ -25,11 +24,6 @@ class StartupMedia extends StatefulWidget {
 }
 
 class _StartupMediaState extends State<StartupMedia> {
-  /// 启动图资源路径。
-  ///
-  /// 如果后续要替换图片，修改这里的资源路径，并在 `pubspec.yaml` 注册资源目录。
-  static const String _startupImageAsset = 'assets/images/智能柜启动.png';
-
   /// 是否已经结束启动媒体展示。
   bool _startupFinished = false;
 
@@ -67,41 +61,13 @@ class _StartupMediaState extends State<StartupMedia> {
               : AbsorbPointer(
                   key: const ValueKey('startup_media_layer'),
                   absorbing: true,
-                  child: _StartupImage(assetPath: _startupImageAsset),
+                  child: const SmartCabinetBrandPanel(
+                    key: ValueKey('startup_media_image'),
+                    showLoading: true,
+                  ),
                 ),
         ),
       ],
-    );
-  }
-}
-
-/// 启动图片展示组件。
-class _StartupImage extends StatelessWidget {
-  /// 创建启动图片展示组件。
-  const _StartupImage({required this.assetPath});
-
-  /// 图片资源路径。
-  final String assetPath;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppTheme.scaffoldBackgroundColor,
-      child: Center(
-        child: FittedBox(
-          fit: BoxFit.contain,
-          child: SizedBox(
-            width: 1280,
-            height: 800,
-            child: Image.asset(
-              assetPath,
-              key: const ValueKey('startup_media_image'),
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

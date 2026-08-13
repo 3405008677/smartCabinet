@@ -13,6 +13,7 @@ smartCabinet/
 ├── assets/                  # Flutter 静态资源
 ├── lib/                     # Flutter/Dart 主源码
 ├── test/                    # 单元测试与 Widget 测试
+├── tool/                    # 自动版本递增、发布构建与工程审计工具
 ├── web/                     # Flutter Web 平台入口
 ├── AGENTS.md                # AI 协作入口
 ├── analysis_options.yaml    # Dart analyzer 与 lint 配置
@@ -101,10 +102,11 @@ app/
 
 ```text
 features/
-├── admin/                  # 管理员账号、三因子校验、设备检测与控制台
+├── admin/                  # 管理员账号、三因子校验、设备检测、通讯日志与控制台
 ├── home/                   # 公开只读首页、柜体概览与登录入口
 ├── identity_verification/  # 操作员账号、三项全验、资料同步/录入/异常恢复
-└── task_center/            # 认证后任务工作台与五类智能柜任务
+├── task_center/            # 认证后任务工作台与五类智能柜任务
+└── terminal_upgrade/       # STUM 升级检查、URL 包校验与管理员安装流程
 ```
 
 需要分层的 Feature 优先遵循：
@@ -145,7 +147,9 @@ home
 
 ### 身份会话
 
-1. 正式模式下账号密码只用于确定 `OperatorAccount`，不能加入 `verifiedFactors`，也不能直接授予任务权限。仅当 `AppConfig.current.isTestMode == true` 时，账号登录协调器可为测试会话补齐三项 `verifiedFactors` 并直接进入任务中心；人脸登录不使用该旁路，正式部署前必须关闭。 测试模式下进入身份校验页时，人脸步骤使用明确的模拟结果，不启动摄像头或等待身份后端；正式模式继续走摄像头和 Repository。
+普通账号、人脸和指纹认证由 `OperatorAfrrLoginDataSource` 通过 AFRR TCP A170/B170 完成。账号密码使用 40 位大写 SHA-1，三种方式分别使用 `logway = 1/2/3`，操作员登录固定使用 `func=userLogin` 且只认 `rst=9` 成功，不支持旧版 `cmd=login`；协议层负责 BCD 时间、KLV、流水号、长度、异或校验、转义、半包/粘包和最多两次重发。APP `logon` 成功后同一长连接每 60 秒发送 `func=heartbeat` 并等待 B170 `rst=9`；连续失败时废弃当前 Socket，延时重连并保证 `logon` 仍是新连接首帧。真实终端 A101/A102 接收链路未接入时，heartbeat 的终端透传 `data` 必须为 `null`。B170 同时识别文档标准的两字节原流水号加 JSON 回复，以及现场 APP `logon` 使用的五字节原指令码、原流水号和结果码精简回复；`userLogin` 必须取得人员资料 JSON。B170 人员资料映射为 `OperatorAccount` 和不含 HTTP token 的 `OperatorLoginSession`，退出回首页前清除，不进入 Widget 参数或日志。当前只支持未加密标记 `0x00`，人脸和指纹文件 ID 解析仍是可替换的模拟硬件边界。
+
+1. 正式模式下账号密码只用于确定 `OperatorAccount`，不能加入 `verifiedFactors`，也不能直接授予任务权限。仅当 `AppConfig.current.isTestMode == true` 时，账号登录协调器可为测试会话补齐三项 `verifiedFactors` 并直接进入任务中心；人脸登录不使用该旁路，正式部署前必须关闭。该测试开关不跳过 AFRR 登录，也不得在协议失败时回退 Fake 账号。测试模式下进入身份校验页时，人脸步骤使用明确的模拟结果，不启动摄像头或等待身份后端；正式模式继续走摄像头和 Repository。
 2. 普通 `ready`、刚同步的 `synced` 与异常复核场景都要求人脸、指纹、NFC 三项认证全部完成；`verifiedFactors` 使用 `Set<IdentityFactor>` 表达不同因子，重复同一因子不能累计。
 3. 服务端资料同步到本机后的 `synced` 场景，以及本机资料 `abnormal` 复核场景，同样必须完成人脸、指纹与 NFC 三项认证。
 4. 缺失资料仅录入人脸和指纹。单项失败停留在录入页并允许重试；所有请求项成功后，3 秒自动或手动清空当前流程并回首页重新登录。
@@ -205,19 +209,28 @@ core/
 ├── camera/                 # 摄像头发现、控制与推流能力
 ├── config/                 # 应用配置
 ├── device/                 # 柜机平台抽象与 MethodChannel 实现
-├── logging/                # 应用日志与崩溃记录
+├── logging/                # 应用日志、崩溃记录与结构化通讯日志
 ├── monitoring/             # 运行健康监测
 ├── mqtt/                   # MQTT 连接、消息与设备命令
-├── network/                # API、HTTP 抽象、结果与模拟数据
+├── network/                # API、HTTP 抽象及可复用 TCP 协议请求基础设施
 └── storage/                # 本地存储抽象、实现与 Provider
 ```
 
 1. `core/` 只放跨业务基础设施，不承载操作员任务或管理员规则。
-2. 页面需要系统能力时优先依赖 `KioskDevice` 等抽象，不直接创建新的 `MethodChannel` 调用。
+2. 跨业务柜机能力通过 `core/device` 中的 `KioskDevice` 等抽象访问；`TerminalUpgradeDevice` 这类 Feature 专属平台抽象必须位于对应 Feature 的 `data/datasources`。页面不得直接创建新的 `MethodChannel` 调用。
 3. 网络请求复用 `ApiClient`、项目 HTTP 抽象和现有结果类型；模拟响应集中在 `mock_api_data.dart` 或对应 Feature DataSource。
 4. 本地存储复用 `AppLocalStore`、KeyValueStorage 抽象和现有 Provider，不在页面散落 SharedPreferences key。
-5. 日志和异常统一进入 `AppLogger` 等现有入口；用户可见错误需要保留具体原因并给出可执行的恢复建议。
+5. 普通业务日志和异常进入 `AppLogger` 等现有入口；管理员通讯记录只能进入独立的 `CommunicationLogStore`/原生有界队列，并按服务器、硬件或升级指令归类且在写入前脱敏。ZRD STUM 的 TCP 建连和每条 T01/T03/T00、S00/S03 收发必须使用“升级指令”类型。两类日志不得相互复用，避免错误正文、堆栈或原始协议内容进入管理员页面。
 6. `shared/` 只放真正跨业务、业务无关的通用 UI 或模型，不把它变成无法归类代码的兜底目录。
+
+## 终端升级边界
+
+1. `terminal_upgrade` 的现场连接参数持久化在 `AppLocalStore.upgrade`，默认 `enabled = false`。`T01.ID` 来自管理员保存的真实设备号；`T01.IM` 只能由生产 Provider 从 `AppConfig.current.afrrDeviceImei` 注入，与 AFRR 共用唯一的 15 位 `DEVICE_IMEI`，确保匹配后台按 IMEI 绑定的升级任务，不得再创建第二份升级模块号环境配置；`T01.DP` 从 `terminalUpgradeDataProtocolIp`（`STUM_DP`，一个或多个逗号分隔的 IPv4 地址）注入。`T01.CD` 必须读取“关于设备”同源的 Android `Settings.Secure.ANDROID_ID`；它不是硬件芯片序列号，缺失或为占位值时必须在 Socket 建连前失败。经用户明确确认，管理员终端升级页面可以只读完整展示 IM、DP、CD，但页面和本地 Store 均不得编辑、保存或回退旧 `moduleImei`、`dataProtocolIp`、`chipId`，其它界面及全部日志不得输出。现场服务器可以由应用预填，但启动任务只在身份配置完整、管理员显式保存并启用时调度长连接，不得用空身份参数自动联网。
+2. 跨协议复用 `core/network/protocol/TcpProtocolClient` 管理连接代际、增量拆帧、串行写入、请求匹配、超时、主动消息和断线清理；STUM 报文及命令语义保留在 `terminal_upgrade/data/protocol`，`core` 不得依赖 Feature。STUM TCP 必须按 CRLF 拆帧并只处理 ASCII；每次连接先发送 `T01`，收到对应 `S00 01:OK` 后直接发送 `T03`，二者之间不发送 `T02`。`T03.VE` 按现场约定编码为 `SL_V{Android versionName}_{STUM_VERSION_DATE}`，版本日期必须绑定 APK 构建批次而非请求当天。`S03.VE=0` 只表示当前没有匹配到可下发升级包，不得展示成已经证明客户端为最新版本。`SN` 在 1—9999 循环，服务端 `S03` 的回执复用其 `SN`。URL 中的冒号只能按属性段第一个冒号切分。
+3. 当前只实现 `DT=1` URL 模式。新版本必须提供 HTTP/HTTPS `AD`、32 位完整文件 MD5，并在配置了 `PT` 时严格匹配；协议没有定义 `AD=2` 的分包帧、顺序、重传和校验，必须回复 `NG3AD`，不得自行扩展。
+4. 新 `S03` 只允许作为当前 `T03` 请求窗口的业务回复；窗口外仅对已经接收 offer 的同 `SN/VE/AD/MD/PT` 精确重传幂等补发 ACK，人工或迟到帧不得创建或替换任务。后台收到合法 offer 时可以显示不含 URL、MD5 和设备身份的应用级管理员处理入口，但通知不能直接触发下载或安装，也不能绕过管理员账号和人脸、指纹、NFC 三因子流程；认证通过后可直接进入升级页。停止、重配或安装终态使 offer 失效时，应用级提示必须同步清除。管理员确认必须绑定其看到的具体 offer；`CabinetDoorGuard.allDoorsClosed` 为真后必须原子取得维护租约再下载。租约阻止新的开门请求并保持到安装终态，应用首帧前无论监控开关都先恢复原生活动安装租约；停止、重配或释放监控必须使未提交下载和未跨过原生 commit 的操作失效。下载限制大小、使用临时 `.part` 文件并在完成后校验 MD5。
+5. `TerminalUpgradeDevice` 与 MethodChannel 实现位于 `terminal_upgrade/data/datasources`，`smart_cabinet/upgrade` 的 Android 实现位于 `android/app/src/main/kotlin/com/example/smart_cabinet/upgrade/`。Android 原生层必须重新校验 APK 可读性、协议目标版本与 APK `versionName`、当前包名、签名连续性和严格递增的 `versionCode`，使用 operation ID 隔离并取消 commit 前操作。`PackageInstaller` 显式结果 Receiver 必须核对任务、Session、系统包名与实际安装的精确版本，并持久化防重复提交和最终状态。
+6. STUM 文档没有定义安装结果上报、灰度、失败重试或回滚命令；这些能力在服务端协议补齐前不得伪造。应用可在 `MY_PACKAGE_REPLACED` 后尝试拉起，但不能替代 Device Owner 或现场 watchdog。release 绝不回退到 debug 签名；生产构建必须在未入库的 `android/key.properties` 中配置 `storeFile`、`storePassword`、`keyAlias`、`keyPassword` 和稳定证书，并完成系统确认路径和目标真机自更新/拉起验收。
 
 ## Android、MethodChannel 与原生边界
 
@@ -226,21 +239,24 @@ Android 平台代码集中在：
 ```text
 android/app/src/main/
 ├── kotlin/com/example/smart_cabinet/  # FlutterActivity 与柜机平台实现
+│   ├── kiosk/                          # 跨页面柜机能力
+│   └── upgrade/                        # APK 校验、PackageInstaller 与结果接收
 ├── cpp/rkmpp_bridge.cpp               # RKMPP JNI 桥接源码
 ├── native/                             # ndk-build 配置
 ├── jniLibs/arm64-v8a/                 # 预编译 RKMPP 与 C++ 运行库
 └── res/                                # Manifest 使用的 Android 资源
 ```
 
-1. Dart 与 Android 共用的通道名是 `smart_cabinet/kiosk`。新增或修改方法时，必须同步检查 Dart 调用名、Kotlin 分发名、参数键、返回类型、错误码和测试。
-2. 平台实现保持在 `MainActivity`、`KioskManager` 或 `kiosk/` 下的明确职责类中；Flutter 页面不直接了解 Camera2、MediaCodec 或 RTSP 细节。
+1. Dart 与 Android 共用的业务通道名是 `smart_cabinet/kiosk` 和 `smart_cabinet/upgrade`；原生通讯诊断使用 `smart_cabinet/communication_log` 及其 events 通道。新增或修改方法时，必须同步检查 Dart 调用名、Kotlin 分发名、参数键、返回类型、错误码和测试。
+2. 平台实现保持在 `MainActivity`、`KioskManager`、`kiosk/` 或 `upgrade/` 下的明确职责类中；Flutter 页面不直接了解 Camera2、MediaCodec、RTSP 或 `PackageInstaller` 细节。
 3. 摄像头和推流代码必须正确处理应用生命周期、权限、重复启动、停止、取消、超时、线程切换、队列背压和资源释放；不得阻塞 Android 主线程或 Flutter UI isolate。
 4. 当前推流主链路为 `Camera2 -> ImageReader -> MediaCodec/RKMPP H265 -> RtspTcpH265Publisher -> RTSP/TCP`。修改其中一层时，应检查上下游格式、分辨率、帧率、码率、GOP、缓冲和失败传播。
 5. `android/app/build.gradle.kts` 当前限定 `arm64-v8a`，Java/Kotlin 目标为 17；不要无依据扩大 ABI、改变 SDK 或替换构建体系。
 6. 普通构建默认打包 `jniLibs/arm64-v8a/` 中的预编译库，不会因为修改 `rkmpp_bridge.cpp` 就自动更新 `.so`。只有明确要求重建 native 时才启用和验证 `buildRkMppNative` 流程。
 7. JNI/C++ 改动必须维护 ABI、符号加载、互斥、缓冲区边界和每条失败路径的资源释放，并明确需要在 Rockchip ARM64 真机上复测。
-8. 当前 `applicationId` 仍是示例值、release 使用 debug key，Manifest 还允许明文流量；这些都是正式投产前需要专项处理的边界，不能把验收构建描述为生产发布构建。
+8. 当前 `applicationId` 仍是示例值，Manifest 还允许明文流量；release 已禁止回退 debug key，但仍需由部署方通过未入库的 `android/key.properties` 提供稳定生产证书。这些都是正式投产前需要专项处理的边界，不能把验收构建描述为生产发布构建。
 9. 二进制 `.so`、签名配置和设备所有者/Kiosk 配置属于高风险交付边界，不为普通 UI 或业务改动顺手调整。
+10. 通讯诊断只记录 RTSP 控制方法/CSeq/响应码、脱敏 endpoint 和其它结构化元数据；不得读取、复制或保存 SDP、Session、VPS/SPS/PPS、RTP/H265 帧，也不得改变视频发送、重连、队列背压或资源释放时序。
 
 ## 多语言与资源
 
@@ -260,6 +276,7 @@ test/
 ├── core/                   # 摄像头、设备、MQTT、存储等基础设施测试
 ├── features/               # 业务流程与业务组件测试
 ├── shared/                 # 通用组件测试
+├── tool/                   # 发布版本与工程工具测试
 └── widget_test.dart        # 跨流程 Widget 回归测试
 ```
 

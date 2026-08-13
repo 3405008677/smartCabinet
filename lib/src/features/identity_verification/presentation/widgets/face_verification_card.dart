@@ -9,9 +9,27 @@ import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 import 'package:smart_cabinet/src/core/device/hardware_recovery_advice.dart';
+import 'package:smart_cabinet/src/core/logging/communication_log_store.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/localized_hardware_recovery_advice.dart';
 
 /// 人脸识别流程状态。
 enum FaceVerificationStatus { initializing, ready, verifying, success, failure }
+
+/// 人脸卡片内部使用的稳定消息类型，最终在 build 阶段按当前语言转换。
+enum _FaceVerificationMessage {
+  cameraStarting,
+  cameraReady,
+  noCamera,
+  cameraPermissionDenied,
+  cameraPermissionPermanentlyDenied,
+  cameraStartFailed,
+  simulationReady,
+  simulationVerifying,
+  simulationSucceeded,
+  captureVerifying,
+  captureFailed,
+  verifiedSubmitted,
+}
 
 /// 人脸识别卡片。
 class FaceVerificationCard extends StatefulWidget {
@@ -20,8 +38,8 @@ class FaceVerificationCard extends StatefulWidget {
     super.key,
     required this.verified,
     required this.onVerified,
-    this.title = '人脸识别',
-    this.subtitle = 'Face Recognition',
+    this.title,
+    this.subtitle,
     this.accentColor,
     this.stepNumber,
     this.allowFallbackWithoutCamera = false,
@@ -37,10 +55,10 @@ class FaceVerificationCard extends StatefulWidget {
   final VoidCallback onVerified;
 
   /// 卡片标题。
-  final String title;
+  final String? title;
 
-  /// 卡片英文副标题。
-  final String subtitle;
+  /// 卡片副标题；当前统一头部不展示，仅保留兼容现有调用。
+  final String? subtitle;
 
   /// 主题强调色。
   ///
@@ -66,6 +84,7 @@ class FaceVerificationCard extends StatefulWidget {
   State<FaceVerificationCard> createState() => _FaceVerificationCardState();
 }
 
+/// 协调摄像头生命周期、临时拍照文件与人脸认证页面状态。
 class _FaceVerificationCardState extends State<FaceVerificationCard>
     with WidgetsBindingObserver {
   /// 摄像头控制器。
@@ -74,6 +93,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
   /// 正在初始化、尚未发布到界面的摄像头控制器。
   CameraController? _initializingController;
 
+  /// 串行化控制器释放，避免 camera 插件同时关闭多个会话时争用原生资源。
   Future<void> _releaseChain = Future<void>.value();
 
   /// 摄像头异步请求代次，用于丢弃过期结果。
@@ -85,8 +105,8 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
   /// 当前人脸识别状态。
   FaceVerificationStatus _status = FaceVerificationStatus.initializing;
 
-  /// 人脸识别提示文案。
-  String _message = '正在启动摄像头...';
+  /// 人脸识别提示类型；具体文案在 build 阶段按当前语言生成。
+  _FaceVerificationMessage _message = _FaceVerificationMessage.cameraStarting;
 
   /// 拍照后的定格图片路径。
   String? _capturedImagePath;
@@ -106,12 +126,13 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
         lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
     if (widget.simulateVerification) {
       _status = FaceVerificationStatus.ready;
-      _message = '测试模式：点击确认完成人脸模拟认证';
+      _message = _FaceVerificationMessage.simulationReady;
     } else if (_lifecycleActive) {
       unawaited(_initializeCamera());
     }
   }
 
+  /// 外部认证结果变化时释放或重建摄像头，已通过的卡片不继续占用硬件。
   @override
   void didUpdateWidget(covariant FaceVerificationCard oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -119,8 +140,8 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
       unawaited(_releaseControllers(invalidate: true));
       _status = FaceVerificationStatus.success;
       _message = widget.simulateVerification
-          ? '测试模式：人脸模拟认证已完成'
-          : '人脸识别通过，照片已提交后端校验';
+          ? _FaceVerificationMessage.simulationSucceeded
+          : _FaceVerificationMessage.verifiedSubmitted;
       _recoveryAdvice = null;
     } else if (!widget.verified &&
         oldWidget.verified &&
@@ -130,6 +151,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     }
   }
 
+  /// 退到后台时立即失效并释放摄像头，回到前台后再按最新状态初始化。
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final lifecycleActive = state == AppLifecycleState.resumed;
@@ -160,7 +182,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     super.dispose();
   }
 
-  /// 初始化摄像头。
+  /// 初始化摄像头，并用请求代次阻止较早的异步结果覆盖最新页面状态。
   Future<void> _initializeCamera() async {
     final generation = ++_cameraGeneration;
     await _releaseControllers(invalidate: false);
@@ -172,7 +194,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     setState(() {
       _capturedImagePath = null;
       _status = FaceVerificationStatus.initializing;
-      _message = '正在启动摄像头...';
+      _message = _FaceVerificationMessage.cameraStarting;
       _recoveryAdvice = null;
     });
     unawaited(_cleanupCapturedImage(previousImagePath));
@@ -185,7 +207,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
         return;
       }
       if (selectedCamera == null) {
-        _markCameraFailure('未检测到可用摄像头');
+        _markCameraFailure(_FaceVerificationMessage.noCamera);
         return;
       }
 
@@ -197,7 +219,16 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
       );
       candidate = controller;
       _initializingController = controller;
-      await controller.initialize();
+      await CommunicationLogStore.instance.traceExchange<void>(
+        targetType: CommunicationTargetType.hardware,
+        channel: 'camera plugin',
+        operation: '初始化人脸识别摄像头',
+        requestBody: const <String, Object?>{
+          'role': 'faceRecognition',
+          'resolution': 'medium',
+        },
+        action: controller.initialize,
+      );
       if (identical(_initializingController, controller)) {
         _initializingController = null;
       }
@@ -209,7 +240,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
       setState(() {
         _controller = controller;
         _status = FaceVerificationStatus.ready;
-        _message = '摄像头已启动，请对准面部后点击确认';
+        _message = _FaceVerificationMessage.cameraReady;
         _recoveryAdvice = null;
       });
     } on CameraException catch (error) {
@@ -226,26 +257,29 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
         _ => HardwareFailure.unavailable,
       };
       final message = switch (error.code) {
-        'CameraAccessDenied' => '摄像头权限被拒绝',
-        'CameraAccessDeniedWithoutPrompt' => '摄像头权限被永久拒绝，请到系统设置开启',
-        _ => '摄像头启动失败：${error.description ?? error.code}',
+        'CameraAccessDenied' => _FaceVerificationMessage.cameraPermissionDenied,
+        'CameraAccessDeniedWithoutPrompt' =>
+          _FaceVerificationMessage.cameraPermissionPermanentlyDenied,
+        _ => _FaceVerificationMessage.cameraStartFailed,
       };
       _markCameraFailure(message, failure: failure);
-    } catch (error) {
+    } catch (_) {
       if (identical(_initializingController, candidate)) {
         _initializingController = null;
       }
       await _disposeControllerSerially(candidate);
       if (_isCameraRequestCurrent(generation)) {
-        _markCameraFailure('摄像头启动失败：$error');
+        _markCameraFailure(_FaceVerificationMessage.cameraStartFailed);
       }
     }
   }
 
+  /// 只有仍挂载、位于前台且代次匹配的初始化请求可以发布控制器。
   bool _isCameraRequestCurrent(int generation) {
     return mounted && _lifecycleActive && generation == _cameraGeneration;
   }
 
+  /// 先从页面状态摘除控制器，再按需使在途初始化请求失效并异步释放资源。
   Future<void> _releaseControllers({required bool invalidate}) {
     if (invalidate) {
       _cameraGeneration++;
@@ -261,6 +295,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     return release;
   }
 
+  /// 将控制器释放追加到同一 Future 链，避免原生层并发 close 产生竞态。
   Future<void> _disposeControllerSerially(CameraController? controller) {
     if (controller == null) {
       return _releaseChain;
@@ -271,17 +306,25 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     return _releaseChain;
   }
 
+  /// 容忍生命周期切换时原生平台已先行回收摄像头的情况。
   Future<void> _safeDisposeController(CameraController? controller) async {
     if (controller == null) {
       return;
     }
     try {
-      await controller.dispose();
+      await CommunicationLogStore.instance.traceExchange<void>(
+        targetType: CommunicationTargetType.hardware,
+        channel: 'camera plugin',
+        operation: '释放人脸识别摄像头',
+        requestBody: const <String, Object?>{'role': 'faceRecognition'},
+        action: controller.dispose,
+      );
     } catch (_) {
-      // The platform may already have released the camera.
+      // 生命周期切换期间原生平台可能已经先行释放摄像头。
     }
   }
 
+  /// 尽力移除本次拍照的图片缓存与临时文件；清理失败不能中断认证流程。
   Future<void> _cleanupCapturedImage(String? path) async {
     if (path == null || path.isEmpty) {
       return;
@@ -290,14 +333,14 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     try {
       await FileImage(file).evict();
     } catch (_) {
-      // Cache eviction is best effort.
+      // 图片可能尚未进入 Flutter 缓存，逐出失败无需阻断后续文件清理。
     }
     try {
       if (await file.exists()) {
         await file.delete();
       }
     } catch (_) {
-      // Temporary photo cleanup must not break the verification flow.
+      // 临时照片清理属于收尾动作，不能反向改变已经完成的认证结果。
     }
   }
 
@@ -305,7 +348,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
   ///
   /// 失败后会同步生成恢复建议，便于现场人员知道下一步如何处理。
   void _markCameraFailure(
-    String message, {
+    _FaceVerificationMessage message, {
     HardwareFailure failure = HardwareFailure.unavailable,
   }) {
     if (!mounted) {
@@ -313,9 +356,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     }
     setState(() {
       _status = FaceVerificationStatus.failure;
-      _message = widget.allowFallbackWithoutCamera
-          ? '$message，可使用模拟校验'
-          : message;
+      _message = message;
       _recoveryAdvice = HardwareRecoveryAdvice.forFailure(
         hardware: CabinetHardware.camera,
         failure: failure,
@@ -339,8 +380,8 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     setState(() {
       _status = FaceVerificationStatus.verifying;
       _message = widget.simulateVerification
-          ? '测试模式：正在完成人脸模拟认证...'
-          : '正在拍照并提交后端校验...';
+          ? _FaceVerificationMessage.simulationVerifying
+          : _FaceVerificationMessage.captureVerifying;
     });
 
     if (widget.simulateVerification) {
@@ -350,7 +391,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
       }
       setState(() {
         _status = FaceVerificationStatus.success;
-        _message = '测试模式：人脸模拟认证已完成';
+        _message = _FaceVerificationMessage.simulationSucceeded;
       });
       widget.onVerified();
       return;
@@ -359,7 +400,17 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     try {
       final controller = _controller;
       if (controller != null && controller.value.isInitialized) {
-        final image = await controller.takePicture();
+        final image = await CommunicationLogStore.instance.traceExchange<XFile>(
+          targetType: CommunicationTargetType.hardware,
+          channel: 'camera plugin',
+          operation: '采集人脸验证图片',
+          requestBody: const <String, Object?>{'role': 'faceRecognition'},
+          action: controller.takePicture,
+          responseBody: (_) => const <String, Object?>{
+            'captured': true,
+            'imageContent': '<不记录>',
+          },
+        );
         pendingImagePath = image.path;
         if (!_isCameraRequestCurrent(generation)) {
           unawaited(_cleanupCapturedImage(pendingImagePath));
@@ -396,11 +447,11 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
       setState(() {
         _status = FaceVerificationStatus.success;
         _message = widget.simulateVerification
-            ? '测试模式：人脸模拟认证已完成'
-            : '人脸识别通过，照片已提交后端校验';
+            ? _FaceVerificationMessage.simulationSucceeded
+            : _FaceVerificationMessage.verifiedSubmitted;
       });
       widget.onVerified();
-    } catch (error) {
+    } catch (_) {
       unawaited(_cleanupCapturedImage(pendingImagePath));
       if (!_isCameraRequestCurrent(generation)) {
         return;
@@ -409,7 +460,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
       setState(() {
         _capturedImagePath = null;
         _status = FaceVerificationStatus.failure;
-        _message = '拍照或校验失败：$error';
+        _message = _FaceVerificationMessage.captureFailed;
         _recoveryAdvice = HardwareRecoveryAdvice.forFailure(
           hardware: CabinetHardware.camera,
           failure: HardwareFailure.unavailable,
@@ -438,41 +489,17 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     /// 当前页面文案集合。
     final l10n = context.l10n;
 
-    /// 摄像头初始化中时的文案。
-    final cameraStartingText = l10n.t('sharedFaceCameraStarting', '正在启动摄像头...');
-
-    /// 人脸识别成功后的文案。
-    final verifiedSubmittedText = l10n.t(
-      'sharedFaceVerifiedSubmitted',
-      '人脸识别通过，照片已提交后端校验',
+    /// 当前状态在所选语言下的提示文案。
+    final displayMessage = _localizedFaceMessage(
+      l10n,
+      _message,
+      allowFallback:
+          _status == FaceVerificationStatus.failure &&
+          widget.allowFallbackWithoutCamera,
     );
 
-    /// 摄像头已就绪时的引导文案。
-    final cameraReadyText = l10n.t(
-      'sharedFaceCameraReady',
-      '摄像头已启动，请对准面部后点击确认',
-    );
-
-    final simulationReadyText = l10n.t(
-      'sharedFaceSimulationReady',
-      '测试模式：点击确认完成人脸模拟认证',
-    );
-
-    final simulationSucceededText = l10n.t(
-      'sharedFaceSimulationSucceeded',
-      '测试模式：人脸模拟认证已完成',
-    );
-
-    final displayMessage = switch (_status) {
-      FaceVerificationStatus.initializing => cameraStartingText,
-      FaceVerificationStatus.ready =>
-        widget.simulateVerification ? simulationReadyText : cameraReadyText,
-      FaceVerificationStatus.success =>
-        widget.simulateVerification
-            ? simulationSucceededText
-            : verifiedSubmittedText,
-      _ => _message,
-    };
+    /// 未显式传入标题时使用当前语言的人脸识别标题。
+    final effectiveTitle = widget.title ?? l10n.t('identityFaceTitle', '人脸识别');
 
     /// 当前组件实际使用的强调色。
     final effectiveAccentColor =
@@ -498,7 +525,9 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
     final headerTitleSize = widget.compact ? 16.0 : 18.0;
 
     /// 当前摄像头恢复建议。
-    final recoveryAdvice = _recoveryAdvice;
+    final recoveryAdvice = _recoveryAdvice == null
+        ? null
+        : localizeHardwareRecoveryAdvice(l10n, _recoveryAdvice!);
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -549,7 +578,7 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      widget.title,
+                      effectiveTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -679,7 +708,10 @@ class _FaceVerificationCardState extends State<FaceVerificationCard>
                 border: Border.all(color: const Color(0xFFFFD49A)),
               ),
               child: Text(
-                '${recoveryAdvice.title}：${recoveryAdvice.recoverySteps}',
+                l10n
+                    .t('hardwareRecoverySummary', '{title}：{steps}')
+                    .replaceAll('{title}', recoveryAdvice.title)
+                    .replaceAll('{steps}', recoveryAdvice.recoverySteps),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Color(0xFF7A4A0A),
@@ -796,4 +828,68 @@ class _FacePreview extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 将稳定的人脸认证消息类型转换为当前界面语言。
+String _localizedFaceMessage(
+  AppLocalizations l10n,
+  _FaceVerificationMessage message, {
+  required bool allowFallback,
+}) {
+  final localized = switch (message) {
+    _FaceVerificationMessage.cameraStarting => l10n.t(
+      'sharedFaceCameraStarting',
+      '正在启动摄像头...',
+    ),
+    _FaceVerificationMessage.cameraReady => l10n.t(
+      'sharedFaceCameraReady',
+      '摄像头已启动，请对准面部后点击确认',
+    ),
+    _FaceVerificationMessage.noCamera => l10n.t(
+      'sharedFaceNoCamera',
+      '未检测到可用摄像头',
+    ),
+    _FaceVerificationMessage.cameraPermissionDenied => l10n.t(
+      'sharedFaceCameraPermissionDenied',
+      '摄像头权限被拒绝',
+    ),
+    _FaceVerificationMessage.cameraPermissionPermanentlyDenied => l10n.t(
+      'sharedFaceCameraPermissionPermanentlyDenied',
+      '摄像头权限被永久拒绝，请到系统设置开启',
+    ),
+    _FaceVerificationMessage.cameraStartFailed => l10n.t(
+      'sharedFaceCameraStartFailed',
+      '摄像头启动失败',
+    ),
+    _FaceVerificationMessage.simulationReady => l10n.t(
+      'sharedFaceSimulationReady',
+      '测试模式：点击确认完成人脸模拟认证',
+    ),
+    _FaceVerificationMessage.simulationVerifying => l10n.t(
+      'sharedFaceSimulationVerifying',
+      '测试模式：正在完成人脸模拟认证...',
+    ),
+    _FaceVerificationMessage.simulationSucceeded => l10n.t(
+      'sharedFaceSimulationSucceeded',
+      '测试模式：人脸模拟认证已完成',
+    ),
+    _FaceVerificationMessage.captureVerifying => l10n.t(
+      'sharedFaceCaptureVerifying',
+      '正在拍照并提交后端校验...',
+    ),
+    _FaceVerificationMessage.captureFailed => l10n.t(
+      'sharedFaceCaptureFailed',
+      '拍照或校验失败，请重试',
+    ),
+    _FaceVerificationMessage.verifiedSubmitted => l10n.t(
+      'sharedFaceVerifiedSubmitted',
+      '人脸识别通过，照片已提交后端校验',
+    ),
+  };
+  if (!allowFallback) {
+    return localized;
+  }
+  return l10n
+      .t('sharedFaceFallbackAvailable', '{message}，可使用模拟校验')
+      .replaceAll('{message}', localized);
 }

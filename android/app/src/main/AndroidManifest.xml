@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -15,8 +17,8 @@
         android:name=".SmartCabinetApplication"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
-        <!-- The target RK3566 Mali driver spends several seconds compiling
-             Impeller shaders while FlutterJNI creates its first surface. -->
+        <!-- 目标 RK3566 的 Mali 驱动会在 FlutterJNI 创建首个 Surface 时耗时数秒编译
+             Impeller shader，因此柜机版本固定关闭 Impeller，避免启动阶段长时间黑屏。 -->
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
@@ -44,6 +46,8 @@
             </intent-filter>
         </activity>
 
+        <!-- 这里只注册 DevicePolicyManager 所需的管理组件；锁定任务与用户限制仍要求
+             部署阶段先将应用配置为 device owner。 -->
         <receiver
             android:name=".kiosk.KioskDeviceAdminReceiver"
             android:description="@string/kiosk_device_admin_description"
@@ -55,6 +59,19 @@
                 android:resource="@xml/kiosk_device_admin" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- PackageInstaller 通过应用创建的显式 PendingIntent 回传状态；同一组件还接收
+             应用自身的确认超时 Alarm，以及仅系统可发送的 MY_PACKAGE_REPLACED。
+             组件不向其它应用开放广播入口。 -->
+        <receiver
+            android:name=".upgrade.TerminalUpgradeInstallReceiver"
+            android:exported="false">
+            <!-- 自更新成功后由新版本进程尝试恢复柜机主界面；Android/OEM 仍可能
+                 施加后台启动限制，现场必须配合 Device Owner 或外部 watchdog 验收。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
         <!-- Don't delete the meta-data below.

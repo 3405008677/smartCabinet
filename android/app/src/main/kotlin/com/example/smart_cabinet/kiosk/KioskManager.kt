@@ -22,6 +22,9 @@ import android.os.UserManager
 import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
+import com.example.smart_cabinet.logging.NativeCommunicationDirection
+import com.example.smart_cabinet.logging.NativeCommunicationLogStore
+import com.example.smart_cabinet.logging.NativeCommunicationTargetType
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
@@ -42,6 +45,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import android.net.Uri
 
+/**
+ * 统一编排柜机模式、摄像头推流、18080 控制服务和原生错误上报。
+ * 通讯诊断只在各协议边界记录脱敏元数据，不复制视频帧、身份信息或文件内容。
+ */
 class KioskManager(private val activity: Activity) {
     private var outsideEnvironmentStream: DualMediaCodecH265Stream? = null
 
@@ -663,8 +670,13 @@ class KioskManager(private val activity: Activity) {
         streamControlServerThread = null
     }
 
+    /**
+     * 处理一个 18080 HTTP 控制连接，并只记录归一化方法、命令类别和响应码。
+     * 请求 path、query、header 与 body 都不会复制到通讯日志。
+     */
     private fun handleStreamControlSocket(socket: Socket) {
         socket.use { clientSocket ->
+            val requestTime = System.currentTimeMillis()
             val input = BufferedReader(InputStreamReader(clientSocket.getInputStream(), Charsets.UTF_8))
             val requestLine = input.readLine().orEmpty()
             val headers = mutableMapOf<String, String>()
@@ -685,7 +697,49 @@ class KioskManager(private val activity: Activity) {
                 ""
             }
             val response = handleStreamControlRequest(requestLine, body)
-            writeHttpJsonResponse(clientSocket, response.first, response.second)
+            val requestParts = requestLine.split(' ')
+            val method = requestParts.getOrNull(0)
+                ?.uppercase(Locale.US)
+                ?.takeIf { value -> value.matches(HTTP_METHOD_PATTERN) }
+                ?: "UNKNOWN"
+            val path = requestParts.getOrNull(1).orEmpty().substringBefore('?')
+            val requestKind = if (method == "GET" && path == "/stream/status") {
+                "读取推流状态"
+            } else {
+                "不支持的控制请求"
+            }
+            val requestSummary = linkedMapOf<String, Any?>(
+                "method" to method,
+                "requestKind" to requestKind,
+                "endpoint" to "http://127.0.0.1:$STREAM_CONTROL_PORT",
+            )
+            try {
+                writeHttpJsonResponse(clientSocket, response.first, response.second)
+                NativeCommunicationLogStore.tryRecord(
+                    targetType = NativeCommunicationTargetType.SERVER,
+                    direction = NativeCommunicationDirection.INBOUND,
+                    channel = "HTTP",
+                    operation = "推流控制请求",
+                    messageBody = requestSummary,
+                    result = if (response.first in 200..299) {
+                        "成功：HTTP ${response.first}"
+                    } else {
+                        "失败：HTTP ${response.first}"
+                    },
+                    requestTimeEpochMs = requestTime,
+                )
+            } catch (error: Throwable) {
+                NativeCommunicationLogStore.tryRecord(
+                    targetType = NativeCommunicationTargetType.SERVER,
+                    direction = NativeCommunicationDirection.INBOUND,
+                    channel = "HTTP",
+                    operation = "推流控制请求",
+                    messageBody = requestSummary,
+                    result = "响应失败：${error::class.java.simpleName}",
+                    requestTimeEpochMs = requestTime,
+                )
+                throw error
+            }
         }
     }
 
@@ -1245,6 +1299,10 @@ class KioskManager(private val activity: Activity) {
         }
     }
 
+    /**
+     * 调度一次错误日志 HTTP POST。
+     * 通讯日志仅观察脱敏 endpoint 和 HTTP 结果，不复制错误正文、设备 ID 或堆栈。
+     */
     private fun scheduleErrorUpload(
         source: String,
         message: String,
@@ -1260,9 +1318,18 @@ class KioskManager(private val activity: Activity) {
         if (now < errorUploadMutedUntilMs || !errorUploadInFlight.compareAndSet(false, true)) {
             return
         }
+        val requestTime = System.currentTimeMillis()
+        val endpoint = NativeCommunicationLogStore.sanitizeEndpoint(reportUrl)
+        val requestSummary = linkedMapOf<String, Any?>(
+            "method" to "POST",
+            "endpoint" to endpoint,
+            "contentType" to "application/json",
+            "requestKind" to "错误日志上报",
+        )
         try {
             uploadExecutor.execute {
                 var connection: HttpURLConnection? = null
+                var requestSent = false
                 try {
                     val androidId = Settings.Secure.getString(
                         activity.contentResolver,
@@ -1287,14 +1354,58 @@ class KioskManager(private val activity: Activity) {
                     connection?.outputStream?.use { output ->
                         output.write(payload.toByteArray(Charsets.UTF_8))
                     }
+                    requestSent = true
+                    NativeCommunicationLogStore.tryRecord(
+                        targetType = NativeCommunicationTargetType.SERVER,
+                        direction = NativeCommunicationDirection.OUTBOUND,
+                        channel = "HTTP",
+                        operation = "错误日志上报",
+                        messageBody = requestSummary,
+                        result = "发送成功",
+                        requestTimeEpochMs = requestTime,
+                    )
                     val code = connection?.responseCode ?: -1
+                    NativeCommunicationLogStore.tryRecord(
+                        targetType = NativeCommunicationTargetType.SERVER,
+                        direction = NativeCommunicationDirection.INBOUND,
+                        channel = "HTTP",
+                        operation = "错误日志上报",
+                        messageBody = requestSummary + ("responseCode" to code),
+                        result = if (code in 200..299) {
+                            "成功：HTTP $code"
+                        } else {
+                            "失败：HTTP $code"
+                        },
+                    )
                     if (code !in 200..299) {
                         errorUploadMutedUntilMs = System.currentTimeMillis() + ERROR_UPLOAD_FAILURE_COOLDOWN_MS
-                        Log.e(TAG, "error log upload failed, code=$code, url=$reportUrl")
+                        Log.e(TAG, "error log upload failed, code=$code, endpoint=$endpoint")
                     }
                 } catch (uploadError: Throwable) {
+                    NativeCommunicationLogStore.tryRecord(
+                        targetType = NativeCommunicationTargetType.SERVER,
+                        direction = if (requestSent) {
+                            NativeCommunicationDirection.INBOUND
+                        } else {
+                            NativeCommunicationDirection.OUTBOUND
+                        },
+                        channel = "HTTP",
+                        operation = "错误日志上报",
+                        messageBody = requestSummary,
+                        result = if (requestSent) {
+                            "接收失败：${uploadError::class.java.simpleName}"
+                        } else {
+                            "发送失败：${uploadError::class.java.simpleName}"
+                        },
+                        requestTimeEpochMs = requestTime,
+                    )
                     errorUploadMutedUntilMs = System.currentTimeMillis() + ERROR_UPLOAD_FAILURE_COOLDOWN_MS
-                    Log.w(TAG, "error log upload muted for ${ERROR_UPLOAD_FAILURE_COOLDOWN_MS / 1000}s: ${uploadError.message ?: uploadError::class.java.simpleName}")
+                    Log.w(
+                        TAG,
+                        "error log upload muted for " +
+                            "${ERROR_UPLOAD_FAILURE_COOLDOWN_MS / 1000}s: " +
+                            uploadError::class.java.simpleName,
+                    )
                 } finally {
                     connection?.disconnect()
                     errorUploadInFlight.set(false)
@@ -1302,6 +1413,15 @@ class KioskManager(private val activity: Activity) {
             }
         } catch (rejected: Throwable) {
             errorUploadInFlight.set(false)
+            NativeCommunicationLogStore.tryRecord(
+                targetType = NativeCommunicationTargetType.SERVER,
+                direction = NativeCommunicationDirection.OUTBOUND,
+                channel = "HTTP",
+                operation = "错误日志上报",
+                messageBody = requestSummary,
+                result = "发送调度失败：${rejected::class.java.simpleName}",
+                requestTimeEpochMs = requestTime,
+            )
             if (!released.get()) {
                 Log.w(TAG, "error log upload scheduling failed", rejected)
             }
@@ -2079,6 +2199,7 @@ class KioskManager(private val activity: Activity) {
             StreamProfile("720p", 1280, 720, 15, 2000 * 1000, 1),
             StreamProfile("1080p", 1920, 1080, 15, 5000 * 1000, 1),
         )
+        private val HTTP_METHOD_PATTERN = Regex("[A-Z]{1,16}")
         private val DEFAULT_STREAM_PROFILE = STREAM_PROFILES.first { profile -> profile.name == "720p" }
         private const val RECONNECT_DELAY_MS = 3000L
         private const val MAX_RECONNECT_DELAY_MS = 60_000L

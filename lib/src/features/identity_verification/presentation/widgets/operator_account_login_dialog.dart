@@ -5,6 +5,7 @@ import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 import 'package:smart_cabinet/src/features/identity_verification/data/repositories/operator_identity_repository_impl.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_account.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/repositories/operator_identity_repository.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/operator_login_error_localizer.dart';
 
 /// 打开普通操作员账号登录弹窗，并在登录成功后返回账号。
 Future<OperatorAccount?> showOperatorAccountLoginDialog(
@@ -108,6 +109,7 @@ class _OperatorAccountLoginDialogState
         username: username,
         password: password,
       );
+      _passwordController.clear();
       if (!mounted) {
         return;
       }
@@ -122,13 +124,26 @@ class _OperatorAccountLoginDialogState
         return;
       }
       Navigator.of(context).pop(account);
-    } catch (error) {
+    } on OperatorLoginException catch (error) {
+      _passwordController.clear();
       if (!mounted) {
         return;
       }
       setState(() {
         _loading = false;
-        _errorMessage = context.l10n.t('operatorLoginFailed', '账号登录失败，请稍后重试');
+        _errorMessage = localizeOperatorLoginError(context.l10n, error);
+      });
+    } catch (error) {
+      _passwordController.clear();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loading = false;
+        _errorMessage = context.l10n.t(
+          'operatorLoginFailed',
+          '账号登录失败，请检查网络后重试',
+        );
       });
     }
   }
@@ -306,7 +321,7 @@ class _OperatorLoginIllustration extends StatelessWidget {
               ),
               const SizedBox(height: 18),
               Text(
-                l10n.t('operatorLoginDemoHint', '演示账号 666666 / 666666'),
+                l10n.t('operatorLoginServerHint', '请输入平台分配的账号与密码'),
                 style: TextStyle(
                   color: AppTheme.primaryStrongColor.withValues(alpha: .68),
                   fontSize: 11,

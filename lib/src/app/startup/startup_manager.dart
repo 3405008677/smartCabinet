@@ -13,9 +13,13 @@ class StartupManager {
 
   const StartupManager._(this._tasks);
 
+  /// 本次需要编排的任务；执行时会复制后排序，不改变调用方传入列表。
   final List<StartupTask> _tasks;
 
-  /// 执行全部启动任务。
+  /// 按 [StartupTask.order] 顺序执行全部任务。
+  ///
+  /// 可选任务失败只记录结果并继续；关键任务失败立即抛出
+  /// [StartupFailedException]，异常中只包含已经执行过的任务结果。
   Future<StartupResult> start() async {
     final orderedTasks = [..._tasks]
       ..sort((a, b) => a.order.compareTo(b.order));

@@ -7,11 +7,13 @@ import 'package:smart_cabinet/src/app/routing/app_routes.dart';
 import 'package:smart_cabinet/src/app/shell/app_shell.dart';
 import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 import 'package:smart_cabinet/src/core/device/cabinet_door_guard.dart';
+import 'package:smart_cabinet/src/features/identity_verification/data/repositories/operator_identity_repository_impl.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_account.dart';
 import 'package:smart_cabinet/src/features/task_center/data/repositories/task_center_repository_impl.dart';
 import 'package:smart_cabinet/src/features/task_center/domain/entities/cabinet_task.dart';
 import 'package:smart_cabinet/src/features/task_center/domain/repositories/task_center_repository.dart';
 import 'package:smart_cabinet/src/features/task_center/presentation/widgets/inventory_task_panel.dart';
+import 'package:smart_cabinet/src/features/task_center/presentation/task_center_localization.dart';
 
 /// 打开单个任务执行页所需的路由参数。
 class TaskExecutionArguments {
@@ -48,11 +50,10 @@ class TaskExecutionPage extends StatefulWidget {
   State<TaskExecutionPage> createState() => _TaskExecutionPageState();
 }
 
-/// 任务执行页状态，负责顺序推进步骤、柜门互锁与完成后的安全退出。
-/// 管理单项任务的步骤推进、柜门互锁与完成后安全退出。
+/// 管理单项任务的顺序推进、柜门互锁、异常恢复与完成后安全退出。
 class _TaskExecutionPageState extends State<TaskExecutionPage> {
   static const int _doorTimeoutSeconds = 30;
-  static const int _noTaskTimeoutSeconds = 10;
+  static const int _inactivityTimeoutSeconds = 100;
 
   late final TaskCenterRepository _repository =
       widget.arguments.repository ?? taskCenterRepository;
@@ -61,29 +62,44 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
 
   CabinetTask? _task;
   bool _loading = true;
+
+  /// 页面级业务动作锁，防止按钮连击并发推进同一个仓库步骤。
   bool _actionInProgress = false;
   bool _taskCompleted = false;
   int _remainingTaskCount = 0;
   Object? _loadError;
   String? _actionError;
   String? _openedDoorNo;
+
+  /// 当前开门周期在全局互锁器中的唯一操作 ID。
   String? _openedDoorOperationId;
+
+  /// 操作员已确认实物门关闭；平台业务结算可能仍在重试。
   bool _doorClosedConfirmed = false;
   Timer? _doorTimer;
   int _doorSeconds = _doorTimeoutSeconds;
   bool _doorTimeoutAlarm = false;
+
+  /// 开门后仓库推进失败时，是否必须先由人工确认关门才能释放互锁。
   bool _doorRecoveryRequired = false;
+
+  /// 实物关门事实已持久化、但平台结算尚未完成的可恢复状态。
   bool _doorReportPending = false;
-  Timer? _noTaskTimer;
-  int _noTaskSeconds = _noTaskTimeoutSeconds;
+  Timer? _inactivityTimer;
+  int _inactivitySeconds = _inactivityTimeoutSeconds;
+
+  /// 倒计时、手动返回和自动完成共用的一次性导航闩锁。
   bool _navigationCommitted = false;
   bool _inventoryDoorOpen = false;
+
+  /// 任务加载请求代次，丢弃刷新或退出后返回的旧快照。
   int _loadGeneration = 0;
   final TextEditingController _pickupCodeController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _restartInactivityTimer();
     unawaited(_loadTask());
   }
 
@@ -168,16 +184,26 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
             validatedDoorNo,
             operationId: operationId,
           );
-          if (result is CabinetDoorOpenConflict) {
-            _showStepError(
-              context.l10n
-                  .t(
-                    'taskExecutionAnotherDoorOpen',
-                    '柜门 {activeDoorNo} 尚未关闭，不能打开 {requestedDoorNo}',
-                  )
-                  .replaceAll('{activeDoorNo}', result.activeDoorNo)
-                  .replaceAll('{requestedDoorNo}', validatedDoorNo),
-            );
+          if (!result.granted) {
+            final message = switch (result) {
+              CabinetDoorOpenConflict conflict =>
+                context.l10n
+                    .t(
+                      'taskExecutionAnotherDoorOpen',
+                      '柜门 {activeDoorNo} 尚未关闭，不能打开 {requestedDoorNo}',
+                    )
+                    .replaceAll('{activeDoorNo}', conflict.activeDoorNo)
+                    .replaceAll('{requestedDoorNo}', validatedDoorNo),
+              CabinetDoorOpenMaintenanceConflict() => context.l10n.t(
+                'taskExecutionUpgradeMaintenanceActive',
+                '系统正在执行升级维护，暂不能打开柜门',
+              ),
+              _ => context.l10n.t(
+                'taskExecutionDoorOpenBlocked',
+                '当前不能打开柜门，请稍后重试',
+              ),
+            };
+            _showStepError(message);
             return;
           }
           _openedDoorNo = validatedDoorNo;
@@ -334,7 +360,10 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
         );
       }
     } catch (error) {
-      _showStepError('$error');
+      if (!mounted) {
+        return;
+      }
+      _showStepError(localizedTaskError(context, error));
     }
   }
 
@@ -362,7 +391,10 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
         _actionInProgress = false;
       });
     } catch (error) {
-      _showStepError('$error');
+      if (!mounted) {
+        return;
+      }
+      _showStepError(localizedTaskError(context, error));
     }
   }
 
@@ -404,11 +436,11 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
         _remainingTaskCount = remainingTasks.length;
         _actionInProgress = false;
       });
-      if (remainingTasks.isEmpty) {
-        _startNoTaskCountdown();
-      }
     } catch (error) {
-      _showStepError('$error');
+      if (!mounted) {
+        return;
+      }
+      _showStepError(localizedTaskError(context, error));
     }
   }
 
@@ -579,7 +611,8 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
       );
       final released = _doorGuard.markClosed(doorNo, operationId: operationId);
       if (!released) {
-        throw StateError(doorStateMismatchMessage);
+        _showStepError(doorStateMismatchMessage);
+        return;
       }
       _cancelDoorCountdown();
       if (!mounted) {
@@ -596,7 +629,10 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
         _actionInProgress = false;
       });
     } catch (error) {
-      _showStepError('$error');
+      if (!mounted) {
+        return;
+      }
+      _showStepError(localizedTaskError(context, error));
     }
   }
 
@@ -632,26 +668,48 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
     return null;
   }
 
-  /// 没有剩余任务时启动 10 秒安全退出倒计时。
-  void _startNoTaskCountdown() {
-    _noTaskTimer?.cancel();
-    _noTaskSeconds = _noTaskTimeoutSeconds;
-    _noTaskTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || _remainingTaskCount != 0) {
+  /// 重新开始 100 秒无操作倒计时。
+  void _restartInactivityTimer() {
+    if (!mounted || _navigationCommitted) {
+      return;
+    }
+    _inactivityTimer?.cancel();
+    if (_inactivitySeconds == _inactivityTimeoutSeconds) {
+      _inactivitySeconds = _inactivityTimeoutSeconds;
+    } else {
+      setState(() => _inactivitySeconds = _inactivityTimeoutSeconds);
+    }
+    _inactivityTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _navigationCommitted) {
         return;
       }
-      if (!_doorGuard.allDoorsClosed || _doorGuard.hasActiveOperation) {
-        if (_noTaskSeconds != _noTaskTimeoutSeconds) {
-          setState(() => _noTaskSeconds = _noTaskTimeoutSeconds);
+      if (!_canLogoutForInactivity) {
+        if (_inactivitySeconds != _inactivityTimeoutSeconds) {
+          setState(() => _inactivitySeconds = _inactivityTimeoutSeconds);
         }
         return;
       }
-      if (_noTaskSeconds <= 1) {
+      if (_inactivitySeconds <= 1) {
         _returnHome();
         return;
       }
-      setState(() => _noTaskSeconds -= 1);
+      setState(() => _inactivitySeconds -= 1);
     });
+  }
+
+  /// 柜门全部安全关闭且没有进行中柜门操作时才允许无操作退出。
+  bool get _canLogoutForInactivity {
+    return !_navigationCommitted &&
+        _doorGuard.allDoorsClosed &&
+        !_doorGuard.hasActiveOperation &&
+        !_inventoryDoorOpen &&
+        !_isCurrentDoorOpen;
+  }
+
+  /// 停止无操作倒计时。
+  void _cancelInactivityTimer() {
+    _inactivityTimer?.cancel();
+    _inactivityTimer = null;
   }
 
   /// 返回任务中心并通知上页刷新任务。
@@ -663,7 +721,7 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
       return;
     }
     _navigationCommitted = true;
-    _noTaskTimer?.cancel();
+    _cancelInactivityTimer();
     Navigator.of(context).pop(true);
   }
 
@@ -672,11 +730,14 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
     if (!mounted ||
         _navigationCommitted ||
         !_doorGuard.allDoorsClosed ||
-        _doorGuard.hasActiveOperation) {
+        _doorGuard.hasActiveOperation ||
+        _inventoryDoorOpen ||
+        _isCurrentDoorOpen) {
       return;
     }
     _navigationCommitted = true;
-    _noTaskTimer?.cancel();
+    _cancelInactivityTimer();
+    operatorIdentityRepository.clearSession();
     Navigator.of(
       context,
     ).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
@@ -697,6 +758,7 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
     if (!mounted) {
       return;
     }
+    _restartInactivityTimer();
     setState(() => _task = task);
   }
 
@@ -705,6 +767,7 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
     if (!mounted || _inventoryDoorOpen == isOpen) {
       return;
     }
+    _restartInactivityTimer();
     setState(() => _inventoryDoorOpen = isOpen);
   }
 
@@ -713,6 +776,7 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
     if (!mounted || _taskCompleted) {
       return;
     }
+    _restartInactivityTimer();
     setState(() => _task = task);
     await _finishTask(task);
   }
@@ -721,7 +785,7 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
   void dispose() {
     _loadGeneration += 1;
     _doorTimer?.cancel();
-    _noTaskTimer?.cancel();
+    _cancelInactivityTimer();
     _pickupCodeController.dispose();
     super.dispose();
   }
@@ -730,29 +794,55 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
   Widget build(BuildContext context) {
     final task = _task;
     final l10n = context.l10n;
+    final shell = TerminalShell(
+      topBarLeading: TextButton.icon(
+        onPressed: _doorGuard.hasActiveOperation || _inventoryDoorOpen
+            ? null
+            : _returnTaskCenter,
+        icon: const Icon(Icons.arrow_back_rounded, size: 18),
+        label: Text(l10n.t('taskExecutionBack', '返回任务工作台')),
+      ),
+      topRightBadge: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FlowStatusBadge(
+            text: task == null
+                ? l10n.t('taskExecutionLoadingBadge', '任务加载中')
+                : l10n
+                      .t('taskExecutionBadge', '{type}任务执行中')
+                      .replaceAll(
+                        '{type}',
+                        localizedTaskTypeTitle(context, task.type),
+                      ),
+          ),
+          const SizedBox(width: 10),
+          InactivityCountdownBadge(
+            key: const ValueKey('task_execution_inactivity_countdown'),
+            seconds: _inactivitySeconds,
+          ),
+        ],
+      ),
+      child: Container(
+        color: AppTheme.scaffoldBackgroundColor,
+        padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
+        child: _buildBody(context),
+      ),
+    );
+    final interactiveShell = Focus(
+      onKeyEvent: (_, _) {
+        _restartInactivityTimer();
+        return KeyEventResult.ignored;
+      },
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _restartInactivityTimer(),
+        onPointerSignal: (_) => _restartInactivityTimer(),
+        child: shell,
+      ),
+    );
     return PopScope(
       canPop: !_doorGuard.hasActiveOperation && !_inventoryDoorOpen,
-      child: TerminalShell(
-        topBarLeading: TextButton.icon(
-          onPressed: _doorGuard.hasActiveOperation || _inventoryDoorOpen
-              ? null
-              : _returnTaskCenter,
-          icon: const Icon(Icons.arrow_back_rounded, size: 18),
-          label: Text(l10n.t('taskExecutionBack', '返回任务工作台')),
-        ),
-        topRightBadge: FlowStatusBadge(
-          text: task == null
-              ? l10n.t('taskExecutionLoadingBadge', '任务加载中')
-              : l10n
-                    .t('taskExecutionBadge', '{type}任务执行中')
-                    .replaceAll('{type}', _taskTypeTitle(context, task.type)),
-        ),
-        child: Container(
-          color: AppTheme.scaffoldBackgroundColor,
-          padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
-          child: _buildBody(context),
-        ),
-      ),
+      child: interactiveShell,
     );
   }
 
@@ -773,7 +863,7 @@ class _TaskExecutionPageState extends State<TaskExecutionPage> {
       return _TaskCompletedPanel(
         task: task,
         remainingTaskCount: _remainingTaskCount,
-        noTaskSeconds: _noTaskSeconds,
+        inactivitySeconds: _inactivitySeconds,
         onReturnTaskCenter: _returnTaskCenter,
       );
     }
@@ -856,7 +946,7 @@ class _ExecutionSummaryPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            _taskTypeTitle(context, task.type),
+            localizedTaskTypeTitle(context, task.type),
             style: const TextStyle(
               color: AppTheme.primaryColor,
               fontSize: 14,
@@ -865,7 +955,7 @@ class _ExecutionSummaryPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            task.title,
+            localizedTaskTitle(context, task),
             style: const TextStyle(
               color: AppTheme.textPrimaryColor,
               fontSize: 23,
@@ -951,7 +1041,7 @@ class _ExecutionSummaryPanel extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  item.documentName,
+                                  localizedTaskItemName(context, item),
                                   style: const TextStyle(
                                     color: AppTheme.textPrimaryColor,
                                     fontWeight: FontWeight.w900,
@@ -1517,13 +1607,13 @@ class _TaskCompletedPanel extends StatelessWidget {
   const _TaskCompletedPanel({
     required this.task,
     required this.remainingTaskCount,
-    required this.noTaskSeconds,
+    required this.inactivitySeconds,
     required this.onReturnTaskCenter,
   });
 
   final CabinetTask task;
   final int remainingTaskCount;
-  final int noTaskSeconds;
+  final int inactivitySeconds;
   final VoidCallback onReturnTaskCenter;
 
   @override
@@ -1551,7 +1641,10 @@ class _TaskCompletedPanel extends StatelessWidget {
             Text(
               l10n
                   .t('taskExecutionCompletedTitle', '{type}任务已经完成')
-                  .replaceAll('{type}', _taskTypeTitle(context, task.type)),
+                  .replaceAll(
+                    '{type}',
+                    localizedTaskTypeTitle(context, task.type),
+                  ),
               style: const TextStyle(
                 color: AppTheme.textPrimaryColor,
                 fontSize: 30,
@@ -1569,7 +1662,7 @@ class _TaskCompletedPanel extends StatelessWidget {
                           'taskExecutionNoTaskExit',
                           '当前无其他任务，{seconds} 秒后退出登录',
                         )
-                        .replaceAll('{seconds}', '$noTaskSeconds'),
+                        .replaceAll('{seconds}', '$inactivitySeconds'),
               style: const TextStyle(
                 color: AppTheme.textSecondaryColor,
                 fontSize: 16,
@@ -1611,7 +1704,7 @@ class _ExecutionLoadError extends StatelessWidget {
           Text(
             l10n
                 .t('taskExecutionLoadFailed', '任务加载失败：{error}')
-                .replaceAll('{error}', '$error'),
+                .replaceAll('{error}', localizedTaskError(context, error)),
           ),
           const SizedBox(height: 12),
           ElevatedButton(
@@ -1662,18 +1755,6 @@ class _SummaryLine extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 返回任务类型的本地化标题。
-String _taskTypeTitle(BuildContext context, TaskType type) {
-  final l10n = context.l10n;
-  return switch (type) {
-    TaskType.storeEvidence => l10n.t('taskTypeStoreEvidence', '存证'),
-    TaskType.retrieveEvidence => l10n.t('taskTypeRetrieveEvidence', '取证'),
-    TaskType.borrowEvidence => l10n.t('taskTypeBorrowEvidence', '借证'),
-    TaskType.returnEvidence => l10n.t('taskTypeReturnEvidence', '还证'),
-    TaskType.inventory => l10n.t('taskTypeInventory', '盘点'),
-  };
 }
 
 /// 返回步骤标题。

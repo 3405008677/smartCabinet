@@ -1,10 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:smart_cabinet/src/app/localization/values/admin_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/device_info_localizations.dart';
 import 'package:smart_cabinet/src/app/localization/values/home_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/home_runtime_localizations.dart';
 import 'package:smart_cabinet/src/app/localization/values/identity_localizations.dart';
 import 'package:smart_cabinet/src/app/localization/values/operator_workflow_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/system_localizations.dart';
 import 'package:smart_cabinet/src/app/localization/values/task_inventory_localizations.dart';
+import 'package:smart_cabinet/src/app/localization/values/terminal_upgrade_localizations.dart';
 
 /// 应用支持的界面语言。
 enum AppLanguage {
@@ -12,7 +18,7 @@ enum AppLanguage {
   simplifiedChinese(locale: Locale('zh', 'CN'), label: '简体中文', icon: '🇨🇳'),
 
   /// 繁体中文。
-  traditionalChinese(locale: Locale('zh', 'TW'), label: '繁體中文', icon: '🇭🇰'),
+  traditionalChinese(locale: Locale('zh', 'TW'), label: '繁體中文', icon: '🇹🇼'),
 
   /// 英语。
   english(locale: Locale('en', 'US'), label: 'English', icon: '🇺🇸'),
@@ -35,6 +41,37 @@ enum AppLanguage {
 
   /// 代表语言国家或地区的图标。
   final String icon;
+
+  /// 持久化到本地 Store 的标准语言标签。
+  String get code => '${locale.languageCode}-${locale.countryCode}';
+
+  /// 把本地存储或旧版本留下的语言代码解析为应用支持的语言。
+  ///
+  /// 同时兼容连字符、下划线、仅语言代码以及常见的繁体中文地区/脚本标签。
+  static AppLanguage fromCode(String? code) {
+    final normalized = (code ?? '').trim().replaceAll('_', '-').toLowerCase();
+    for (final language in values) {
+      if (language.code.toLowerCase() == normalized) {
+        return language;
+      }
+    }
+
+    if (normalized == 'zh' || normalized.startsWith('zh-')) {
+      final traditional =
+          normalized.contains('tw') ||
+          normalized.contains('hk') ||
+          normalized.contains('mo') ||
+          normalized.contains('hant');
+      return traditional ? traditionalChinese : simplifiedChinese;
+    }
+    if (normalized == 'en' || normalized.startsWith('en-')) {
+      return english;
+    }
+    if (normalized == 'ja' || normalized.startsWith('ja-')) {
+      return japanese;
+    }
+    return simplifiedChinese;
+  }
 }
 
 /// 应用语言状态控制器。
@@ -44,6 +81,11 @@ final class AppLocaleController extends ChangeNotifier {
 
   AppLanguage _language;
 
+  Future<void> Function(AppLanguage language)? _persistLanguage;
+  void Function(Object error, StackTrace stackTrace)? _onPersistenceError;
+  Future<void> _persistenceTail = Future<void>.value();
+  int _persistenceGeneration = 0;
+
   /// 当前选择的语言。
   AppLanguage get language => _language;
 
@@ -51,13 +93,62 @@ final class AppLocaleController extends ChangeNotifier {
   Locale get locale => _language.locale;
 
   /// 切换应用语言。
-  void setLanguage(AppLanguage language) {
+  void setLanguage(AppLanguage language, {bool persist = true}) {
     if (_language == language) {
       return;
     }
 
     _language = language;
     notifyListeners();
+
+    if (persist) {
+      _schedulePersistence(language);
+    }
+  }
+
+  /// 绑定语言偏好的持久化实现。
+  ///
+  /// 控制器会串行执行写入，确保用户快速连续切换语言时，最后一次选择不会被较慢的旧写入覆盖。
+  void bindPersistence({
+    required Future<void> Function(AppLanguage language) persistLanguage,
+    void Function(Object error, StackTrace stackTrace)? onError,
+  }) {
+    _persistenceGeneration += 1;
+    _persistLanguage = persistLanguage;
+    _onPersistenceError = onError;
+  }
+
+  /// 解除当前持久化实现，供应用重新启动或测试清理状态时使用。
+  void clearPersistence() {
+    _persistenceGeneration += 1;
+    _persistLanguage = null;
+    _onPersistenceError = null;
+  }
+
+  void _schedulePersistence(AppLanguage language) {
+    final persistLanguage = _persistLanguage;
+    if (persistLanguage == null) {
+      return;
+    }
+
+    final onError = _onPersistenceError;
+    final generation = _persistenceGeneration;
+    final previous = _persistenceTail;
+    _persistenceTail = () async {
+      await previous;
+      if (generation != _persistenceGeneration) {
+        return;
+      }
+
+      try {
+        await persistLanguage(language);
+      } catch (error, stackTrace) {
+        onError?.call(error, stackTrace);
+      }
+    }();
+
+    // 明确标记这个由控制器内部托管的异步任务，避免调用页面需要自行处理 Future。
+    unawaited(_persistenceTail);
   }
 }
 
@@ -74,18 +165,21 @@ class AppLocalizations {
 
   static final Map<String, Map<AppLanguage, String>> _values = {
     ...homeLocalizations,
+    ...homeRuntimeLocalizations,
+    ...deviceInfoLocalizations,
     ...identityLocalizations,
     ...operatorWorkflowLocalizations,
+    ...systemLocalizations,
     ...taskInventoryLocalizations,
     ...adminLocalizations,
+    ...terminalUpgradeRuntimeLocalizations,
   };
 
-  /// 根据 key 读取当前语言文案，缺少翻译时回退到调用处的中文兜底文案。
+  /// 根据 key 读取当前语言文案，缺少注册项时回退到调用处的中文兜底文案。
+  ///
+  /// 简体中文也统一从资源表读取，确保所有语言只有一份可审计的正式文案；
+  /// [fallback] 只负责保护尚未注册或动态生成的调用点。
   String t(String key, String fallback) {
-    if (language == AppLanguage.simplifiedChinese) {
-      return fallback;
-    }
-
     return _values[key]?[language] ?? fallback;
   }
 

@@ -4,6 +4,7 @@ import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/core/device/hardware_recovery_advice.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/localized_hardware_recovery_advice.dart';
 
 /// 指纹和 NFC 等简单传感器认证卡片。
 class SensorVerificationCard extends StatelessWidget {
@@ -101,7 +102,9 @@ class SensorVerificationCard extends StatelessWidget {
     final headerTitleSize = compact ? 16.0 : 18.0;
 
     /// 当前硬件异常恢复建议，没有异常时为 null。
-    final advice = recoveryAdvice;
+    final advice = recoveryAdvice == null
+        ? null
+        : localizeHardwareRecoveryAdvice(l10n, recoveryAdvice!);
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -244,7 +247,7 @@ class SensorVerificationCard extends StatelessWidget {
                       foregroundColor: const Color(0xFF9A5A00),
                       side: const BorderSide(color: Color(0xFFFFC46F)),
                     ),
-                    child: const Text('重新检测'),
+                    child: Text(l10n.t('sharedRetryDetection', '重新检测')),
                   ),
                 ],
               ),

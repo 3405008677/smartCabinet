@@ -28,6 +28,13 @@ void main() {
       'uploadEnabled': false,
     });
     expect(state.video, <String, Object?>{'streamUrl': ''});
+    expect(state.upgrade, <String, Object?>{
+      'enabled': false,
+      'host': '',
+      'port': 0,
+      'terminalId': '',
+      'packageTag': '',
+    });
     expect(await store.snapshot(), <String, Object?>{
       'authToken': '',
       'languageCode': 'zh-CN',
@@ -39,6 +46,13 @@ void main() {
         'uploadEnabled': false,
       },
       'video': <String, Object?>{'streamUrl': ''},
+      'upgrade': <String, Object?>{
+        'enabled': false,
+        'host': '',
+        'port': 0,
+        'terminalId': '',
+        'packageTag': '',
+      },
     });
   });
 
@@ -59,8 +73,24 @@ void main() {
         video: <String, Object?>{
           'streamUrl': '${AppConfig.streamBaseUrl}/a1b2c3d4e5f67890',
         },
+        upgrade: <String, Object?>{
+          'enabled': true,
+          'host': '10.0.0.8',
+          'port': 8001,
+          'terminalId': '13800138000',
+          // 模拟升级旧版本重复保存的设备身份。
+          'moduleImei': '123456789012345',
+          'dataProtocolIp': '10.0.0.8',
+          'chipId': 'legacy-chip',
+          'packageTag': 'APP',
+        },
       ),
     );
+
+    final rawState = await storage.readString(AppLocalStore.localStateKey);
+    expect(rawState, isNot(contains('moduleImei')));
+    expect(rawState, isNot(contains('dataProtocolIp')));
+    expect(rawState, isNot(contains('chipId')));
 
     expect(await store.snapshot(), <String, Object?>{
       'authToken': 'token-001',
@@ -74,6 +104,13 @@ void main() {
       },
       'video': <String, Object?>{
         'streamUrl': '${AppConfig.streamBaseUrl}/a1b2c3d4e5f67890',
+      },
+      'upgrade': <String, Object?>{
+        'enabled': true,
+        'host': '10.0.0.8',
+        'port': 8001,
+        'terminalId': '13800138000',
+        'packageTag': 'APP',
       },
     });
   });

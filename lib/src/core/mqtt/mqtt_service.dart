@@ -8,6 +8,7 @@ import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 import 'package:smart_cabinet/src/core/device/kiosk_device.dart';
 import 'package:smart_cabinet/src/core/device/method_channel_kiosk_device.dart';
 import 'package:smart_cabinet/src/core/logging/app_logger.dart';
+import 'package:smart_cabinet/src/core/logging/communication_log_store.dart';
 
 /// 智能柜 MQTT 连接配置。
 class SmartCabinetMqttOptions {
@@ -163,7 +164,7 @@ class SmartCabinetMqttCommandHandler {
     }
     final videoType = command.videoType;
     if (videoType != '720p' && videoType != '1080p') {
-      AppLogger.business('Ignore unsupported MQTT videoType: $videoType');
+      AppLogger.business('Ignore unsupported MQTT video profile');
       return;
     }
     await kioskDevice.startCameraStream(
@@ -187,7 +188,12 @@ class SmartCabinetMqttCommandHandler {
         videoType: payloadValue['videoType']?.toString() ?? '',
       );
     } catch (error, stackTrace) {
-      AppLogger.error('MQTT command parse failed', error, stackTrace);
+      // FormatException 可能携带原始下发负载片段，错误日志只能保留异常类型。
+      AppLogger.error(
+        'MQTT command parse failed',
+        error.runtimeType,
+        stackTrace,
+      );
       return null;
     }
   }
@@ -229,15 +235,41 @@ class MqttClientGateway implements SmartCabinetMqttGateway {
     client.onDisconnected = () => AppLogger.business('MQTT disconnected');
     client.onAutoReconnect = () => AppLogger.business('MQTT reconnecting');
     client.onAutoReconnected = () => AppLogger.business('MQTT reconnected');
-    client.onSubscribed = (topic) =>
-        AppLogger.business('MQTT subscribed: $topic');
+    client.onSubscribed = (topic) {
+      final safeTopic = _safeMqttTopic(topic);
+      AppLogger.business('MQTT subscribed: $safeTopic');
+      CommunicationLogStore.instance.tryRecord(
+        targetType: CommunicationTargetType.server,
+        direction: CommunicationDirection.inbound,
+        channel: 'MQTT',
+        operation: '订阅确认',
+        messageBody: <String, Object?>{'topic': safeTopic},
+        result: '成功',
+      );
+    };
     client.connectionMessage = options.clean
         ? (MqttConnectMessage()
             ..withClientIdentifier(options.clientId)
             ..startClean())
         : (MqttConnectMessage()..withClientIdentifier(options.clientId));
 
-    final status = await client.connect();
+    final status = await CommunicationLogStore.instance
+        .traceExchange<MqttClientConnectionStatus?>(
+          targetType: CommunicationTargetType.server,
+          channel: 'MQTT',
+          operation: '连接 broker',
+          requestBody: <String, Object?>{
+            'host': options.host,
+            'port': options.port,
+            'clientId': options.clientId,
+            'cleanSession': options.clean,
+          },
+          action: client.connect,
+          responseBody: (value) => <String, Object?>{
+            'state': value?.state.name,
+            'returnCode': value?.returnCode?.name,
+          },
+        );
     if (status?.state != MqttConnectionState.connected) {
       client.disconnect();
       throw StateError('MQTT 连接失败：${status?.state} / ${status?.returnCode}');
@@ -250,6 +282,17 @@ class MqttClientGateway implements SmartCabinetMqttGateway {
         }
         final payload = MqttPublishPayload.bytesToStringAsString(
           mqttMessage.payload.message,
+        );
+        CommunicationLogStore.instance.tryRecord(
+          targetType: CommunicationTargetType.server,
+          direction: CommunicationDirection.inbound,
+          channel: 'MQTT',
+          operation: '接收发布消息',
+          messageBody: <String, Object?>{
+            'topic': _safeMqttTopic(receivedMessage.topic),
+            'payload': _safeMqttPayload(payload),
+          },
+          result: '成功',
         );
         _messagesController.add(
           SmartCabinetMqttMessage(
@@ -267,8 +310,75 @@ class MqttClientGateway implements SmartCabinetMqttGateway {
     final client = _client;
     if (client == null ||
         client.connectionStatus?.state != MqttConnectionState.connected) {
-      throw StateError('MQTT 尚未连接，无法订阅：$topic');
+      throw StateError('MQTT 尚未连接，无法订阅主题');
     }
-    client.subscribe(topic, MqttQos.atMostOnce);
+    final safeTopic = _safeMqttTopic(topic);
+    final logId = CommunicationLogStore.instance.tryRecord(
+      targetType: CommunicationTargetType.server,
+      direction: CommunicationDirection.outbound,
+      channel: 'MQTT',
+      operation: '订阅主题',
+      messageBody: <String, Object?>{
+        'topic': safeTopic,
+        'qos': MqttQos.atMostOnce.index,
+      },
+      result: '处理中',
+    );
+    try {
+      client.subscribe(topic, MqttQos.atMostOnce);
+      CommunicationLogStore.instance.tryUpdateResult(logId, '成功');
+    } catch (error, stackTrace) {
+      CommunicationLogStore.instance.tryUpdateResult(
+        logId,
+        '失败：${error.runtimeType}',
+      );
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+}
+
+/// 只公开当前视频命令 topic 的固定层级，并隐藏其中的终端标识。
+String _safeMqttTopic(String topic) {
+  final parts = topic.split('/');
+  if (parts.length == 5 &&
+      parts[0] == 'ata' &&
+      parts[1] == 'smartCabinet' &&
+      parts[2].isNotEmpty &&
+      parts[3] == 'video' &&
+      parts[4] == 'command') {
+    return 'ata/smartCabinet/<已脱敏>/video/command';
+  }
+  return '<非标准主题已省略>';
+}
+
+/// 只记录当前 MQTT 视频命令白名单字段，未知负载仅保留长度。
+Object _safeMqttPayload(String payload) {
+  const maximumInspectableCharacters = 4096;
+  if (payload.length > maximumInspectableCharacters) {
+    return <String, Object?>{'format': 'oversized', 'length': payload.length};
+  }
+  try {
+    final decoded = jsonDecode(payload);
+    if (decoded is! Map) {
+      return <String, Object?>{
+        'format': 'unsupported',
+        'length': payload.length,
+      };
+    }
+    final nested = decoded['payload'];
+    final messageType = decoded['type'] == 'video' ? 'video' : 'unsupported';
+    final rawVideoType = nested is Map ? nested['videoType'] : null;
+    final videoType = rawVideoType == '720p' || rawVideoType == '1080p'
+        ? rawVideoType
+        : 'unsupported';
+    return <String, Object?>{
+      'type': messageType,
+      if (nested is Map) 'payload': <String, Object?>{'videoType': videoType},
+    };
+  } catch (_) {
+    return <String, Object?>{
+      'format': 'invalid-json',
+      'length': payload.length,
+    };
   }
 }

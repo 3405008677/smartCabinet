@@ -8,6 +8,7 @@ import 'package:smart_cabinet/src/core/device/cabinet_door_guard.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_account.dart';
 import 'package:smart_cabinet/src/features/task_center/domain/entities/cabinet_task.dart';
 import 'package:smart_cabinet/src/features/task_center/domain/repositories/task_center_repository.dart';
+import 'package:smart_cabinet/src/features/task_center/presentation/task_center_localization.dart';
 
 /// 箱格级盘点主面板，负责飞检码、抽中箱格和箱内明细流程。
 class InventoryTaskPanel extends StatefulWidget {
@@ -96,7 +97,7 @@ class _InventoryTaskPanelState extends State<InventoryTaskPanel> {
       }
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = localizedTaskError(context, error);
       });
     }
   }
@@ -144,16 +145,25 @@ class _InventoryTaskPanelState extends State<InventoryTaskPanel> {
         binding.doorNo,
         operationId: operationId,
       );
-      if (guardResult is CabinetDoorOpenConflict) {
+      if (!guardResult.granted) {
+        final errorMessage = switch (guardResult) {
+          CabinetDoorOpenConflict conflict =>
+            context.l10n
+                .t(
+                  'taskExecutionAnotherDoorOpen',
+                  '柜门 {activeDoorNo} 尚未关闭，不能打开 {requestedDoorNo}',
+                )
+                .replaceAll('{activeDoorNo}', conflict.activeDoorNo)
+                .replaceAll('{requestedDoorNo}', doorNo),
+          CabinetDoorOpenMaintenanceConflict() => context.l10n.t(
+            'taskExecutionUpgradeMaintenanceActive',
+            '系统正在执行升级维护，暂不能打开柜门',
+          ),
+          _ => context.l10n.t('taskExecutionDoorOpenBlocked', '当前不能打开柜门，请稍后重试'),
+        };
         setState(() {
           _busy = false;
-          _error = context.l10n
-              .t(
-                'taskExecutionAnotherDoorOpen',
-                '柜门 {activeDoorNo} 尚未关闭，不能打开 {requestedDoorNo}',
-              )
-              .replaceAll('{activeDoorNo}', guardResult.activeDoorNo)
-              .replaceAll('{requestedDoorNo}', doorNo);
+          _error = errorMessage;
         });
         return;
       }
@@ -200,7 +210,7 @@ class _InventoryTaskPanelState extends State<InventoryTaskPanel> {
       }
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = localizedTaskError(context, error);
       });
       if (guardAcquired && operationId != null) {
         await _confirmRecoveryDoorClosed(doorNo, operationId);
@@ -247,7 +257,7 @@ class _InventoryTaskPanelState extends State<InventoryTaskPanel> {
       }
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = localizedTaskError(context, error);
       });
     }
   }
@@ -859,7 +869,7 @@ class _InventorySlotDetailDialogState extends State<InventorySlotDetailDialog> {
       }
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = localizedTaskError(context, error);
       });
     }
   }
@@ -949,7 +959,7 @@ class _InventorySlotDetailDialogState extends State<InventorySlotDetailDialog> {
       }
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = localizedTaskError(context, error);
       });
     }
   }
@@ -979,7 +989,7 @@ class _InventorySlotDetailDialogState extends State<InventorySlotDetailDialog> {
       }
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = localizedTaskError(context, error);
       });
       return null;
     }

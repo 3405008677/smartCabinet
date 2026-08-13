@@ -4,10 +4,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 import 'package:smart_cabinet/src/features/home/domain/entities/home.dart';
+import 'package:smart_cabinet/src/features/home/presentation/device_info_localizer.dart';
 import 'package:smart_cabinet/src/features/home/presentation/widgets/home_dashboard.dart';
 
 /// 验证首页只暴露新的身份登录入口，并适配柜机目标分辨率。
 void main() {
+  test('设备信息字段和值跟随当前语言', () {
+    for (final language in AppLanguage.values) {
+      final localizations = AppLocalizations(language);
+      expect(
+        localizeDeviceInfoLabel(localizations, '主板'),
+        localizations.t('deviceInfoBoard', '主板'),
+      );
+      expect(
+        localizeDeviceInfoValue(localizations, '设备信息尚未完成启动缓存'),
+        localizations.t('deviceInfoCachePending', '设备信息尚未完成启动缓存'),
+      );
+    }
+  });
+
   testWidgets('首页展示可点击的人脸和账号登录入口且不再展示旧业务入口', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
@@ -101,6 +116,27 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+
+      expect(
+        find.text(localizations.t('homeDefaultRegion', 'A · B 区')),
+        findsOneWidget,
+      );
+      expect(
+        find.text(localizations.t('homeStatusOnline', '在线运行')),
+        findsOneWidget,
+      );
+      expect(
+        find.text(localizations.t('homeCabinetStatisticsHeadline', '智能柜统计信息')),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          localizations
+              .t('homeDocumentCountValue', '{count} 份')
+              .replaceAll('{count}', '12'),
+        ),
+        findsOneWidget,
+      );
 
       final identityTitle = find.text(
         localizations.t('homeIdentityLoginTitle', '身份登录'),

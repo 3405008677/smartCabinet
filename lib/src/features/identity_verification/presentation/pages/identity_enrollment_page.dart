@@ -11,6 +11,7 @@ import 'package:smart_cabinet/src/features/identity_verification/data/repositori
 import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_account.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_identity_navigation.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/repositories/operator_identity_repository.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/identity_result_localizer.dart';
 import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/face_verification_card.dart';
 import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/sensor_verification_card.dart';
 import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/verification_progress_footer.dart';
@@ -43,10 +44,14 @@ class _IdentityEnrollmentPageState extends State<IdentityEnrollmentPage> {
   late final OperatorIdentityRepository _repository;
   late final Set<IdentityFactor> _requestedFactors;
   final Set<IdentityFactor> _completedFactors = <IdentityFactor>{};
+
+  /// 正在录入的因子集合；按因子防重入，允许人脸与指纹维护各自的按钮状态。
   final Set<IdentityFactor> _busyFactors = <IdentityFactor>{};
   _EnrollmentPageStatus _status = _EnrollmentPageStatus.inProgress;
   String? _resultMessage;
   Timer? _returnTimer;
+
+  /// 自动倒计时与手动按钮共用的一次性返回闩锁。
   bool _hasReturnedHome = false;
 
   @override
@@ -68,6 +73,8 @@ class _IdentityEnrollmentPageState extends State<IdentityEnrollmentPage> {
   }
 
   /// 录入或重录指定的人脸、指纹因子。
+  ///
+  /// 同一因子在请求完成前不会重复提交；只有全部请求因子成功后才启动返回首页计时。
   Future<void> _enrollFactor(IdentityFactor factor) async {
     if (_status == _EnrollmentPageStatus.success ||
         _busyFactors.contains(factor) ||
@@ -95,7 +102,11 @@ class _IdentityEnrollmentPageState extends State<IdentityEnrollmentPage> {
         setState(() {
           _busyFactors.remove(factor);
           _status = _EnrollmentPageStatus.failure;
-          _resultMessage = result.message;
+          _resultMessage = localizeIdentityEnrollmentResult(
+            context.l10n,
+            factor: factor,
+            result: result,
+          );
         });
         return;
       }
@@ -103,7 +114,11 @@ class _IdentityEnrollmentPageState extends State<IdentityEnrollmentPage> {
       setState(() {
         _busyFactors.remove(factor);
         _completedFactors.add(factor);
-        _resultMessage = result.message;
+        _resultMessage = localizeIdentityEnrollmentResult(
+          context.l10n,
+          factor: factor,
+          result: result,
+        );
       });
       if (_completedFactors.containsAll(_requestedFactors)) {
         _markAllSucceeded();
@@ -348,7 +363,7 @@ class _IdentityEnrollmentPageState extends State<IdentityEnrollmentPage> {
         padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
         child: SensorVerificationCard(
           title: l10n.t('operatorEnrollFingerprintTitle', '录入指纹'),
-          subtitle: 'Fingerprint Enrollment',
+          subtitle: l10n.t('operatorEnrollFingerprintTitle', '录入指纹'),
           icon: Icons.fingerprint_rounded,
           verified: verified,
           actionText: busy

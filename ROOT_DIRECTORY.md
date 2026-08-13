@@ -20,6 +20,7 @@
 | `assets/GLB/` | 3D 模型或 GLB 资源目录。 | 按需 |
 | `assets/原型页面/` | 原型页面资源目录，已在 `pubspec.yaml` 中声明。 | 是 |
 | `test/` | Flutter 测试目录，包含 Widget 测试、单元测试和分层测试目录。 | 是 |
+| `tool/` | 受维护的工程工具目录，包含自动递增版本并验真 release APK 的 `build_release.dart`。 | 是 |
 
 ## 3. 平台工程目录
 
@@ -58,7 +59,7 @@
 | `README.md` | 项目总入口文档，说明项目背景、当前能力、技术栈、启动命令和业务流程。 | 是 |
 | `ARCHITECTURE.md` | 架构说明文档，描述项目分层、依赖方向和目录约束。 | 是 |
 | `ROOT_DIRECTORY.md` | 根目录说明文档，即当前文件，用于解释根目录文件和文件夹用途。 | 是 |
-| `打包命令.md` | 打包命令备忘文档，记录 Android APK 构建和依赖处理命令。 | 是 |
+| `打包命令.md` | 打包命令备忘文档，记录 Android APK 自动版本递增、构建和依赖处理命令。 | 是 |
 
 ## 6. 构建产物与本地缓存
 
@@ -92,4 +93,4 @@
 - 修改通用组件、通用模型和扩展方法优先查看 `lib/src/shared/`。
 - 新增图片、图标或国际化资源后，需要确认 `pubspec.yaml` 的 `flutter.assets` 是否覆盖对应路径。
 - 不要手动编辑 `.dart_tool/`、`build/`、`.metadata`、`.flutter-plugins-dependencies`、`.git/` 等自动生成或工具维护内容。
-- 打包或验证前建议执行 `flutter pub get`、`flutter analyze`、`flutter test`，必要时再执行 `flutter build apk --debug` 或 `flutter build apk --release`。
+- 打包或验证前建议执行 `flutter pub get`、`flutter analyze`、`flutter test`；调试包使用 `flutter build apk --debug`，正式 release 使用 Windows 发布工具 `dart run tool/build_release.dart`。

@@ -2,18 +2,28 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 
+/// 全局轻提示的语义类型，用于统一图标、配色和加载态展示。
 enum MessageType { info, success, warning, error, loading }
 
+/// 单条提示的控制句柄。
+///
+/// 调用 [close] 可提前移除提示；重复关闭是安全的，不会影响其他提示。
 class MessageHandle {
   const MessageHandle._(this._close);
 
   final VoidCallback _close;
 
+  /// 提前关闭当前提示。
   void close() => _close();
 }
 
+/// 在根 [Overlay] 顶部展示可堆叠的全局轻提示。
+///
+/// 普通提示默认两秒后关闭；加载提示默认常驻，应由调用方保留
+/// [MessageHandle] 并在异步操作结束后主动关闭。
 class Message {
   Message._();
 
@@ -21,8 +31,11 @@ class Message {
   static const double defaultTop = 32;
   static const double defaultMaxWidth = 440;
 
+  // 记录顺序同时决定提示的纵向位置；删除任意一项后必须重建剩余项，
+  // 才能让后续提示向上补位。
   static final List<_MessageRecord> _records = [];
 
+  /// 展示普通信息提示。
   static MessageHandle info(
     BuildContext context,
     String text, {
@@ -31,6 +44,7 @@ class Message {
     return show(context, text, type: MessageType.info, duration: duration);
   }
 
+  /// 展示操作成功提示。
   static MessageHandle success(
     BuildContext context,
     String text, {
@@ -39,6 +53,7 @@ class Message {
     return show(context, text, type: MessageType.success, duration: duration);
   }
 
+  /// 展示需要用户留意、但不阻断当前操作的警告提示。
   static MessageHandle warning(
     BuildContext context,
     String text, {
@@ -47,6 +62,7 @@ class Message {
     return show(context, text, type: MessageType.warning, duration: duration);
   }
 
+  /// 展示操作失败提示。
   static MessageHandle error(
     BuildContext context,
     String text, {
@@ -55,6 +71,9 @@ class Message {
     return show(context, text, type: MessageType.error, duration: duration);
   }
 
+  /// 展示加载提示。
+  ///
+  /// [duration] 为空时不会自动关闭，适合覆盖一段异步操作的生命周期。
   static MessageHandle loading(
     BuildContext context,
     String text, {
@@ -63,6 +82,7 @@ class Message {
     return show(context, text, type: MessageType.loading, duration: duration);
   }
 
+  /// 使用 [context] 所属导航树的根 Overlay 展示提示。
   static MessageHandle show(
     BuildContext context,
     String text, {
@@ -82,6 +102,9 @@ class Message {
     );
   }
 
+  /// 在指定 [overlay] 中插入提示，便于不持有可用 [BuildContext] 的调用方使用。
+  ///
+  /// [duration] 为空表示常驻；[top] 是第一条提示的顶部偏移，后续提示会自动下移。
   static MessageHandle showInOverlay(
     OverlayState overlay,
     String text, {
@@ -93,6 +116,8 @@ class Message {
     final id = Object();
     late final OverlayEntry entry;
 
+    // 通过稳定 id 查找记录，使计时器、关闭按钮和调用方句柄同时触发关闭时
+    // 仍保持幂等。
     void close() {
       final index = _records.indexWhere((record) => record.id == id);
       if (index == -1) {
@@ -129,6 +154,7 @@ class Message {
     return MessageHandle._(close);
   }
 
+  /// 立即移除当前所有提示，通常在退出业务流程或重置全局 UI 时调用。
   static void closeAll() {
     final records = List<_MessageRecord>.of(_records);
     _records.clear();
@@ -229,12 +255,14 @@ class _MessageToastState extends State<_MessageToast> {
       return;
     }
     setState(() => _visible = false);
+    // 等退场动画完成后再移除 OverlayEntry，避免提示直接闪退。
     Timer(const Duration(milliseconds: 180), widget.onClose);
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = _MessageColors.resolve(widget.type);
+    final dismissLabel = context.l10n.t('messageDismiss', '关闭提示');
 
     return AnimatedOpacity(
       opacity: _visible ? 1 : 0,
@@ -278,15 +306,23 @@ class _MessageToastState extends State<_MessageToast> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: _close,
-                    child: Padding(
-                      padding: const EdgeInsets.all(2),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 18,
-                        color: colors.foreground.withValues(alpha: .75),
+                  Tooltip(
+                    message: dismissLabel,
+                    excludeFromSemantics: true,
+                    child: Semantics(
+                      button: true,
+                      label: dismissLabel,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: _close,
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: colors.foreground.withValues(alpha: .75),
+                          ),
+                        ),
                       ),
                     ),
                   ),

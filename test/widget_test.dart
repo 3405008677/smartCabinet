@@ -6,14 +6,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
-import 'package:smart_cabinet/src/app/app.dart';
 
+import 'package:smart_cabinet/src/app/app.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/app/startup/startup_media.dart';
 import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 import 'package:smart_cabinet/src/features/admin/presentation/widgets/admin_camera_capability_panel.dart';
+import 'package:smart_cabinet/src/features/terminal_upgrade/presentation/terminal_upgrade_offer_notifier.dart';
 
 const MethodChannel _kioskChannel = MethodChannel('smart_cabinet/kiosk');
+const MethodChannel _upgradeChannel = MethodChannel('smart_cabinet/upgrade');
 
 const List<CameraDescription> _testCameras = [
   CameraDescription(
@@ -49,17 +51,28 @@ void main() {
 
     /// 每个测试开始前都先恢复到简体中文，避免前一个用例修改全局语言造成串扰。
     appLocaleController.setLanguage(AppLanguage.simplifiedChinese);
+    globalTerminalUpgradeOfferNotifier.resetForTesting();
     StartupMedia.minimumDisplayDuration = Duration.zero;
     CabinetCameraService.debugUseCameraData(cameras: _testCameras);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_kioskChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_upgradeChannel, (call) async {
+          if (call.method == 'getAppVersion') {
+            return <String, Object?>{'versionName': '1.2.3', 'versionCode': 23};
+          }
+          return null;
+        });
   });
 
   tearDown(() {
     StartupMedia.minimumDisplayDuration = const Duration(milliseconds: 1200);
     CabinetCameraService.debugReset();
+    globalTerminalUpgradeOfferNotifier.resetForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_kioskChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_upgradeChannel, null);
   });
 
   testWidgets('app renders new smart cabinet home page', (
@@ -86,7 +99,8 @@ void main() {
     expect(find.text('飞检操作'), findsNothing);
     expect(find.text('管理员模式'), findsNothing);
     expect(find.text('设置'), findsNothing);
-    expect(find.text('v2.4.1'), findsOneWidget);
+    await tester.pump();
+    expect(find.text('v1.2.3'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 1500));
     await tester.pumpAndSettle();
@@ -100,7 +114,7 @@ void main() {
     await _pumpSmartCabinetApp(tester);
 
     for (var i = 0; i < 7; i += 1) {
-      await tester.tap(find.text('v2.4.1'));
+      await _tapVersion(tester);
       await tester.pump();
     }
 
@@ -498,6 +512,42 @@ void main() {
     expect(find.text('1. Initialize Data'), findsOneWidget);
     expect(find.text('2. Reset Device'), findsOneWidget);
     expect(find.text('3. Auto Detect'), findsOneWidget);
+  });
+
+  testWidgets('admin console opens communication log page', (
+    WidgetTester tester,
+  ) async {
+    await _pumpSmartCabinetApp(tester);
+    await _openAdminConsole(tester);
+
+    final communicationLogItem = find.byKey(
+      const ValueKey('admin_function_communication_log'),
+    );
+    await tester.scrollUntilVisible(
+      communicationLogItem,
+      180,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('admin_function_list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('5、通讯日志'), findsOneWidget);
+    await tester.tap(communicationLogItem);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('admin_communication_log_page')),
+      findsOneWidget,
+    );
+    expect(find.text('通讯记录'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('admin_communication_log_back')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('管理员控制台'), findsOneWidget);
   });
 
   testWidgets('admin console opens preview for a connected camera card', (

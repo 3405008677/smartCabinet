@@ -103,12 +103,18 @@ List<AdminDetectionItem> buildAdminDetectionItems({
       return item(
         id: id,
         title: title,
-        result: error,
+        result: l10n.t('adminDeviceStatusReadFailed', '硬件状态读取失败'),
         icon: icon,
         state: AdminDetectionState.abnormal,
       );
     }
-    return item(id: id, title: title, result: value, icon: icon);
+    return item(
+      id: id,
+      title: title,
+      result: localizedAdminDeviceStatus(l10n, value),
+      icon: icon,
+      state: _detectionStateFor(value),
+    );
   }
 
   AdminDetectionItem cameraItem(CabinetCameraRole role) {
@@ -119,10 +125,12 @@ List<AdminDetectionItem> buildAdminDetectionItems({
     late final String connectionResult;
     late final AdminDetectionState connectionState;
     if (capability?.hasConnectionProbeError == true) {
-      final detail = capability!.errorMessage.isEmpty
-          ? capability.errorCode
-          : capability.errorMessage;
-      connectionResult = detail.isEmpty ? '连接检测异常' : '连接检测异常：$detail';
+      final code = capability!.errorCode.trim();
+      connectionResult = code.isEmpty
+          ? l10n.t('adminCameraConnectionProbeError', '连接检测异常')
+          : l10n
+                .t('adminCameraConnectionProbeErrorCode', '连接检测异常（{code}）')
+                .replaceAll('{code}', code);
       connectionState = AdminDetectionState.abnormal;
     } else if (capability != null) {
       connected = capability.available;
@@ -133,13 +141,13 @@ List<AdminDetectionItem> buildAdminDetectionItems({
           ? AdminDetectionState.healthy
           : AdminDetectionState.abnormal;
     } else if (capabilityError != null) {
-      connectionResult = '检测失败：$capabilityError';
+      connectionResult = l10n.t('adminCameraDetectionFailed', '检测失败');
       connectionState = AdminDetectionState.abnormal;
     } else if (cameraConfigLoading) {
       connectionResult = l10n.t('adminAutoDetectCheckingResult', '正在读取设备状态...');
       connectionState = AdminDetectionState.checking;
     } else if (cameraConfigError != null && !enumerated) {
-      connectionResult = '检测失败：$cameraConfigError';
+      connectionResult = l10n.t('adminCameraDetectionFailed', '检测失败');
       connectionState = AdminDetectionState.abnormal;
     } else {
       connected = enumerated;
@@ -159,9 +167,22 @@ List<AdminDetectionItem> buildAdminDetectionItems({
     final supportsNativeStream =
         CabinetCameraConfig.bindingFor(role).useMode ==
         CabinetCameraUseMode.rtspStream;
+    final connectionSummary = l10n
+        .t('adminCameraConnectionSummary', '设备连接：{status}')
+        .replaceAll('{status}', connectionResult);
+    final streamSummary = l10n
+        .t('adminCameraStreamSummary', '视频推流：{status}')
+        .replaceAll(
+          '{status}',
+          localizedAdminCameraStreamStatus(
+            l10n,
+            streamStatus,
+            streamStatusErrors[role],
+          ),
+        );
     final result = supportsNativeStream
-        ? '设备连接：$connectionResult\n视频推流：${_streamDetectionText(streamStatus, streamStatusErrors[role])}'
-        : '设备连接：$connectionResult';
+        ? '$connectionSummary\n$streamSummary'
+        : connectionSummary;
     final canRetryStream =
         connected == true &&
         streamStatus?.needsUserAttention == true &&
@@ -216,47 +237,107 @@ List<AdminDetectionItem> buildAdminDetectionItems({
     item(
       id: 'cabinet_board',
       title: l10n.t('adminDeviceCabinetBoard', '柜控板'),
-      result: '待接入驱动与检测接口',
+      result: l10n.t('adminAutoDetectPendingDriver', '待接入驱动与检测接口'),
       icon: Icons.developer_board,
       state: AdminDetectionState.pending,
       recoveryAction: AdminDetectionRecoveryAction.unsupported,
-      recoveryUnavailableReason: '系统尚未接入柜控板驱动与重连接口',
+      recoveryUnavailableReason: l10n.t(
+        'adminAutoDetectCabinetBoardRecoveryUnsupported',
+        '系统尚未接入柜控板驱动与重连接口',
+      ),
     ),
     item(
       id: 'scanner',
       title: l10n.t('adminDeviceScanner', '扫码器'),
-      result: '待接入驱动与检测接口',
+      result: l10n.t('adminAutoDetectPendingDriver', '待接入驱动与检测接口'),
       icon: Icons.qr_code_scanner,
       state: AdminDetectionState.pending,
       recoveryAction: AdminDetectionRecoveryAction.unsupported,
-      recoveryUnavailableReason: '系统尚未接入扫码器驱动与重连接口',
+      recoveryUnavailableReason: l10n.t(
+        'adminAutoDetectScannerRecoveryUnsupported',
+        '系统尚未接入扫码器驱动与重连接口',
+      ),
     ),
   ];
 }
 
 /// 为自动检测弹窗生成独立于设备连接状态的推流摘要。
-String _streamDetectionText(CameraStreamStatus? status, String? readError) {
+String localizedAdminCameraStreamStatus(
+  AppLocalizations l10n,
+  CameraStreamStatus? status,
+  String? readError,
+) {
   if (status == null) {
-    return readError == null ? '未启动' : '状态读取失败';
+    return readError == null
+        ? l10n.t('adminCameraStreamNotStarted', '未启动')
+        : l10n.t('adminCameraStreamReadFailed', '状态读取失败');
   }
   if (status.isStreaming) {
-    return status.profile.isEmpty ? '推流中' : '${status.profile} 推流中';
+    return status.profile.isEmpty
+        ? l10n.t('adminCameraStreaming', '推流中')
+        : l10n
+              .t('adminCameraStreamingProfile', '{profile} 推流中')
+              .replaceAll('{profile}', status.profile);
   }
   return switch (status.state) {
-    CameraStreamState.starting => '启动中',
+    CameraStreamState.starting => l10n.t('adminCameraStreamStarting', '启动中'),
     CameraStreamState.reconnecting =>
       status.reconnectAttempts > 0
-          ? '自动重连中（第 ${status.reconnectAttempts} 次）'
-          : '自动重连中',
-    CameraStreamState.failed => '推流失败（详见推流异常提示）',
-    CameraStreamState.stopping => '停止中',
-    CameraStreamState.stopped => '未启动',
-    CameraStreamState.unconfigured => '未配置',
+          ? l10n
+                .t('adminCameraStreamReconnectingAttempt', '自动重连中（第 {count} 次）')
+                .replaceAll('{count}', '${status.reconnectAttempts}')
+          : l10n.t('adminCameraStreamReconnecting', '自动重连中'),
+    CameraStreamState.failed => l10n.t(
+      'adminCameraStreamFailedSeeDetails',
+      '推流失败（详见推流异常提示）',
+    ),
+    CameraStreamState.stopping => l10n.t('adminCameraStreamStopping', '停止中'),
+    CameraStreamState.stopped => l10n.t('adminCameraStreamNotStarted', '未启动'),
+    CameraStreamState.unconfigured => l10n.t('adminStatusNotConfigured', '未配置'),
     CameraStreamState.unknown =>
-      status.needsUserAttention ? '推流失败（详见推流异常提示）' : status.status,
+      status.needsUserAttention
+          ? l10n.t('adminCameraStreamFailedSeeDetails', '推流失败（详见推流异常提示）')
+          : l10n.t('adminCameraStreamUnknown', '状态未知'),
     CameraStreamState.streaming =>
-      status.allProfilesStreaming == false ? '启动中' : '推流中',
+      status.allProfilesStreaming == false
+          ? l10n.t('adminCameraStreamStarting', '启动中')
+          : l10n.t('adminCameraStreaming', '推流中'),
   };
+}
+
+/// 将领域层的稳定状态值转换为当前界面语言；动态设备名保持原样。
+String localizedAdminDeviceStatus(AppLocalizations l10n, String value) {
+  return switch (value.trim()) {
+    '正在读取' => l10n.t('adminStatusReading', '正在读取'),
+    '正在检测' => l10n.t('adminStatusDetecting', '正在检测'),
+    '待接入' || '待配置' => l10n.t('adminStatusPending', '待接入'),
+    '已连接' => l10n.t('adminStatusConnected', '已连接'),
+    '未连接' => l10n.t('adminStatusDisconnected', '未连接'),
+    '可用' => l10n.t('adminStatusAvailable', '可用'),
+    '不可用' => l10n.t('adminStatusUnavailable', '不可用'),
+    '未知设备' => l10n.t('adminStatusUnknownDevice', '未知设备'),
+    '未配置' => l10n.t('adminStatusNotConfigured', '未配置'),
+    '已连接 WiFi' => l10n.t('adminStatusWifiConnected', '已连接 WiFi'),
+    _ => value,
+  };
+}
+
+/// 避免把原生固定中文异常直接拼进其他语言界面。
+String _localizedAdminOperationError(BuildContext context, Object error) {
+  final l10n = context.l10n;
+  if (error is AdminDetectionOperationException) {
+    return error.message;
+  }
+  final raw = error
+      .toString()
+      .replaceFirst(RegExp(r'^(Bad state|Exception):\s*'), '')
+      .trim();
+  final containsCjk = RegExp(r'[\u3400-\u9fff\u3040-\u30ff]').hasMatch(raw);
+  if (raw.isNotEmpty &&
+      (!containsCjk || l10n.language == AppLanguage.simplifiedChinese)) {
+    return raw;
+  }
+  return l10n.t('adminAutoDetectOperationFailedDetail', '设备操作未完成，请重试');
 }
 
 /// 将已有状态文案映射为统一的检测状态。
@@ -396,6 +477,18 @@ class AdminDetectionItem {
   }
 }
 
+/// 管理员检测操作中可直接安全展示的本地化失败原因。
+class AdminDetectionOperationException implements Exception {
+  /// 创建本地化检测失败。
+  const AdminDetectionOperationException(this.message);
+
+  /// 当前语言下的可操作提示。
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 /// 弹窗打开后读取最新的自动检测项。
 typedef AdminDetectionInitialLoader =
     Future<List<AdminDetectionItem>> Function();
@@ -477,7 +570,7 @@ class _AdminAutoDetectionDialogState extends State<AdminAutoDetectionDialog> {
       setState(() => _initialLoading = false);
       final message = context.l10n
           .t('adminAutoDetectInitialLoadFailed', '自动检测失败：{error}')
-          .replaceAll('{error}', '$error');
+          .replaceAll('{error}', _localizedAdminOperationError(context, error));
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -493,7 +586,7 @@ class _AdminAutoDetectionDialogState extends State<AdminAutoDetectionDialog> {
 
     if (item.recoveryAction == AdminDetectionRecoveryAction.unsupported) {
       final reason = item.recoveryUnavailableReason.isEmpty
-          ? '当前设备不支持自动恢复'
+          ? context.l10n.t('adminAutoDetectRecoveryUnsupported', '当前设备不支持自动恢复')
           : item.recoveryUnavailableReason;
       ScaffoldMessenger.of(
         context,
@@ -503,7 +596,9 @@ class _AdminAutoDetectionDialogState extends State<AdminAutoDetectionDialog> {
 
     final reconnect = widget.onReconnect;
     if (reconnect == null) {
-      final message = '${item.title} 的恢复处理尚未接入';
+      final message = context.l10n
+          .t('adminAutoDetectRecoveryPending', '{name} 的恢复处理尚未接入')
+          .replaceAll('{name}', item.title);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -530,8 +625,12 @@ class _AdminAutoDetectionDialogState extends State<AdminAutoDetectionDialog> {
       if (verifiedItem.recoveryVerifiedFor(item.recoveryAction)) {
         final message =
             item.recoveryAction == AdminDetectionRecoveryAction.retryStream
-            ? '${item.title} 推流已恢复'
-            : '${item.title} 重新检测通过';
+            ? context.l10n
+                  .t('adminAutoDetectStreamRecovered', '{name} 推流已恢复')
+                  .replaceAll('{name}', item.title)
+            : context.l10n
+                  .t('adminAutoDetectRecheckSucceeded', '{name} 重新检测通过')
+                  .replaceAll('{name}', item.title);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(message)));
@@ -540,12 +639,28 @@ class _AdminAutoDetectionDialogState extends State<AdminAutoDetectionDialog> {
 
       final verificationReason =
           item.recoveryAction == AdminDetectionRecoveryAction.retryStream
-          ? '复检后视频流仍未进入推流中状态'
-          : '复检后设备状态仍未恢复正常';
+          ? context.l10n.t(
+              'adminAutoDetectStreamVerificationFailed',
+              '复检后视频流仍未进入推流中状态',
+            )
+          : context.l10n.t(
+              'adminAutoDetectDeviceVerificationFailed',
+              '复检后设备状态仍未恢复正常',
+            );
       final result = verifiedItem.result.trim();
       final message = result.isEmpty
-          ? '${item.title} 恢复失败：$verificationReason'
-          : '${item.title} 恢复失败：$verificationReason（$result）';
+          ? context.l10n
+                .t('adminAutoDetectRecoveryFailed', '{name} 恢复失败：{reason}')
+                .replaceAll('{name}', item.title)
+                .replaceAll('{reason}', verificationReason)
+          : context.l10n
+                .t(
+                  'adminAutoDetectRecoveryFailedWithResult',
+                  '{name} 恢复失败：{reason}（{result}）',
+                )
+                .replaceAll('{name}', item.title)
+                .replaceAll('{reason}', verificationReason)
+                .replaceAll('{result}', result);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -557,7 +672,7 @@ class _AdminAutoDetectionDialogState extends State<AdminAutoDetectionDialog> {
       final message = context.l10n
           .t('adminAutoDetectReconnectFailed', '{name} 重连失败：{error}')
           .replaceAll('{name}', item.title)
-          .replaceAll('{error}', '$error');
+          .replaceAll('{error}', _localizedAdminOperationError(context, error));
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -1154,17 +1269,24 @@ class _DetectionDetailPanel extends StatelessWidget {
         !recoveryInProgress;
     final recoveryUnavailableReason = !recoverySupported
         ? (selectedItem.recoveryUnavailableReason.isEmpty
-              ? '当前设备不支持自动恢复'
+              ? l10n.t('adminAutoDetectRecoveryUnsupported', '当前设备不支持自动恢复')
               : selectedItem.recoveryUnavailableReason)
         : !recoveryHandlerAvailable
-        ? '当前设备的恢复处理尚未接入'
+        ? l10n.t('adminAutoDetectDeviceRecoveryPending', '当前设备的恢复处理尚未接入')
         : '';
     final recoveryActionLabel = switch (selectedItem.recoveryAction) {
       AdminDetectionRecoveryAction.retryStream =>
-        reconnecting ? '推流重试中...' : '立即重试推流',
+        reconnecting
+            ? l10n.t('adminAutoDetectStreamRetrying', '推流重试中...')
+            : l10n.t('adminAutoDetectRetryStream', '立即重试推流'),
       AdminDetectionRecoveryAction.recheck =>
-        reconnecting ? '检测中...' : '重新检测该设备',
-      AdminDetectionRecoveryAction.unsupported => '暂不支持自动恢复',
+        reconnecting
+            ? l10n.t('adminAutoDetectDeviceChecking', '检测中...')
+            : l10n.t('adminAutoDetectRecheckDevice', '重新检测该设备'),
+      AdminDetectionRecoveryAction.unsupported => l10n.t(
+        'adminAutoDetectAutomaticRecoveryUnsupported',
+        '暂不支持自动恢复',
+      ),
     };
 
     return Column(
@@ -1298,8 +1420,11 @@ class _DetectionDetailPanel extends StatelessWidget {
                     ? recoveryUnavailableReason
                     : selectedItem.recoveryAction ==
                           AdminDetectionRecoveryAction.retryStream
-                    ? '仅重新启动当前摄像头的视频推流，并在完成后复检'
-                    : '仅重新检测当前左侧选中的设备',
+                    ? l10n.t(
+                        'adminAutoDetectRetryStreamTooltip',
+                        '仅重新启动当前摄像头的视频推流，并在完成后复检',
+                      )
+                    : l10n.t('adminAutoDetectRecheckTooltip', '仅重新检测当前左侧选中的设备'),
                 child: OutlinedButton.icon(
                   key: const ValueKey(
                     'admin_auto_detection_reconnect_selected',

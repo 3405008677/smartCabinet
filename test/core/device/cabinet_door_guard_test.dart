@@ -63,5 +63,36 @@ void main() {
         isTrue,
       );
     });
+
+    test('系统维护租约原子阻止新的开门操作', () {
+      final guard = CabinetDoorGuard();
+
+      expect(guard.tryAcquireMaintenance('UPGRADE-1'), isTrue);
+      expect(guard.tryAcquireMaintenance('UPGRADE-1'), isTrue);
+      expect(guard.maintenanceActive, isTrue);
+      expect(guard.hasActiveOperation, isTrue);
+
+      final result = guard.requestOpen('A-01', operationId: 'TASK-001');
+      expect(result, isA<CabinetDoorOpenMaintenanceConflict>());
+      expect(result.granted, isFalse);
+      expect(guard.activeDoorNo, isNull);
+
+      expect(guard.releaseMaintenance('UPGRADE-OTHER'), isFalse);
+      expect(guard.releaseMaintenance('UPGRADE-1'), isTrue);
+      expect(guard.maintenanceActive, isFalse);
+      expect(
+        guard.requestOpen('A-01', operationId: 'TASK-001').granted,
+        isTrue,
+      );
+    });
+
+    test('已有开门操作时不能取得系统维护租约', () {
+      final guard = CabinetDoorGuard()
+        ..requestOpen('A-01', operationId: 'TASK-001');
+
+      expect(guard.tryAcquireMaintenance('UPGRADE-1'), isFalse);
+      expect(guard.maintenanceActive, isFalse);
+      expect(guard.activeDoorNo, 'A-01');
+    });
   });
 }

@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:smart_cabinet/src/app/theme/app_theme.dart';
-
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+import 'package:smart_cabinet/src/app/theme/app_theme.dart';
+import 'package:smart_cabinet/src/core/device/app_version_service.dart';
 import 'package:smart_cabinet/src/features/home/data/repositories/home_repository_impl.dart';
 
 /// Returns the delay to the next wall-clock minute boundary.
@@ -31,6 +31,7 @@ class TerminalShell extends StatefulWidget {
     this.topBarLeading,
     this.topRightBadge,
     this.onVersionTap,
+    this.appVersionLoader,
     super.key,
   });
 
@@ -49,6 +50,9 @@ class TerminalShell extends StatefulWidget {
 
   /// 点击底部版本号时执行的动作。
   final VoidCallback? onVersionTap;
+
+  /// 读取当前已安装 APK 版本；测试可注入受控结果。
+  final Future<AppVersionInfo> Function()? appVersionLoader;
 
   @override
   State<TerminalShell> createState() => _TerminalShellState();
@@ -107,7 +111,11 @@ class _TerminalShellState extends State<TerminalShell> {
                       topRightBadge: widget.topRightBadge,
                     ),
                   Expanded(child: widget.child),
-                  _GlobalFooter(onVersionTap: widget.onVersionTap),
+                  _GlobalFooter(
+                    onVersionTap: widget.onVersionTap,
+                    appVersionLoader:
+                        widget.appVersionLoader ?? globalAppVersionService.load,
+                  ),
                 ],
               ),
             ),
@@ -168,7 +176,9 @@ class _GlobalHeader extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'Intelligent Document Cabinet · $cabinetCode',
+                l10n
+                    .t('terminalProductSubtitle', '智能文件保管柜 · {cabinetCode}')
+                    .replaceAll('{cabinetCode}', cabinetCode),
                 style: const TextStyle(
                   color: AppTheme.textSecondaryColor,
                   fontSize: 13,
@@ -327,10 +337,13 @@ class _SubHeader extends StatelessWidget {
 
 /// 底部全局状态栏。
 class _GlobalFooter extends StatelessWidget {
-  const _GlobalFooter({this.onVersionTap});
+  const _GlobalFooter({required this.appVersionLoader, this.onVersionTap});
 
   /// 点击底部版本号时执行的动作。
   final VoidCallback? onVersionTap;
+
+  /// 读取当前已安装 APK 的真实版本。
+  final Future<AppVersionInfo> Function() appVersionLoader;
 
   @override
   Widget build(BuildContext context) {
@@ -391,16 +404,24 @@ class _GlobalFooter extends StatelessWidget {
               key: const ValueKey('terminal_version_tap_target'),
               behavior: HitTestBehavior.opaque,
               onTap: onVersionTap,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Text(
-                  'v2.4.1',
-                  style: TextStyle(
-                    color: Color(0xFFA7B0CC),
-                    fontSize: 12,
-                    letterSpacing: 1,
-                    fontWeight: FontWeight.w700,
-                  ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: FutureBuilder<AppVersionInfo>(
+                  future: appVersionLoader(),
+                  builder: (context, snapshot) {
+                    final versionName = snapshot.data?.name.trim();
+                    return Text(
+                      versionName == null || versionName.isEmpty
+                          ? 'v—'
+                          : 'v$versionName',
+                      style: const TextStyle(
+                        color: Color(0xFFA7B0CC),
+                        fontSize: 12,
+                        letterSpacing: 1,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -451,6 +472,54 @@ class FlowStatusBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 登录会话无操作自动退出倒计时徽标。
+class InactivityCountdownBadge extends StatelessWidget {
+  /// 创建无操作倒计时徽标。
+  const InactivityCountdownBadge({required this.seconds, super.key});
+
+  /// 距离自动退出登录剩余的秒数。
+  final int seconds;
+
+  @override
+  Widget build(BuildContext context) {
+    final isWarning = seconds <= 20;
+    final color = isWarning ? const Color(0xFFC43B3B) : AppTheme.primaryColor;
+    final countdownValue = context.l10n
+        .t('terminalInactivityCountdownValue', '{seconds} 秒')
+        .replaceAll('{seconds}', '$seconds');
+
+    return Semantics(
+      label: context.l10n.t('taskCenterInactivityCountdown', '无操作自动退出倒计时'),
+      value: countdownValue,
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: .3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.timer_outlined, color: color, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              countdownValue,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                height: 1,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

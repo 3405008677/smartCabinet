@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/core/device/device_info_service.dart';
+import 'package:smart_cabinet/src/features/home/presentation/device_info_localizer.dart';
 import 'package:smart_cabinet/src/core/storage/app_local_store_provider.dart';
 import 'package:smart_cabinet/src/features/admin/presentation/widgets/admin_login_dialog.dart';
 
@@ -498,6 +499,8 @@ class _AboutDeviceInfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       decoration: BoxDecoration(
@@ -511,7 +514,7 @@ class _AboutDeviceInfoRow extends StatelessWidget {
           SizedBox(
             width: 154,
             child: Text(
-              item.label,
+              localizeDeviceInfoLabel(l10n, item.label),
               style: const TextStyle(
                 color: AppTheme.textSecondaryColor,
                 fontSize: 13,
@@ -522,7 +525,7 @@ class _AboutDeviceInfoRow extends StatelessWidget {
           const SizedBox(width: 14),
           Expanded(
             child: SelectableText(
-              item.value,
+              localizeDeviceInfoValue(l10n, item.value),
               style: const TextStyle(
                 color: AppTheme.textPrimaryColor,
                 fontSize: 13,

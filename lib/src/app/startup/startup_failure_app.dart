@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:smart_cabinet/src/app/bootstrap/bootstrap.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/app/startup/startup_task.dart';
 
 /// 启动失败时展示的兜底应用。
@@ -37,63 +39,83 @@ class _StartupFailureAppState extends State<StartupFailureApp> {
   @override
   Widget build(BuildContext context) {
     final failure = widget.result.firstRequiredFailure;
+    final localizations = AppLocalizations(appLocaleController.language);
 
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        backgroundColor: const Color(0xFF111827),
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '系统启动失败',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF991B1B),
+    return AppLocalizationsScope(
+      localizations: localizations,
+      child: MaterialApp(
+        title: localizations.t('startupFailureTitle', '系统启动失败'),
+        debugShowCheckedModeBanner: false,
+        locale: appLocaleController.locale,
+        supportedLocales: AppLanguage.values
+            .map((language) => language.locale)
+            .toList(growable: false),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        home: Scaffold(
+          backgroundColor: const Color(0xFF111827),
+          body: SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            localizations.t('startupFailureTitle', '系统启动失败'),
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF991B1B),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '关键功能未准备完成，系统已阻止进入主界面。请检查硬件连接后重试。',
-                          style: TextStyle(
-                            fontSize: 18,
-                            height: 1.5,
-                            color: Color(0xFF374151),
+                          const SizedBox(height: 12),
+                          Text(
+                            localizations.t(
+                              'startupFailureDescription',
+                              '关键功能未准备完成，系统已阻止进入主界面。请检查硬件连接后重试。',
+                            ),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              height: 1.5,
+                              color: Color(0xFF374151),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                        if (failure != null) _FailureSummary(failure: failure),
-                        const SizedBox(height: 24),
-                        _TaskResultList(results: widget.result.taskResults),
-                        const SizedBox(height: 28),
-                        FilledButton.icon(
-                          onPressed: _retrying ? null : _retry,
-                          icon: _retrying
-                              ? const SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.refresh_rounded),
-                          label: const Text('重新启动检测'),
-                        ),
-                      ],
+                          const SizedBox(height: 24),
+                          if (failure != null)
+                            _FailureSummary(failure: failure),
+                          const SizedBox(height: 24),
+                          _TaskResultList(results: widget.result.taskResults),
+                          const SizedBox(height: 28),
+                          FilledButton.icon(
+                            onPressed: _retrying ? null : _retry,
+                            icon: _retrying
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.refresh_rounded),
+                            label: Text(
+                              localizations.t('startupRetry', '重新启动检测'),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -125,7 +147,12 @@ class _FailureSummary extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '失败任务：${failure.name}',
+              context.l10n
+                  .t('startupFailureTask', '失败任务：{task}')
+                  .replaceAll(
+                    '{task}',
+                    _localizedStartupTaskName(context, failure.name),
+                  ),
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -134,7 +161,12 @@ class _FailureSummary extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '错误原因：${_readableErrorMessage(failure.error)}',
+              context.l10n
+                  .t('startupErrorReason', '错误原因：{reason}')
+                  .replaceAll(
+                    '{reason}',
+                    _readableErrorMessage(context, failure.error),
+                  ),
               style: const TextStyle(fontSize: 15, color: Color(0xFF7F1D1D)),
             ),
           ],
@@ -143,17 +175,17 @@ class _FailureSummary extends StatelessWidget {
     );
   }
 
-  String _readableErrorMessage(Object? error) {
-    final message = error?.toString() ?? '未知错误';
+  String _readableErrorMessage(BuildContext context, Object? error) {
+    final message = error?.toString() ?? '';
     if (message.contains('Device reporting less cameras than anticipated') ||
         message.contains('Available cameras: 0') ||
         message.contains('未检测到可用摄像头')) {
-      return '未检测到可用摄像头。请确认摄像头已连接、系统相机权限正常，并重启检测。';
+      return context.l10n.t(
+        'startupCameraUnavailable',
+        '未检测到可用摄像头。请确认摄像头已连接、系统相机权限正常，并重新检测。',
+      );
     }
-    if (message.length <= 180) {
-      return message;
-    }
-    return '${message.substring(0, 180)}...';
+    return context.l10n.t('startupUnknownError', '启动检测未完成，请检查设备状态后重试。');
   }
 }
 
@@ -167,9 +199,9 @@ class _TaskResultList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '启动任务结果',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        Text(
+          context.l10n.t('startupTaskResults', '启动任务结果'),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 12),
         for (final result in results) _TaskResultTile(result: result),
@@ -200,7 +232,16 @@ class _TaskResultTile extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '${result.name} · ${result.duration.inMilliseconds}ms',
+              context.l10n
+                  .t('startupTaskDuration', '{task} · {milliseconds} 毫秒')
+                  .replaceAll(
+                    '{task}',
+                    _localizedStartupTaskName(context, result.name),
+                  )
+                  .replaceAll(
+                    '{milliseconds}',
+                    '${result.duration.inMilliseconds}',
+                  ),
               style: const TextStyle(fontSize: 15, color: Color(0xFF111827)),
             ),
           ),
@@ -208,4 +249,15 @@ class _TaskResultTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 把内部启动任务名称映射为用户可见文案；未知任务不直接泄露内部名称。
+String _localizedStartupTaskName(BuildContext context, String name) {
+  return switch (name) {
+    '缓存本地设备数据' => context.l10n.t('startupTaskCacheLocalData', '缓存本地设备数据'),
+    '加载摄像头' => context.l10n.t('startupTaskLoadCameras', '加载摄像头'),
+    '连接 MQTT' => context.l10n.t('startupTaskConnectMqtt', '连接 MQTT'),
+    '启动终端升级监控' => context.l10n.t('startupTaskStartUpgradeMonitor', '启动终端升级监控'),
+    _ => context.l10n.t('startupTaskUnknown', '启动检测'),
+  };
 }

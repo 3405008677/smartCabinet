@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:smart_cabinet/src/app/routing/app_router.dart';
+import 'package:smart_cabinet/src/app/shell/app_shell.dart';
 import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 import 'package:smart_cabinet/src/core/device/cabinet_door_guard.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_account.dart';
@@ -251,7 +253,157 @@ void main() {
     expect(input, findsNothing);
   });
 
-  testWidgets('无任务倒计时等待柜门关闭后才退出', (tester) async {
+  testWidgets('工作台右上角显示100秒倒计时且操作后重置', (tester) async {
+    await _setTerminalSurface(tester);
+    final observer = _HomePushObserver();
+    final repository = TaskCenterRepositoryImpl(
+      FakeTaskCenterDataSource.seeded(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        navigatorObservers: [observer],
+        home: TaskCenterPage(
+          arguments: TaskCenterArguments(
+            account: account,
+            repository: repository,
+            doorGuard: CabinetDoorGuard(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final authenticationBadge = find.byType(FlowStatusBadge);
+    final countdownBadge = find.byKey(
+      const ValueKey('task_center_inactivity_countdown'),
+    );
+    expect(authenticationBadge, findsOneWidget);
+    expect(countdownBadge, findsOneWidget);
+    expect(find.text('100 秒'), findsOneWidget);
+    expect(
+      tester.getTopLeft(countdownBadge).dx,
+      greaterThan(tester.getTopRight(authenticationBadge).dx),
+    );
+
+    await _pumpSeconds(tester, 35);
+    expect(find.text('65 秒'), findsOneWidget);
+
+    await tester.tap(find.text('当前可执行任务'));
+    await tester.pump();
+    expect(find.text('100 秒'), findsOneWidget);
+
+    await _pumpSeconds(tester, 99);
+    expect(observer.homePushCount, 1);
+    expect(find.text('1 秒'), findsOneWidget);
+
+    await _pumpSeconds(tester, 1);
+    expect(observer.homePushCount, greaterThanOrEqualTo(2));
+  });
+
+  testWidgets('进入任务执行页后启用100秒倒计时且操作后重置', (tester) async {
+    await _setTerminalSurface(tester);
+    final observer = _HomePushObserver();
+    final repository = TaskCenterRepositoryImpl(
+      FakeTaskCenterDataSource.seeded(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        navigatorObservers: [observer],
+        onGenerateRoute: AppRouter.onGenerateRoute,
+        home: TaskCenterPage(
+          arguments: TaskCenterArguments(
+            account: account,
+            repository: repository,
+            doorGuard: CabinetDoorGuard(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('task_center_open_storeEvidence')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(TaskExecutionPage), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('task_execution_inactivity_countdown')),
+      findsOneWidget,
+    );
+    expect(find.text('100 秒'), findsOneWidget);
+
+    await _pumpSeconds(tester, 35);
+    expect(find.text('65 秒'), findsOneWidget);
+
+    await tester.tap(find.byType(FlowStatusBadge));
+    await tester.pump();
+    expect(find.text('100 秒'), findsOneWidget);
+
+    await _pumpSeconds(tester, 99);
+    expect(find.byType(TaskExecutionPage), findsOneWidget);
+    expect(observer.homePushCount, 1);
+    expect(find.text('1 秒'), findsOneWidget);
+
+    await _pumpSeconds(tester, 1);
+    await tester.pumpAndSettle();
+    expect(find.byType(TaskExecutionPage), findsNothing);
+    expect(observer.homePushCount, greaterThanOrEqualTo(2));
+  });
+
+  testWidgets('任务执行中柜门未关闭时不会强制退出', (tester) async {
+    await _setTerminalSurface(tester);
+    final observer = _HomePushObserver();
+    final guard = CabinetDoorGuard();
+    final repository = TaskCenterRepositoryImpl(
+      FakeTaskCenterDataSource.seeded(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        navigatorObservers: [observer],
+        onGenerateRoute: AppRouter.onGenerateRoute,
+        home: TaskCenterPage(
+          arguments: TaskCenterArguments(
+            account: account,
+            repository: repository,
+            doorGuard: guard,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('task_center_open_storeEvidence')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(TaskExecutionPage), findsOneWidget);
+
+    guard.requestOpen('A-01', operationId: 'EXECUTION-DOOR');
+    expect(guard.activeDoorNo, 'A-01');
+
+    await _pumpSeconds(tester, 102);
+    expect(find.byType(TaskExecutionPage), findsOneWidget);
+    expect(observer.homePushCount, 1);
+    expect(find.text('100 秒'), findsOneWidget);
+
+    expect(guard.markClosed('A-01', operationId: 'EXECUTION-DOOR'), isTrue);
+    await _pumpSeconds(tester, 99);
+    expect(find.byType(TaskExecutionPage), findsOneWidget);
+    expect(observer.homePushCount, 1);
+
+    await _pumpSeconds(tester, 1);
+    await tester.pumpAndSettle();
+    expect(find.byType(TaskExecutionPage), findsNothing);
+    expect(observer.homePushCount, greaterThanOrEqualTo(2));
+  });
+
+  testWidgets('无操作倒计时等待柜门关闭后才退出', (tester) async {
     await _setTerminalSurface(tester);
     final guard = CabinetDoorGuard()
       ..requestOpen('A-01', operationId: 'EXTERNAL-TASK');
@@ -280,11 +432,11 @@ void main() {
     expect(find.text('等待全部柜门关闭后再退出登录'), findsOneWidget);
 
     expect(guard.markClosed('A-01', operationId: 'EXTERNAL-TASK'), isTrue);
-    await _pumpSeconds(tester, 12);
+    await _pumpSeconds(tester, 102);
     expect(observer.homePushCount, greaterThanOrEqualTo(2));
   });
 
-  testWidgets('任务工作台销毁后无任务计时器不会继续导航', (tester) async {
+  testWidgets('任务工作台销毁后无操作计时器不会继续导航', (tester) async {
     await _setTerminalSurface(tester);
     final observer = _HomePushObserver();
     final repository = TaskCenterRepositoryImpl(
@@ -306,7 +458,7 @@ void main() {
     );
     await tester.pump();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-    await _pumpSeconds(tester, 12);
+    await _pumpSeconds(tester, 102);
 
     expect(tester.takeException(), isNull);
     expect(observer.homePushCount, 1);

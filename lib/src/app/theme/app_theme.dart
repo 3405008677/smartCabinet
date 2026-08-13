@@ -9,16 +9,16 @@ class AppTheme {
   /// 应用主色。
   static const Color primaryColor = Color(0xFF0F766E);
 
-  /// Dark brand tone for pressed states and emphasized text.
+  /// 品牌深色，用于按下态和高强调文本。
   static const Color primaryStrongColor = Color(0xFF0B5F59);
 
-  /// Light brand tone for gradients and decorative elements.
+  /// 品牌亮色，用于渐变和装饰元素。
   static const Color primaryLightColor = Color(0xFF2A9D8F);
 
-  /// Subtle brand surface used by selected and informational containers.
+  /// 品牌浅色背景，用于选中态和信息容器。
   static const Color primarySoftColor = Color(0xFFE7F3F1);
 
-  /// Subtle brand border used around selected controls.
+  /// 品牌浅色边框，用于选中控件的轮廓。
   static const Color primaryBorderColor = Color(0xFFB8D8D3);
 
   /// 页面外层背景色。
@@ -27,9 +27,13 @@ class AppTheme {
   /// 卡片和弹窗常用背景色。
   static const Color surfaceColor = Color(0xFFFBFDFC);
 
-  /// Shared neutral palette for typography and dividers.
+  /// 正文和高强调文本使用的中性色。
   static const Color textPrimaryColor = Color(0xFF172321);
+
+  /// 辅助说明文本使用的中性色。
   static const Color textSecondaryColor = Color(0xFF64736F);
+
+  /// 分隔线和普通控件轮廓使用的中性色。
   static const Color outlineColor = Color(0xFFD9E4E1);
 
   /// 常用触控目标尺寸。

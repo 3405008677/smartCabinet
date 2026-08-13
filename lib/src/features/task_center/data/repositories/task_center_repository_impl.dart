@@ -6,6 +6,9 @@ import 'package:smart_cabinet/src/features/task_center/domain/entities/cabinet_t
 import 'package:smart_cabinet/src/features/task_center/domain/repositories/task_center_repository.dart';
 
 /// 任务中心仓库实现。
+///
+/// 仓库是任务状态机的唯一推进边界：页面只能提交业务动作，不能自行跳过步骤、
+/// 推定柜门事实或放宽机构隔离规则。
 final class TaskCenterRepositoryImpl implements TaskCenterRepository {
   /// 创建任务中心仓库。
   const TaskCenterRepositoryImpl(this._dataSource);
@@ -434,6 +437,7 @@ final class TaskCenterRepositoryImpl implements TaskCenterRepository {
   }) async {
     _ensureAccountVerified(account);
     final task = await _loadAuthorizedTask(account: account, taskId: taskId);
+    // 这是释放物理互锁前的安全检查点；同门号重试必须幂等，不同门号不能覆盖。
     final pendingDoorNo = task.pendingClosedDoorNo;
     if (pendingDoorNo == doorNo) {
       return task;
@@ -582,6 +586,7 @@ final class TaskCenterRepositoryImpl implements TaskCenterRepository {
     );
     final task = await _loadAuthorizedTask(account: account, taskId: taskId);
     final plan = _requireInventoryPlan(task);
+    // 开门结果响应丢失后允许同一绑定幂等重试，但绑定变化必须中止本次盘点。
     if (plan.activeDoorNo == doorNo && task.slotBinding?.doorNo == doorNo) {
       if (_sameSlotBinding(task.slotBinding!, binding)) {
         return task;
@@ -644,6 +649,7 @@ final class TaskCenterRepositoryImpl implements TaskCenterRepository {
       );
     }
 
+    // 先匹配平台清单；同一已确认 RFID 重扫只返回当前快照，不重复改变状态。
     final expectedIndex = task.items.indexWhere(
       (item) =>
           item.doorNo == doorNo &&
@@ -666,6 +672,7 @@ final class TaskCenterRepositoryImpl implements TaskCenterRepository {
       return updatedTask;
     }
 
+    // 未知 RFID 以溢余项持久化，同一箱格重复扫描仍保持单条记录。
     final existingSurplus = task.items.any(
       (item) =>
           item.doorNo == doorNo &&
@@ -718,6 +725,7 @@ final class TaskCenterRepositoryImpl implements TaskCenterRepository {
       doorNo: doorNo,
     );
 
+    // 只有人工确认关门后的结算才把未扫描清单项标记为缺失；倒计时报警不会走到这里。
     final updatedItems = [
       for (final item in task.items)
         if (item.doorNo != doorNo)

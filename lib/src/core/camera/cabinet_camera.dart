@@ -1,6 +1,8 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 
+import 'package:smart_cabinet/src/core/logging/communication_log_store.dart';
+
 import 'camera_stream_capability.dart';
 
 export 'camera_stream_capability.dart';
@@ -396,7 +398,21 @@ class CabinetCameraService {
       return List<CabinetCameraDevice>.unmodifiable(cachedCameras);
     }
 
-    final cameras = _mapCameraDescriptions(await availableCameras());
+    final descriptions = await CommunicationLogStore.instance
+        .traceExchange<List<CameraDescription>>(
+          targetType: CommunicationTargetType.hardware,
+          channel: 'camera plugin',
+          operation: 'availableCameras',
+          requestBody: const <String, Object?>{},
+          action: availableCameras,
+          responseBody: (items) => <String, Object?>{
+            'count': items.length,
+            'lensDirections': <String>[
+              for (final item in items) item.lensDirection.name,
+            ],
+          },
+        );
+    final cameras = _mapCameraDescriptions(descriptions);
     _cachedCameras = List<CabinetCameraDevice>.unmodifiable(cameras);
     return cameras;
   }
@@ -424,9 +440,16 @@ class CabinetCameraService {
     if (_debugCameras != null) {
       return const CameraStreamStatus(status: '未启动', url: '', cameraId: '');
     }
-    final rawStatus = await _channel.invokeMapMethod<String, Object?>(
-      'readOutsideEnvironmentStreamStatus',
-    );
+    final rawStatus = await CommunicationLogStore.instance
+        .traceExchange<Map<String, Object?>?>(
+          targetType: CommunicationTargetType.hardware,
+          channel: _channel.name,
+          operation: 'readOutsideEnvironmentStreamStatus',
+          requestBody: const <String, Object?>{},
+          action: () => _channel.invokeMapMethod<String, Object?>(
+            'readOutsideEnvironmentStreamStatus',
+          ),
+        );
     return CameraStreamStatus.fromMap(
       rawStatus == null
           ? const <String, Object?>{}
@@ -461,9 +484,16 @@ class CabinetCameraService {
     if (_debugCameras != null) {
       return const CameraStreamStatus(status: '未启动', url: '', cameraId: '');
     }
-    final rawStatus = await _channel.invokeMapMethod<String, Object?>(
-      'readOperationAreaStreamStatus',
-    );
+    final rawStatus = await CommunicationLogStore.instance
+        .traceExchange<Map<String, Object?>?>(
+          targetType: CommunicationTargetType.hardware,
+          channel: _channel.name,
+          operation: 'readOperationAreaStreamStatus',
+          requestBody: const <String, Object?>{},
+          action: () => _channel.invokeMapMethod<String, Object?>(
+            'readOperationAreaStreamStatus',
+          ),
+        );
     return CameraStreamStatus.fromMap(
       rawStatus == null
           ? const <String, Object?>{}
@@ -497,10 +527,18 @@ class CabinetCameraService {
         configuredProfiles: const [],
       );
     }
-    final rawCapability = await _channel.invokeMapMethod<String, Object?>(
-      'readCameraStreamCapability',
-      {'role': role.name},
-    );
+    final arguments = <String, Object?>{'role': role.name};
+    final rawCapability = await CommunicationLogStore.instance
+        .traceExchange<Map<String, Object?>?>(
+          targetType: CommunicationTargetType.hardware,
+          channel: _channel.name,
+          operation: 'readCameraStreamCapability',
+          requestBody: arguments,
+          action: () => _channel.invokeMapMethod<String, Object?>(
+            'readCameraStreamCapability',
+            arguments,
+          ),
+        );
     return CameraStreamCapability.fromMap(
       rawCapability == null
           ? const <String, Object?>{}

@@ -4,15 +4,17 @@
 
 ## 规则文件
 
-- `architecture.md`：仓库结构、登录优先主流程、身份与任务授权、机构箱格隔离、单柜门互锁、Flutter Feature-first 分层和 Android/RKMPP 原生边界。
-- `code-style.md`：Dart/Flutter、身份会话、任务状态机、柜门安全、Riverpod、数据层、多语言、Kotlin/C++、编辑与验证要求。
+- `architecture.md`：仓库结构、登录优先主流程、身份与任务授权、机构箱格隔离、单柜门互锁、终端升级、Flutter Feature-first 分层和 Android/RKMPP 原生边界。
+- `code-style.md`：Dart/Flutter、身份会话、任务状态机、柜门与升级安全、Riverpod、数据层、多语言、Kotlin/C++、编辑与验证要求。
 
 ## 当前业务基线
 
 - 公开主线固定为 `home -> identity_verification -> task_center`：首页不提供匿名业务操作入口。
-- 正式模式下账号密码只确定账号，普通任务权限要求人脸、指纹与 NFC 三项认证全部完成；同步和异常复核场景同样不得省略任一项。`AppConfig.current.isTestMode` 仅允许账号登录建立测试旁路，人脸登录仍须三项全验，正式部署前必须关闭。 测试模式的人脸卡片必须明确标注模拟认证，不启动摄像头、不等待后端；管理员与普通操作员校验页共用同一套三栏布局规格。
+- 普通账号、人脸和指纹统一通过 AFRR TCP A170/B170 真实登录，分别使用 `logway = 1/2/3`；协议地址、端口和货架编码必须显式配置，网络失败不得自动回退演示账号。APP `logon` 成功后同一长连接每 60 秒发送 `heartbeat`，持续失败必须废弃 Socket 并重新以 `logon` 作为首帧；真实终端 A101/A102 接收链路未接入时，心跳透传数据必须发送 `null`，不得伪造终端在线。正式模式下账号密码只确定账号，普通任务权限要求人脸、指纹与 NFC 三项认证全部完成；同步和异常复核场景同样不得省略任一项。`AppConfig.current.isTestMode` 仅允许真实账号登录成功后建立测试旁路，人脸登录仍须三项全验，正式部署前必须关闭。测试模式的人脸卡片必须明确标注模拟认证，不启动摄像头、不等待后端；管理员与普通操作员校验页共用同一套三栏布局规格。
 - 存证、取证、借证、还证和盘点统一在 `task_center` 中按顺序执行，任务与箱格都按 `organizationId` 隔离。
 - 开门同时受 Repository 业务授权、按开门周期唯一操作 ID 隔离的应用级 `CabinetDoorGuard` 和未来真实柜控板约束；当前内存互锁不能冒充物理门磁或平台租约。
+- `terminal_upgrade` 默认关闭，只支持 ZRD STUM `DT=1` URL 模式。新 `S03` 只在当前 `T03` 请求窗口接受；安装必须经过 MD5、绑定具体 offer 的管理员确认、应用级维护租约以及 Android 目标版本/包名/签名/递增版本校验；首帧前恢复原生活动安装租约，停止或重配不得让旧下载及未 commit 的原生操作继续安装。协议未定义的 `AD=2` 必须拒绝，正式签名和真机自更新验收完成前不能宣称生产 OTA 可用。
+- 管理员通讯日志使用独立的进程内有界队列，按服务器/硬件/升级指令和上报/下发记录已脱敏协议快照；ZRD STUM 每次 TCP 建连及 T01/T03/T00、S00/S03 收发都必须归入“升级指令”。不得复用错误日志存储，不得保存账号、凭据、生物/人员资料、设备唯一标识、路径、URL 查询参数或图片、APK、SDP、RTP/H265 等二进制内容。RTSP 只记录控制握手，不能侵入视频帧发送链路。
 - 已删除的 `features/storage`、`features/pickup`、`features/dropoff`、`features/flight_inspection` 不再恢复；名称相近的 `core/storage` 继续作为本地存储基础设施使用。
 
 ## 执行原则

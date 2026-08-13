@@ -29,6 +29,7 @@ Future<OperatorAccount?> coordinateOperatorAccountLogin(
   if (account == null || !context.mounted) {
     return null;
   }
+  // 测试模式只绕过传感器采集，仍构造满足任务中心门禁的完整认证会话。
   if (appConfig.isTestMode) {
     await _navigateOperatorFlow(
       context,
@@ -52,6 +53,9 @@ Future<OperatorAccount?> coordinateOperatorAccountLogin(
 }
 
 /// 根据指定账号的服务端和本机资料状态继续登录流程。
+///
+/// 需要同步时先取得本机可用资料，再按最新状态分流：正常资料进入三因子校验，
+/// 缺失资料进入录入页，异常资料进入全因子复核，避免页面各自重复判断状态机。
 Future<void> continueOperatorAccountLogin(
   BuildContext context, {
   required OperatorAccount account,

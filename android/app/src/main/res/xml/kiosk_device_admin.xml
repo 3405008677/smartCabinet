@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 该组件只作为 device-owner 管理身份使用，不申请旧式 DeviceAdmin 的擦除、
+         改密等 policies；实际 kiosk 能力由部署授权后通过 DevicePolicyManager 配置。 -->
     <uses-policies />
 </device-admin>

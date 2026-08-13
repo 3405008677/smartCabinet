@@ -18,6 +18,13 @@ final class AppLocalState {
       'uploadEnabled': false,
     },
     this.video = const <String, Object?>{'streamUrl': ''},
+    this.upgrade = const <String, Object?>{
+      'enabled': false,
+      'host': '',
+      'port': 0,
+      'terminalId': '',
+      'packageTag': '',
+    },
   });
 
   /// 管理员或接口登录态 token。
@@ -41,6 +48,9 @@ final class AppLocalState {
   /// 视频推流配置对象。
   final Map<String, Object?> video;
 
+  /// ZRD STUM 升级监控现场配置。
+  final Map<String, Object?> upgrade;
+
   /// 复制当前状态并覆盖指定字段。
   AppLocalState copyWith({
     String? authToken,
@@ -50,6 +60,7 @@ final class AppLocalState {
     Map<String, Object?>? deviceInfo,
     Map<String, Object?>? logging,
     Map<String, Object?>? video,
+    Map<String, Object?>? upgrade,
   }) {
     return AppLocalState(
       authToken: authToken ?? this.authToken,
@@ -59,6 +70,7 @@ final class AppLocalState {
       deviceInfo: deviceInfo ?? this.deviceInfo,
       logging: logging ?? this.logging,
       video: video ?? this.video,
+      upgrade: upgrade ?? this.upgrade,
     );
   }
 
@@ -72,10 +84,15 @@ final class AppLocalState {
       'deviceInfo': deviceInfo,
       'logging': logging,
       'video': video,
+      // 登录身份不属于可持久化设置；即使调用方直接构造旧 Map，也在最终
+      // 序列化边界统一丢弃，避免敏感旧值再次写进 SharedPreferences。
+      'upgrade': _upgradeSettingsMap(upgrade),
     };
   }
 
   /// 从 JSON Map 创建应用本地状态对象。
+  ///
+  /// 缺失的复合字段会叠加当前默认值，使旧版本快照升级后仍具备新增配置。
   factory AppLocalState.fromJson(Map<String, Object?> json) {
     return AppLocalState(
       authToken: json['authToken']?.toString() ?? '',
@@ -90,6 +107,7 @@ final class AppLocalState {
       video: _mergeObjectMap(const <String, Object?>{
         'streamUrl': '',
       }, json['video']),
+      upgrade: _upgradeSettingsMap(json['upgrade']),
     );
   }
 }
@@ -108,6 +126,9 @@ final class AppLocalStore {
   final KeyValueStorage _storage;
 
   /// 读取当前完整状态。
+  ///
+  /// 键不存在、内容为空或顶层不是对象时返回默认状态；非法 JSON 的解析异常会继续
+  /// 向上传播，让启动编排记录真实的存储损坏原因，而不是静默覆盖原数据。
   Future<AppLocalState> state() async {
     final value = await _storage.readString(localStateKey);
 
@@ -130,7 +151,10 @@ final class AppLocalStore {
     await _storage.writeString(localStateKey, jsonEncode(state.toJson()));
   }
 
-  /// 基于当前状态做局部更新。
+  /// 基于当前状态做一次“读取—转换—写回”的局部更新。
+  ///
+  /// 此方法不提供跨调用事务或互斥；多个并发更新可能基于同一旧快照计算，调用方
+  /// 必须串行化存在写冲突的操作，或在更高层提供队列。
   Future<AppLocalState> update(
     AppLocalState Function(AppLocalState state) updater,
   ) async {
@@ -164,4 +188,22 @@ Map<String, Object?> _mergeObjectMap(
   Object? value,
 ) {
   return <String, Object?>{...defaults, ..._asStringObjectMap(value)};
+}
+
+/// 迁移升级设置并移除旧版本重复保存的登录身份。
+///
+/// STUM 的 IM/DP 统一读取 `AppConfig`，CD 读取“关于设备”的唯一设备 ID；这里
+/// 删除遗留键，确保后续任意 Store 写回都不会继续携带可能已经失效的身份。
+Map<String, Object?> _upgradeSettingsMap(Object? value) {
+  final settings = _mergeObjectMap(const <String, Object?>{
+    'enabled': false,
+    'host': '',
+    'port': 0,
+    'terminalId': '',
+    'packageTag': '',
+  }, value);
+  settings.remove('moduleImei');
+  settings.remove('dataProtocolIp');
+  settings.remove('chipId');
+  return settings;
 }

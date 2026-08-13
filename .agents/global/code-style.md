@@ -56,6 +56,7 @@
 5. 修改接口字段时同步检查模拟数据、DTO 解析、Entity、Repository 映射、空值兼容和调用方测试。
 6. SharedPreferences key 和序列化规则通过现有存储抽象集中管理；读取失败、旧版本数据和迁移路径必须有确定行为。
 7. 网络、MQTT 和平台调用设置合理的超时、重试与断线行为。重试必须有边界，不能形成无限快速循环。
+8. 普通账号、人脸和指纹登录固定使用 AFRR TCP A170/B170：三种方式分别使用 `logway = 1/2/3`，账号密码先转 40 位大写 SHA-1，操作员登录固定使用 `func=userLogin`，不支持旧版 `cmd=login`；完整帧必须严格校验货架编码、流水号、BCD 时间、KLV 长度、异或校验和转义。APP `logon` 后每 60 秒发送一次 `heartbeat`，单次超时最多重发两次；持续失败必须关闭旧连接并重新登录，不能在同一失效连接上把 `logon` 当普通业务帧发送。未收到真实终端 A101/A102 时 heartbeat 透传数据使用 `null`。B170 必须同时识别标准的两字节原流水号加 JSON 回复和现场五字节原指令码、原流水号、结果码精简回复，但 `userLogin` 必须取得人员资料 JSON，且只认 B170 JSON 的 `rst == 9` 成功。后端失败原因必须保留，且禁止协议或网络失败后自动回退 Fake 账号。当前未取得 AES 密钥和 IV 协商规则前不得发送或接受 `0x01` 加密帧。
 
 ## 身份、任务与柜门安全
 
@@ -83,6 +84,15 @@
 4. 错误提示保留底层或后端返回的具体原因，再补充用户可执行的恢复动作；不要用笼统的“操作失败”覆盖更有价值的信息。
 5. 需要记录的异常进入 `AppLogger`；硬件异常优先复用现有恢复建议和全局覆盖层，避免每个页面自定义不同口径。
 6. 日志不得写入口令、令牌、人脸原始数据、身份证件内容或其他敏感信息。
+
+## 终端升级协议与安装安全
+
+1. STUM 消息保持 ASCII、CRLF、两位属性键和 `SN` 契约；解析属性值只按第一个冒号切分，URL 中后续冒号必须保留。协议示例笔误只能做最小、可测试的兼容，不能放宽全部消息校验。
+2. 升级长连接设置登录超时和有上限的指数退避；登录失败、断线和重连必须清除旧 Socket subscription、Timer、残帧、认证态和请求序号。连接使用代际隔离，出站帧按 Socket 串行写入，不能形成快速重连循环、并发 flush 或旧回调回写。
+3. 新 `S03` 只在当前 `T03` 请求窗口接受；窗口外最多对已经接收 offer 的精确重传幂等补发 ACK。`DT=1` 下载采用流式写入、大小上限、临时文件和完整文件 MD5；进度、校验与原生提交前都要复核当前连接代际和 offer 身份，停止、重配或 dispose 后不得继续提交安装。失败、取消和安装提交后的临时目录都要清理。除用户明确允许的管理员终端升级页面可只读完整展示 STUM 的 IM、DP、CD 外，其它界面和全部日志不得输出终端 ID、IMEI、唯一设备 ID 或 URL 查询参数；该页面也不得编辑或持久化第二份协议身份。
+4. 远端升级通知不能直接触发安装。管理员确认、全柜门关闭和原子维护租约是 Dart 侧门禁；维护期间所有新开门请求必须失败。Android 协议目标版本/`versionName`、包名、签名连续性、递增 `versionCode` 和活动安装互斥是原生最终门禁，任一失败都不得提交 Session。
+5. `PackageInstaller` 状态通过显式非导出 Receiver 和独立 SharedPreferences 同步保存；回调必须核对任务、Session、包名和版本，迟到回调不能覆盖新任务或终态。`STATUS_PENDING_USER_ACTION` 不是成功，系统确认页无法打开时必须保留可诊断状态。
+6. Dart/Kotlin 升级通道的字段名、operation ID、取消语义和状态枚举属于跨层契约；变更时同步更新双方和 MethodChannel 测试。release 证书必须稳定且备份；缺少正式签名配置时不得回退 debug key，未签名或 debug 签名构建都不能作为生产 OTA。
 
 ## Android、Kotlin 与 MethodChannel
 
@@ -120,7 +130,7 @@
 2. 可以验证时，只运行最小且相关的检查；不要为了文档改动启动模拟器、设备或开发服务器。
 3. Dart 源码改动依次考虑：格式化改动文件、`flutter analyze`、相关 `flutter test <path>`，跨模块改动再运行完整 `flutter test`。
 4. Kotlin 或 Android 配置改动按需进入 `android/` 后运行 `.\gradlew.bat :app:assembleDebug`；摄像头、推流或 Kiosk 改动同时列出真机验收项。
-5. APK 构建优先使用 `flutter build apk --debug`。执行 release 构建时必须明确当前 debug key 签名限制，不能作为正式发布结论。
+5. APK 构建优先使用 `flutter build apk --debug`。正式 release 统一使用 `dart run tool/build_release.dart`，由工具自动递增 `versionName/versionCode` 并验证元数据与签名；当前缺少 `android/key.properties` 时只能显式执行不递增版本的 `--allow-unsigned-compile-check`，不能作为正式发布结论。
 6. 日常验证不运行 `flutter clean`；只有确认缓存损坏或 native/资源产物未更新时才使用。
 7. 未经用户明确要求，不运行 `flutter pub upgrade`；依赖声明变化或缺失时使用 `flutter pub get` 并检查 `pubspec.lock` 差异。
 8. 不允许使用 `git worktree` 或 linked worktree 进行隔离修改；所有修改发生在当前仓库工作区。

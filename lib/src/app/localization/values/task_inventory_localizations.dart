@@ -448,4 +448,231 @@ const taskInventoryLocalizations = {
     AppLanguage.english: 'Verify Inspection Code',
     AppLanguage.japanese: '検査コードを確認',
   },
+  'operatorGenderFemale': {
+    AppLanguage.simplifiedChinese: '女',
+    AppLanguage.traditionalChinese: '女',
+    AppLanguage.english: 'Female',
+    AppLanguage.japanese: '女性',
+  },
+  'operatorGenderMale': {
+    AppLanguage.simplifiedChinese: '男',
+    AppLanguage.traditionalChinese: '男',
+    AppLanguage.english: 'Male',
+    AppLanguage.japanese: '男性',
+  },
+  'operatorPositionArchiveAdministrator': {
+    AppLanguage.simplifiedChinese: '档案管理员',
+    AppLanguage.traditionalChinese: '檔案管理員',
+    AppLanguage.english: 'Records Administrator',
+    AppLanguage.japanese: '文書管理者',
+  },
+  'operatorPositionOperationsSpecialist': {
+    AppLanguage.simplifiedChinese: '业务专员',
+    AppLanguage.traditionalChinese: '業務專員',
+    AppLanguage.english: 'Operations Specialist',
+    AppLanguage.japanese: '業務担当者',
+  },
+  'operatorPositionRegulator': {
+    AppLanguage.simplifiedChinese: '监管员',
+    AppLanguage.traditionalChinese: '監管員',
+    AppLanguage.english: 'Regulatory Officer',
+    AppLanguage.japanese: '監督担当者',
+  },
+  'operatorPositionRegulatorySpecialist': {
+    AppLanguage.simplifiedChinese: '监管专员',
+    AppLanguage.traditionalChinese: '監管專員',
+    AppLanguage.english: 'Regulatory Specialist',
+    AppLanguage.japanese: '監督専門員',
+  },
+  'taskDemoDocumentCertificateOriginal': {
+    AppLanguage.simplifiedChinese: '合格证原件',
+    AppLanguage.traditionalChinese: '合格證正本',
+    AppLanguage.english: 'Original Certificate of Conformity',
+    AppLanguage.japanese: '適合証明書原本',
+  },
+  'taskDemoDocumentEnforcementInspectionMaterials': {
+    AppLanguage.simplifiedChinese: '执法检查材料',
+    AppLanguage.traditionalChinese: '執法檢查資料',
+    AppLanguage.english: 'Enforcement Inspection Materials',
+    AppLanguage.japanese: '立入検査資料',
+  },
+  'taskDemoDocumentEnterpriseRegistrationArchive': {
+    AppLanguage.simplifiedChinese: '企业登记档案',
+    AppLanguage.traditionalChinese: '企業登記檔案',
+    AppLanguage.english: 'Enterprise Registration Records',
+    AppLanguage.japanese: '企業登録文書',
+  },
+  'taskDemoDocumentFoodBusinessLicense': {
+    AppLanguage.simplifiedChinese: '食品经营许可证',
+    AppLanguage.traditionalChinese: '食品經營許可證',
+    AppLanguage.english: 'Food Business License',
+    AppLanguage.japanese: '食品営業許可証',
+  },
+  'taskDemoDocumentIndexed': {
+    AppLanguage.simplifiedChinese: '{document} {index}',
+    AppLanguage.traditionalChinese: '{document} {index}',
+    AppLanguage.english: '{document} {index}',
+    AppLanguage.japanese: '{document} {index}',
+  },
+  'taskDemoDocumentInspectionReportOriginal': {
+    AppLanguage.simplifiedChinese: '检验报告原件',
+    AppLanguage.traditionalChinese: '檢驗報告正本',
+    AppLanguage.english: 'Original Inspection Report',
+    AppLanguage.japanese: '検査報告書原本',
+  },
+  'taskDemoDocumentLicenseCopy': {
+    AppLanguage.simplifiedChinese: '许可证副本',
+    AppLanguage.traditionalChinese: '許可證副本',
+    AppLanguage.english: 'License Copy',
+    AppLanguage.japanese: '許可証の写し',
+  },
+  'taskDemoDocumentProductCertificate': {
+    AppLanguage.simplifiedChinese: '产品合格证',
+    AppLanguage.traditionalChinese: '產品合格證',
+    AppLanguage.english: 'Product Certificate of Conformity',
+    AppLanguage.japanese: '製品適合証明書',
+  },
+  'taskDemoDocumentRelatedArchive': {
+    AppLanguage.simplifiedChinese: '同箱关联档案',
+    AppLanguage.traditionalChinese: '同箱關聯檔案',
+    AppLanguage.english: 'Related Records in the Same Slot',
+    AppLanguage.japanese: '同一区画の関連文書',
+  },
+  'taskDemoDocumentSpecifiedSecurityArchive': {
+    AppLanguage.simplifiedChinese: '指定治安档案',
+    AppLanguage.traditionalChinese: '指定治安檔案',
+    AppLanguage.english: 'Specified Public Security Records',
+    AppLanguage.japanese: '指定治安文書',
+  },
+  'taskDemoDocumentUnselectedArchive': {
+    AppLanguage.simplifiedChinese: '未抽中档案',
+    AppLanguage.traditionalChinese: '未抽中檔案',
+    AppLanguage.english: 'Records Not Selected for Sampling',
+    AppLanguage.japanese: '抽出対象外の文書',
+  },
+  'taskDemoInventoryTitlePublicSecurityArchives': {
+    AppLanguage.simplifiedChinese: '公安档案盘点任务',
+    AppLanguage.traditionalChinese: '公安檔案盤點任務',
+    AppLanguage.english: 'Public Security Records Inventory',
+    AppLanguage.japanese: '公安文書棚卸しタスク',
+  },
+  'taskDemoInventoryTitleZoneAQuarterly': {
+    AppLanguage.simplifiedChinese: '盘点任务 · A 区季度盘点',
+    AppLanguage.traditionalChinese: '盤點任務 · A 區季度盤點',
+    AppLanguage.english: 'Inventory Task · Zone A Quarterly Inventory',
+    AppLanguage.japanese: '棚卸しタスク · A エリア四半期棚卸し',
+  },
+  'taskDemoTitleWithDocument': {
+    AppLanguage.simplifiedChinese: '{type}任务 · {document}',
+    AppLanguage.traditionalChinese: '{type}任務 · {document}',
+    AppLanguage.english: '{type} Task · {document}',
+    AppLanguage.japanese: '{document} · {type}タスク',
+  },
+  'taskErrorAuthenticationRequired': {
+    AppLanguage.simplifiedChinese: '身份认证状态已失效，请重新登录',
+    AppLanguage.traditionalChinese: '身分認證狀態已失效，請重新登入',
+    AppLanguage.english: 'Your verification session has expired. Sign in again',
+    AppLanguage.japanese: '本人確認セッションの有効期限が切れました。もう一度ログインしてください',
+  },
+  'taskErrorIncomplete': {
+    AppLanguage.simplifiedChinese: '任务仍有未完成的步骤或证件，请完成后再提交',
+    AppLanguage.traditionalChinese: '任務仍有未完成的步驟或證件，請完成後再提交',
+    AppLanguage.english:
+        'The task still has incomplete steps or documents. Complete them before submitting',
+    AppLanguage.japanese: '未完了のステップまたは証憑があります。完了してから送信してください',
+  },
+  'taskErrorItemAlreadyCompleted': {
+    AppLanguage.simplifiedChinese: '该证件已经处理完成，请选择其他待办证件',
+    AppLanguage.traditionalChinese: '該證件已處理完成，請選擇其他待辦證件',
+    AppLanguage.english:
+        'This document has already been processed. Select another pending document',
+    AppLanguage.japanese: 'この証憑は処理済みです。別の保留中の証憑を選択してください',
+  },
+  'taskErrorItemNotFound': {
+    AppLanguage.simplifiedChinese: '未找到该待办证件，请刷新任务后重试',
+    AppLanguage.traditionalChinese: '未找到該待辦證件，請重新整理任務後重試',
+    AppLanguage.english:
+        'The pending document was not found. Refresh the task and try again',
+    AppLanguage.japanese: '対象の証憑が見つかりません。タスクを更新して再試行してください',
+  },
+  'taskErrorItemSelectionUnavailable': {
+    AppLanguage.simplifiedChinese: '当前步骤不能更换待办证件，请刷新任务',
+    AppLanguage.traditionalChinese: '目前步驟無法更換待辦證件，請重新整理任務',
+    AppLanguage.english:
+        'The pending document cannot be changed at this step. Refresh the task',
+    AppLanguage.japanese: '現在のステップでは対象の証憑を変更できません。タスクを更新してください',
+  },
+  'taskErrorNotFound': {
+    AppLanguage.simplifiedChinese: '任务不存在或已不可执行，请返回任务工作台刷新',
+    AppLanguage.traditionalChinese: '任務不存在或已無法執行，請返回任務工作台重新整理',
+    AppLanguage.english:
+        'The task does not exist or is no longer available. Return to the task workbench and refresh',
+    AppLanguage.japanese: 'タスクが存在しないか、実行できなくなりました。タスクワークベンチに戻って更新してください',
+  },
+  'taskErrorOrganizationUnauthorized': {
+    AppLanguage.simplifiedChinese: '当前机构无权访问此任务',
+    AppLanguage.traditionalChinese: '目前機構無權存取此任務',
+    AppLanguage.english:
+        'The current organization is not authorized to access this task',
+    AppLanguage.japanese: '現在の機関にはこのタスクへのアクセス権限がありません',
+  },
+  'taskErrorStateChanged': {
+    AppLanguage.simplifiedChinese: '任务状态已更新，请刷新后重试',
+    AppLanguage.traditionalChinese: '任務狀態已更新，請重新整理後重試',
+    AppLanguage.english: 'The task state has changed. Refresh and try again',
+    AppLanguage.japanese: 'タスクの状態が更新されました。更新して再試行してください',
+  },
+  'taskErrorUnexpected': {
+    AppLanguage.simplifiedChinese: '操作失败，请稍后重试',
+    AppLanguage.traditionalChinese: '操作失敗，請稍後再試',
+    AppLanguage.english: 'The operation failed. Try again later',
+    AppLanguage.japanese: '操作に失敗しました。しばらくしてから再試行してください',
+  },
+  'taskErrorWorkflowInvalid': {
+    AppLanguage.simplifiedChinese: '平台下发的任务流程异常，请联系平台处理',
+    AppLanguage.traditionalChinese: '平台下發的任務流程異常，請聯絡平台處理',
+    AppLanguage.english:
+        'The task workflow from the platform is invalid. Contact platform support',
+    AppLanguage.japanese: 'プラットフォームから受信したタスク手順に問題があります。プラットフォームにお問い合わせください',
+  },
+  'taskInventoryAnotherDoorActive': {
+    AppLanguage.simplifiedChinese: '箱格 {doorNo} 仍在盘点中，请先完成并关门',
+    AppLanguage.traditionalChinese: '箱格 {doorNo} 仍在盤點中，請先完成並關門',
+    AppLanguage.english:
+        'Slot {doorNo} is still being checked. Complete it and close the door first',
+    AppLanguage.japanese: '区画 {doorNo} は棚卸し中です。先に完了して扉を閉めてください',
+  },
+  'taskInventoryCodeVerificationRequired': {
+    AppLanguage.simplifiedChinese: '请先验证飞检码',
+    AppLanguage.traditionalChinese: '請先驗證飛檢碼',
+    AppLanguage.english: 'Verify the inspection code first',
+    AppLanguage.japanese: '先に検査コードを確認してください',
+  },
+  'taskInventoryDoorAlreadyCompleted': {
+    AppLanguage.simplifiedChinese: '该箱格已经完成盘点，可直接查看盘点结果',
+    AppLanguage.traditionalChinese: '該箱格已完成盤點，可直接查看盤點結果',
+    AppLanguage.english:
+        'This slot has already been checked. View its inventory result instead',
+    AppLanguage.japanese: 'この区画の棚卸しは完了しています。棚卸し結果を確認してください',
+  },
+  'taskInventoryDoorUnavailable': {
+    AppLanguage.simplifiedChinese: '该箱格不在本次盘点范围内',
+    AppLanguage.traditionalChinese: '該箱格不在本次盤點範圍內',
+    AppLanguage.english:
+        'This slot is not included in the current inventory check',
+    AppLanguage.japanese: 'この区画は今回の棚卸し対象ではありません',
+  },
+  'taskInventoryPlanInvalid': {
+    AppLanguage.simplifiedChinese: '平台下发的盘点计划异常，请联系平台处理',
+    AppLanguage.traditionalChinese: '平台下發的盤點計畫異常，請聯絡平台處理',
+    AppLanguage.english:
+        'The inventory plan from the platform is invalid. Contact platform support',
+    AppLanguage.japanese: 'プラットフォームから受信した棚卸し計画に問題があります。プラットフォームにお問い合わせください',
+  },
+  'taskInventoryRfidEmpty': {
+    AppLanguage.simplifiedChinese: '请扫描或输入 RFID',
+    AppLanguage.traditionalChinese: '請掃描或輸入 RFID',
+    AppLanguage.english: 'Scan or enter an RFID',
+    AppLanguage.japanese: 'RFID をスキャンするか入力してください',
+  },
 };

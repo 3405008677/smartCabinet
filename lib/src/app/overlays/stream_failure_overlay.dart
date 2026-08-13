@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:smart_cabinet/src/shared/widgets/app_message.dart';
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
+import 'package:smart_cabinet/src/shared/widgets/app_message.dart';
 
 /// 全局推流失败提示层。
 class StreamFailureOverlay extends StatefulWidget {
@@ -170,9 +171,12 @@ class _StreamFailureOverlayState extends State<StreamFailureOverlay>
       return false;
     }
     _messageHandle?.close();
+    final localizedMessage = context.l10n
+        .t('streamFailurePrefix', '推流异常：{message}')
+        .replaceAll('{message}', message);
     _messageHandle = Message.showInOverlay(
       overlay,
-      '推流异常：$message',
+      localizedMessage,
       type: MessageType.error,
       duration: null,
     );
@@ -185,15 +189,34 @@ class _StreamFailureOverlayState extends State<StreamFailureOverlay>
     required CameraStreamStatus operationStatus,
   }) {
     if (outsideStatus.needsUserAttention) {
-      return '柜外环境推流异常：${outsideStatus.displayStatus}';
+      return context.l10n
+          .t('streamOutsideFailure', '柜外环境推流异常：{detail}')
+          .replaceAll('{detail}', _localizedStreamStatus(outsideStatus));
     }
     if (operationStatus.isUnconfigured) {
       return null;
     }
     if (operationStatus.needsUserAttention) {
-      return '操作区推流异常：${operationStatus.displayStatus}';
+      return context.l10n
+          .t('streamOperationFailure', '操作区推流异常：{detail}')
+          .replaceAll('{detail}', _localizedStreamStatus(operationStatus));
     }
     return null;
+  }
+
+  /// 将原生状态收敛为稳定的用户提示，原始错误详情只进入日志而不直接上屏。
+  String _localizedStreamStatus(CameraStreamStatus status) {
+    return switch (status.state) {
+      CameraStreamState.reconnecting => context.l10n.t(
+        'streamStatusReconnecting',
+        '正在重新连接',
+      ),
+      CameraStreamState.failed => context.l10n.t(
+        'streamStatusFailed',
+        '连接失败，请检查摄像头和网络',
+      ),
+      _ => context.l10n.t('streamStatusUnavailable', '当前不可用，请检查摄像头和网络'),
+    };
   }
 
   @override

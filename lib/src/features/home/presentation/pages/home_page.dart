@@ -26,9 +26,8 @@ class SmartCabinetHomePage extends StatefulWidget {
 
 /// 首页根状态。
 ///
-/// 只负责页面级数据加载和隐藏设置入口触发，具体界面结构放在
-/// Dashboard, settings, login, and shared UI live in independent files under
-/// presentation/widgets.
+/// 只负责页面级数据加载和隐藏设置入口触发；首页看板、设置和登录入口等
+/// 具体界面拆分在 `presentation/widgets` 下。
 class _SmartCabinetHomePageState extends State<SmartCabinetHomePage> {
   /// 首页展示数据。
   ///
@@ -48,7 +47,7 @@ class _SmartCabinetHomePageState extends State<SmartCabinetHomePage> {
 
   /// 加载首页展示数据。
   ///
-  /// 当前通过 Repository 读取模拟接口数据，后续可以无感替换为真实后端返回。
+  /// Repository 屏蔽当前模拟接口与未来真实后端的差异，页面只接收领域模型。
   Future<void> _loadHomeData() async {
     final data = await homeRepository.fetchHomeData();
     if (!mounted) {

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Smart Cabinet</string>
+    <string name="kiosk_device_admin_label">Smart Cabinet Device Administration</string>
+    <string name="kiosk_device_admin_description">Locks the smart cabinet terminal screen and prevents regular users from leaving the app or opening system interfaces.</string>
+</resources>

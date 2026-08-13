@@ -1,7 +1,32 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val releaseSigningProperties = Properties().apply {
+    val propertiesFile = rootProject.file("key.properties")
+    if (propertiesFile.isFile) {
+        propertiesFile.inputStream().use(::load)
+    }
+}
+
+val releaseSigningKeys = listOf(
+    "storeFile",
+    "storePassword",
+    "keyAlias",
+    "keyPassword",
+)
+val configuredReleaseSigningKeys = releaseSigningKeys.filter { key ->
+    !releaseSigningProperties.getProperty(key).isNullOrBlank()
+}
+val hasReleaseSigningConfig = configuredReleaseSigningKeys.size == releaseSigningKeys.size
+if (configuredReleaseSigningKeys.isNotEmpty() && !hasReleaseSigningConfig) {
+    throw GradleException(
+        "android/key.properties must define storeFile, storePassword, keyAlias, and keyPassword",
+    )
 }
 
 android {
@@ -42,11 +67,22 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                storeFile = file(releaseSigningProperties.getProperty("storeFile"))
+                storePassword = releaseSigningProperties.getProperty("storePassword")
+                keyAlias = releaseSigningProperties.getProperty("keyAlias")
+                keyPassword = releaseSigningProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // 生产签名只从未入库的 key.properties 读取；配置缺失时生成未签名包，
+            // 绝不回退到 debug 证书，否则应用内升级会因签名不连续而失败。
+            signingConfig = signingConfigs.findByName("release")
             isCrunchPngs = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -67,6 +103,7 @@ flutter {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation("androidx.camera:camera-core:1.5.3")
     implementation("androidx.camera:camera-camera2:1.5.3")
 }

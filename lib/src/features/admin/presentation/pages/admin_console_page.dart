@@ -7,11 +7,13 @@ import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+import 'package:smart_cabinet/src/app/routing/app_routes.dart';
 import 'package:smart_cabinet/src/app/shell/app_shell.dart';
 import 'package:smart_cabinet/src/core/camera/cabinet_camera.dart';
 import 'package:smart_cabinet/src/core/device/hardware_status_service.dart';
 import 'package:smart_cabinet/src/core/device/kiosk_device.dart';
 import 'package:smart_cabinet/src/core/device/method_channel_kiosk_device.dart';
+import 'package:smart_cabinet/src/core/logging/communication_log_store.dart';
 import 'package:smart_cabinet/src/core/storage/app_local_store_provider.dart';
 import 'package:smart_cabinet/src/features/admin/domain/entities/admin.dart';
 import 'package:smart_cabinet/src/features/admin/presentation/widgets/admin_auto_detection_dialog.dart';
@@ -26,6 +28,7 @@ class AdminConsolePage extends ConsumerStatefulWidget {
   ConsumerState<AdminConsolePage> createState() => _AdminConsolePageState();
 }
 
+/// 汇总本机硬件、摄像头能力与推流状态，并协调控制台弹窗刷新。
 class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
   /// 当前柜体设备状态。
   AdminDeviceStatus _deviceStatus = AdminDeviceStatus.fallback();
@@ -113,7 +116,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
       }
       setState(() {
         _deviceStatusLoading = false;
-        _deviceStatusError = '硬件状态读取失败：$error';
+        _deviceStatusError = '$error';
       });
     }
   }
@@ -135,7 +138,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
         forceReload: forceReload,
       );
     } catch (error) {
-      errors.add('摄像头枚举失败：$error');
+      errors.add('$error');
     }
 
     final capabilityErrors = <CabinetCameraRole, String>{};
@@ -150,7 +153,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
             capability,
           );
         } catch (error) {
-          final message = '${role.name} 连接检测失败：$error';
+          final message = '$error';
           errors.add(message);
           capabilityErrors[role] = message;
           return null;
@@ -169,7 +172,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
       outsideEnvironmentStreamStatus = await _cameraService
           .readOutsideEnvironmentStreamStatus();
     } catch (error) {
-      final message = '柜外环境视频流状态读取失败：$error';
+      final message = '$error';
       errors.add(message);
       streamStatusErrors[CabinetCameraRole.outsideEnvironment] = message;
     }
@@ -177,7 +180,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
       operationAreaStreamStatus = await _cameraService
           .readOperationAreaStreamStatus();
     } catch (error) {
-      final message = '操作区视频流状态读取失败：$error';
+      final message = '$error';
       errors.add(message);
       streamStatusErrors[CabinetCameraRole.operationArea] = message;
     }
@@ -193,9 +196,7 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
       _outsideEnvironmentStreamStatus = outsideEnvironmentStreamStatus;
       _operationAreaStreamStatus = operationAreaStreamStatus;
       _cameraConfigLoading = false;
-      _cameraConfigError = errors.isEmpty
-          ? null
-          : '部分摄像头状态读取失败：${errors.join('；')}';
+      _cameraConfigError = errors.isEmpty ? null : '${errors.length}';
     });
   }
 
@@ -223,14 +224,27 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
     );
   }
 
+  /// 打开独立终端升级页，升级状态由应用级 Repository 持续持有。
+  void _openTerminalUpgrade() {
+    Navigator.of(context).pushNamed(AppRoutes.adminTerminalUpgrade);
+  }
+
+  /// 打开独立通讯日志页，实时日志由应用级存储持续持有。
+  void _openCommunicationLog() {
+    Navigator.of(context).pushNamed(AppRoutes.adminCommunicationLog);
+  }
+
   /// 弹窗打开时读取一次全部设备的最新检测状态。
   Future<List<AdminDetectionItem>> _loadInitialAutoDetectionItems() async {
+    final l10n = context.l10n;
     await Future.wait<void>([
       _loadDeviceStatus(),
       _loadCameraConfig(forceReload: true),
     ]);
     if (!mounted) {
-      throw StateError('管理员控制台已关闭');
+      throw AdminDetectionOperationException(
+        l10n.t('adminConsoleClosed', '管理员控制台已关闭'),
+      );
     }
     return _buildAutoDetectionItems(context);
   }
@@ -239,11 +253,14 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
   Future<AdminDetectionItem> _recoverAutoDetectionItem(
     AdminDetectionItem item,
   ) async {
+    final l10n = context.l10n;
     switch (item.recoveryAction) {
       case AdminDetectionRecoveryAction.retryStream:
         final role = _cameraRoleFromDetectionItem(item);
         if (role == null) {
-          throw StateError('无法识别要重试的视频流');
+          throw AdminDetectionOperationException(
+            l10n.t('adminCameraRetryUnknownStream', '无法识别要重试的视频流'),
+          );
         }
         await _retryCameraStream(role);
         await _loadCameraConfig(forceReload: true);
@@ -256,41 +273,50 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
         }
         break;
       case AdminDetectionRecoveryAction.unsupported:
-        throw StateError(
+        throw AdminDetectionOperationException(
           item.recoveryUnavailableReason.isEmpty
-              ? '当前设备不支持自动恢复'
+              ? l10n.t('adminAutoDetectRecoveryUnsupported', '当前设备不支持自动恢复')
               : item.recoveryUnavailableReason,
         );
     }
 
     if (!mounted) {
-      throw StateError('管理员控制台已关闭');
+      throw AdminDetectionOperationException(
+        l10n.t('adminConsoleClosed', '管理员控制台已关闭'),
+      );
     }
     for (final latestItem in _buildAutoDetectionItems(context)) {
       if (latestItem.id == item.id) {
         return latestItem;
       }
     }
-    throw StateError('未找到 ${item.title} 的最新检测结果');
+    throw AdminDetectionOperationException(
+      l10n
+          .t('adminAutoDetectLatestResultMissing', '未找到 {name} 的最新检测结果')
+          .replaceAll('{name}', item.title),
+    );
   }
 
   /// 复用原生启停能力，保留当前启用清晰度并等待真实推流恢复。
   Future<void> _retryCameraStream(CabinetCameraRole role) async {
+    final l10n = context.l10n;
     final capability = await _cameraService.readCameraStreamCapability(role);
     if (capability.hasConnectionProbeError) {
-      throw StateError(
-        capability.errorMessage.isEmpty
-            ? '设备连接检测异常，无法重试视频推流'
-            : capability.errorMessage,
+      throw AdminDetectionOperationException(
+        l10n.t('adminCameraRetryProbeFailed', '设备连接检测异常，无法重试视频推流'),
       );
     }
     if (!capability.available) {
-      throw StateError('设备未连接，无法重试视频推流');
+      throw AdminDetectionOperationException(
+        l10n.t('adminCameraRetryDisconnected', '设备未连接，无法重试视频推流'),
+      );
     }
 
     final profiles = await _kioskDevice.retryCameraStream(role);
     if (profiles.isEmpty) {
-      throw StateError('当前没有可恢复的推流清晰度，请由手机端重新发起推流');
+      throw AdminDetectionOperationException(
+        l10n.t('adminCameraNoRecoverableProfiles', '当前没有可恢复的推流清晰度，请由手机端重新发起推流'),
+      );
     }
 
     var latest = await _cameraService.readStreamStatus(role);
@@ -299,17 +325,15 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
         return;
       }
       if (latest.state == CameraStreamState.failed && !latest.recoverable) {
-        throw StateError(
-          latest.displayStatus.isEmpty ? '视频推流启动失败' : latest.displayStatus,
+        throw AdminDetectionOperationException(
+          l10n.t('adminCameraStreamStartFailed', '视频推流启动失败'),
         );
       }
       await Future<void>.delayed(const Duration(milliseconds: 500));
       latest = await _cameraService.readStreamStatus(role);
     }
-    throw StateError(
-      latest.displayStatus.isEmpty
-          ? '等待视频推流恢复超时'
-          : '等待视频推流恢复超时：${latest.displayStatus}',
+    throw AdminDetectionOperationException(
+      l10n.t('adminCameraStreamRecoveryTimedOut', '等待视频推流恢复超时'),
     );
   }
 
@@ -389,6 +413,8 @@ class _AdminConsolePageState extends ConsumerState<AdminConsolePage> {
               flex: 4,
               child: _AdminFunctionPanel(
                 onOpenAutoDetection: _openAutoDetection,
+                onOpenTerminalUpgrade: _openTerminalUpgrade,
+                onOpenCommunicationLog: _openCommunicationLog,
               ),
             ),
           ],
@@ -416,6 +442,7 @@ class _AdminConsoleHeader extends StatelessWidget {
       children: [
         IconButton(
           onPressed: onBack,
+          tooltip: context.l10n.t('adminBackTooltip', '返回'),
           icon: const Icon(
             Icons.arrow_back_rounded,
             color: AppTheme.textPrimaryColor,
@@ -487,22 +514,22 @@ class _DeviceInfoPanel extends StatelessWidget {
     final items = [
       _DeviceInfoItem(
         l10n.t('adminDeviceCabinetCode', '柜体编号'),
-        status.cabinetCode,
+        localizedAdminDeviceStatus(l10n, status.cabinetCode),
         Icons.inventory_2_outlined,
       ),
       _DeviceInfoItem(
         l10n.t('adminDeviceRegion', '所在区域'),
-        status.region,
+        localizedAdminDeviceStatus(l10n, status.region),
         Icons.grid_view_rounded,
       ),
       _DeviceInfoItem(
         l10n.t('adminDeviceWifi', '连接 WiFi'),
-        status.wifiName,
+        localizedAdminDeviceStatus(l10n, status.wifiName),
         Icons.wifi_rounded,
       ),
       _DeviceInfoItem(
         l10n.t('adminDeviceRj45', 'RJ45连接'),
-        status.rj45Status,
+        localizedAdminDeviceStatus(l10n, status.rj45Status),
         Icons.settings_ethernet_rounded,
       ),
       ...CabinetCameraRole.values.map((role) {
@@ -519,22 +546,22 @@ class _DeviceInfoPanel extends StatelessWidget {
       }),
       _DeviceInfoItem(
         l10n.t('adminDeviceNfc', 'NFC'),
-        status.nfcStatus,
+        localizedAdminDeviceStatus(l10n, status.nfcStatus),
         Icons.contactless_rounded,
       ),
       _DeviceInfoItem(
         l10n.t('adminDeviceFingerprint', '指纹模块'),
-        status.fingerprintStatus,
+        localizedAdminDeviceStatus(l10n, status.fingerprintStatus),
         Icons.fingerprint,
       ),
       _DeviceInfoItem(
         l10n.t('adminDeviceCabinetBoard', '柜控板'),
-        status.cabinetBoardStatus,
+        localizedAdminDeviceStatus(l10n, status.cabinetBoardStatus),
         Icons.developer_board,
       ),
       _DeviceInfoItem(
         l10n.t('adminDeviceScanner', '扫码器'),
-        status.scannerStatus,
+        localizedAdminDeviceStatus(l10n, status.scannerStatus),
         Icons.qr_code_scanner,
       ),
     ];
@@ -575,10 +602,12 @@ class _DeviceInfoPanel extends StatelessWidget {
       return l10n.t('adminCameraLoading', '正在读取摄像头...');
     }
 
-    final connection = _cameraConnectionText(role);
+    final connection = _cameraConnectionText(context, role);
     final binding = CabinetCameraConfig.bindingFor(role);
     if (binding.useMode != CabinetCameraUseMode.rtspStream) {
-      return '设备连接：$connection';
+      return l10n
+          .t('adminCameraConnectionSummary', '设备连接：{status}')
+          .replaceAll('{status}', connection);
     }
 
     final streamStatus = switch (role) {
@@ -586,47 +615,38 @@ class _DeviceInfoPanel extends StatelessWidget {
       CabinetCameraRole.operationArea => operationAreaStreamStatus,
       _ => null,
     };
-    return '设备连接：$connection\n视频推流：${_streamStatusText(streamStatus, streamStatusErrors[role])}';
-  }
-
-  /// 摄像头卡片中的推流摘要；详细错误由独立推流异常提示展示。
-  String _streamStatusText(CameraStreamStatus? status, String? readError) {
-    if (status == null) {
-      return readError == null ? '未启动' : '状态读取失败';
-    }
-    if (status.isStreaming) {
-      return status.profile.isEmpty ? '推流中' : '${status.profile} 推流中';
-    }
-    return switch (status.state) {
-      CameraStreamState.starting => '启动中',
-      CameraStreamState.reconnecting =>
-        status.reconnectAttempts > 0
-            ? '自动重连中（第 ${status.reconnectAttempts} 次）'
-            : '自动重连中',
-      CameraStreamState.failed => '推流失败（详见推流异常提示）',
-      CameraStreamState.stopping => '停止中',
-      CameraStreamState.stopped => '未启动',
-      CameraStreamState.unconfigured => '未配置',
-      CameraStreamState.unknown =>
-        status.needsUserAttention ? '推流失败（详见推流异常提示）' : status.status,
-      CameraStreamState.streaming =>
-        status.allProfilesStreaming == false ? '启动中' : '推流中',
-    };
+    final stream = localizedAdminCameraStreamStatus(
+      l10n,
+      streamStatus,
+      streamStatusErrors[role],
+    );
+    final connectionSummary = l10n
+        .t('adminCameraConnectionSummary', '设备连接：{status}')
+        .replaceAll('{status}', connection);
+    final streamSummary = l10n
+        .t('adminCameraStreamSummary', '视频推流：{status}')
+        .replaceAll('{status}', stream);
+    return '$connectionSummary\n$streamSummary';
   }
 
   /// 判断开发绑定的物理摄像头当前是否能被 Camera2 枚举到。
-  String _cameraConnectionText(CabinetCameraRole role) {
+  String _cameraConnectionText(BuildContext context, CabinetCameraRole role) {
+    final l10n = context.l10n;
     final capability = cameraCapabilities[role];
     if (capability != null) {
       if (capability.hasConnectionProbeError) {
-        return '检测失败';
+        return l10n.t('adminCameraDetectionFailed', '检测失败');
       }
-      return capability.available ? '连接成功' : '连接失败';
+      return capability.available
+          ? l10n.t('adminAutoDetectConnected', '连接成功')
+          : l10n.t('adminAutoDetectDisconnected', '连接失败');
     }
     if (cameraCapabilityErrors.containsKey(role)) {
-      return '检测失败';
+      return l10n.t('adminCameraDetectionFailed', '检测失败');
     }
-    return _connectedCameraForRole(role) == null ? '连接失败' : '连接成功';
+    return _connectedCameraForRole(role) == null
+        ? l10n.t('adminAutoDetectDisconnected', '连接失败')
+        : l10n.t('adminAutoDetectConnected', '连接成功');
   }
 
   /// 查找当前角色已经连接的摄像头。
@@ -804,6 +824,7 @@ class _AdminCameraPreviewPanel extends StatefulWidget {
       _AdminCameraPreviewPanelState();
 }
 
+/// 管理单路实时预览及其独立的 Camera2 能力诊断状态。
 class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
     with WidgetsBindingObserver {
   /// 当前预览控制器。
@@ -812,6 +833,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
   /// 正在初始化、尚未发布到界面的预览控制器。
   CameraController? _initializingController;
 
+  /// 串行化控制器释放，避免 camera 插件并发关闭原生会话。
   Future<void> _releaseChain = Future<void>.value();
 
   /// 预览异步请求代次，用于丢弃过期结果。
@@ -821,14 +843,21 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
   bool _lifecycleActive = true;
 
   /// 当前预览状态文案。
-  String _message = '正在启动预览...';
+  String _message = '';
 
   /// Camera2 能力只用于弹窗下方诊断，不参与预览控制。
   final CabinetCameraService _cameraService = const CabinetCameraService();
 
+  /// 当前角色的只读 Camera2 能力快照，不参与预览控制器选型。
   CameraStreamCapability? _capability;
+
+  /// 能力诊断是否仍在读取。
   bool _capabilityLoading = true;
+
+  /// 能力读取失败说明；该错误不会降级实时预览。
   String _capabilityError = '';
+
+  /// 能力读取请求代次，用于丢弃切换摄像头后返回的旧结果。
   int _capabilityGeneration = 0;
 
   @override
@@ -844,6 +873,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
     }
   }
 
+  /// 角色变化只刷新诊断；物理设备变化才重建实时预览控制器。
   @override
   void didUpdateWidget(covariant _AdminCameraPreviewPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -856,6 +886,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
     }
   }
 
+  /// 后台释放摄像头，回到前台后以最新设备重新读取能力并初始化预览。
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final lifecycleActive = state == AppLifecycleState.resumed;
@@ -909,19 +940,22 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
       }
       setState(() {
         _capabilityLoading = false;
-        _capabilityError = '读取失败：$error';
+        _capabilityError = '$error';
       });
     }
   }
 
-  /// 初始化摄像头实时预览。
+  /// 初始化实时预览，并通过请求代次阻止过期控制器发布到界面。
   Future<void> _initializePreview() async {
     final generation = ++_previewGeneration;
     await _releaseControllers(invalidate: false);
     if (!_isPreviewRequestCurrent(generation)) {
       return;
     }
-    setState(() => _message = '正在启动预览...');
+    setState(
+      () =>
+          _message = context.l10n.t('adminCameraPreviewStarting', '正在启动预览...'),
+    );
 
     CameraController? candidate;
     try {
@@ -934,7 +968,13 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
       candidate = controller;
       controller.addListener(_handleControllerValueChanged);
       _initializingController = controller;
-      await controller.initialize();
+      await CommunicationLogStore.instance.traceExchange<void>(
+        targetType: CommunicationTargetType.hardware,
+        channel: 'camera plugin',
+        operation: '初始化管理员摄像头预览',
+        requestBody: <String, Object?>{'role': widget.role.name},
+        action: controller.initialize,
+      );
       if (identical(_initializingController, controller)) {
         _initializingController = null;
       }
@@ -946,8 +986,11 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
       setState(() {
         _controller = controller;
         _message = controller.value.hasError
-            ? adminCameraPreviewErrorMessage(controller.value.errorDescription)
-            : '预览已启动';
+            ? adminCameraPreviewErrorMessage(
+                controller.value.errorDescription,
+                localizations: context.l10n,
+              )
+            : context.l10n.t('adminCameraPreviewStarted', '预览已启动');
       });
     } catch (error) {
       if (identical(_initializingController, candidate)) {
@@ -955,11 +998,17 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
       }
       await _disposeControllerSerially(candidate);
       if (_isPreviewRequestCurrent(generation)) {
-        setState(() => _message = adminCameraPreviewErrorMessage(error));
+        setState(
+          () => _message = adminCameraPreviewErrorMessage(
+            error,
+            localizations: context.l10n,
+          ),
+        );
       }
     }
   }
 
+  /// 监听 camera 插件运行期错误，并避免相同错误文案触发重复刷新。
   void _handleControllerValueChanged() {
     final controller = _controller ?? _initializingController;
     if (!mounted || controller == null || !controller.value.hasError) {
@@ -967,16 +1016,19 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
     }
     final nextMessage = adminCameraPreviewErrorMessage(
       controller.value.errorDescription,
+      localizations: context.l10n,
     );
     if (_message != nextMessage) {
       setState(() => _message = nextMessage);
     }
   }
 
+  /// 只有仍挂载、处于前台且代次匹配的请求可以更新预览。
   bool _isPreviewRequestCurrent(int generation) {
     return mounted && _lifecycleActive && generation == _previewGeneration;
   }
 
+  /// 先摘除页面引用，再按需使在途初始化失效并异步释放控制器。
   Future<void> _releaseControllers({required bool invalidate}) {
     if (invalidate) {
       _previewGeneration++;
@@ -992,6 +1044,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
     return release;
   }
 
+  /// 将原生控制器释放追加到同一 Future 链，防止并发 close 竞态。
   Future<void> _disposeControllerSerially(CameraController? controller) {
     if (controller == null) {
       return _releaseChain;
@@ -1002,21 +1055,31 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
     return _releaseChain;
   }
 
+  /// 移除监听后安全释放控制器，并容忍平台已先行回收摄像头。
   Future<void> _safeDisposeController(CameraController? controller) async {
     if (controller == null) {
       return;
     }
     controller.removeListener(_handleControllerValueChanged);
     try {
-      await controller.dispose();
+      await CommunicationLogStore.instance.traceExchange<void>(
+        targetType: CommunicationTargetType.hardware,
+        channel: 'camera plugin',
+        operation: '释放管理员摄像头预览',
+        requestBody: <String, Object?>{'role': widget.role.name},
+        action: controller.dispose,
+      );
     } catch (_) {
-      // The platform may already have released the camera.
+      // 生命周期切换期间原生平台可能已经先行释放摄像头。
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
+    final previewMessage = _message.isEmpty
+        ? context.l10n.t('adminCameraPreviewStarting', '正在启动预览...')
+        : _message;
     return Container(
       key: const ValueKey('admin_camera_preview_panel'),
       width: 620,
@@ -1034,7 +1097,9 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
               children: [
                 Expanded(
                   child: Text(
-                    '${widget.role.label(context)}预览',
+                    context.l10n
+                        .t('adminCameraPreviewTitle', '{name}预览')
+                        .replaceAll('{name}', widget.role.label(context)),
                     style: const TextStyle(
                       color: AppTheme.textPrimaryColor,
                       fontSize: 18,
@@ -1045,6 +1110,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
                 IconButton(
                   key: const ValueKey('admin_camera_preview_close'),
                   onPressed: () => Navigator.of(context).pop(),
+                  tooltip: context.l10n.t('adminCloseTooltip', '关闭'),
                   icon: const Icon(Icons.close_rounded),
                 ),
               ],
@@ -1064,7 +1130,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
                       ? CameraPreview(controller)
                       : Center(
                           child: Text(
-                            _message,
+                            previewMessage,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               color: Colors.white,
@@ -1079,7 +1145,7 @@ class _AdminCameraPreviewPanelState extends State<_AdminCameraPreviewPanel>
             const SizedBox(height: 10),
             AdminCameraCapabilityPanel(
               previewCameraId: widget.camera.id,
-              previewStatus: _message,
+              previewStatus: previewMessage,
               loading: _capabilityLoading,
               capability: _capability,
               loadError: _capabilityError,
@@ -1119,30 +1185,63 @@ extension _CabinetCameraRoleLabel on CabinetCameraRole {
 /// 右侧管理员功能面板。
 class _AdminFunctionPanel extends StatelessWidget {
   /// 创建管理员功能面板。
-  const _AdminFunctionPanel({required this.onOpenAutoDetection});
+  const _AdminFunctionPanel({
+    required this.onOpenAutoDetection,
+    required this.onOpenTerminalUpgrade,
+    required this.onOpenCommunicationLog,
+  });
 
   /// 打开自动检测面板。
   final VoidCallback onOpenAutoDetection;
+
+  /// 打开终端升级页。
+  final VoidCallback onOpenTerminalUpgrade;
+
+  /// 打开通讯日志页。
+  final VoidCallback onOpenCommunicationLog;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final functions = [
       _AdminFunctionItem(
+        'initializeData',
         l10n.t('adminFunctionInitializeData', '初始化数据'),
         l10n.t('adminFunctionInitializeDataDescription', '清理本地演示数据并重新拉取柜体配置'),
         Icons.restart_alt,
       ),
       _AdminFunctionItem(
+        'resetDevice',
         l10n.t('adminFunctionResetDevice', '重置设备'),
         l10n.t('adminFunctionResetDeviceDescription', '重启外设连接、柜控板与终端运行状态'),
         Icons.power_settings_new,
       ),
       _AdminFunctionItem(
+        'autoDetection',
         l10n.t('adminFunctionAutoDetect', '自动检测'),
         l10n.t('adminFunctionAutoDetectDescription', '自动检查网络、摄像头、NFC、柜控板与扫码器'),
         Icons.health_and_safety,
         onPressed: onOpenAutoDetection,
+      ),
+      _AdminFunctionItem(
+        'terminalUpgrade',
+        l10n.t('adminFunctionTerminalUpgrade', '终端升级'),
+        l10n.t(
+          'adminFunctionTerminalUpgradeDescription',
+          '连接 ZRD 升级服务，检查并安全安装 URL 升级包',
+        ),
+        Icons.system_update_alt_rounded,
+        onPressed: onOpenTerminalUpgrade,
+      ),
+      _AdminFunctionItem(
+        'communication_log',
+        l10n.t('adminFunctionCommunicationLog', '通讯日志'),
+        l10n.t(
+          'adminFunctionCommunicationLogDescription',
+          '查看软件与服务器、硬件之间的实时指令记录',
+        ),
+        Icons.receipt_long_rounded,
+        onPressed: onOpenCommunicationLog,
       ),
     ];
 
@@ -1153,14 +1252,12 @@ class _AdminFunctionPanel extends StatelessWidget {
           _PanelTitle(
             icon: Icons.tune_rounded,
             title: l10n.t('adminFunctionPanelTitle', '功能列表'),
-            subtitle: l10n.t(
-              'adminFunctionPanelSubtitle',
-              '当前为演示入口，后续接入真实设备能力',
-            ),
+            subtitle: l10n.t('adminFunctionPanelSubtitle', '设备检测与维护入口'),
           ),
           const SizedBox(height: 22),
           Expanded(
             child: ListView.separated(
+              key: const ValueKey('admin_function_list'),
               itemCount: functions.length,
               separatorBuilder: (_, _) => const SizedBox(height: 16),
               itemBuilder: (context, index) {
@@ -1181,11 +1278,15 @@ class _AdminFunctionPanel extends StatelessWidget {
 class _AdminFunctionItem {
   /// 创建管理员功能项。
   const _AdminFunctionItem(
+    this.id,
     this.title,
     this.description,
     this.icon, {
     this.onPressed,
   });
+
+  /// 用于交互测试和自动化定位的稳定标识。
+  final String id;
 
   /// 功能标题。
   final String title;
@@ -1214,6 +1315,7 @@ class _AdminFunctionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OutlinedButton(
+      key: ValueKey('admin_function_${item.id}'),
       onPressed:
           item.onPressed ??
           () {

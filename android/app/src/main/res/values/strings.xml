@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">管管智能柜</string>
+    <string name="app_name">智能柜</string>
     <string name="kiosk_device_admin_label">智能柜终端设备管理</string>
     <string name="kiosk_device_admin_description">用于锁定智慧柜终端屏幕，限制普通用户退出应用或打开系统界面。</string>
 </resources>

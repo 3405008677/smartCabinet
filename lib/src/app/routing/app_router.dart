@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
 
 import 'package:smart_cabinet/src/features/admin/presentation/pages/admin_console_page.dart';
+import 'package:smart_cabinet/src/features/admin/presentation/pages/admin_communication_log_page.dart';
 import 'package:smart_cabinet/src/features/admin/presentation/pages/admin_verification_page.dart';
 import 'package:smart_cabinet/src/features/home/presentation/pages/home_page.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_account.dart';
@@ -11,17 +12,22 @@ import 'package:smart_cabinet/src/features/identity_verification/presentation/pa
 import 'package:smart_cabinet/src/features/identity_verification/presentation/pages/operator_verification_page.dart';
 import 'package:smart_cabinet/src/features/task_center/presentation/pages/task_center_page.dart';
 import 'package:smart_cabinet/src/features/task_center/presentation/pages/task_execution_page.dart';
+import 'package:smart_cabinet/src/features/terminal_upgrade/presentation/pages/admin_terminal_upgrade_page.dart';
 
 /// 应用路由生成器。
 ///
 /// [MaterialApp.onGenerateRoute] 会把用户要跳转的路由信息传进来，
 /// 这里根据 [RouteSettings.name] 返回对应的页面路由。
+///
+/// 路由层只负责入口参数和三项身份因子的第一层校验；Repository 仍需在每次
+/// 业务读写时重新执行身份、机构、任务和箱格授权，不能把路由通过视为最终授权。
 class AppRouter {
   const AppRouter._();
 
   /// 根据路由设置创建页面。
   ///
-  /// [settings] 中包含目标路由名称和可选参数。
+  /// [settings] 中包含目标路由名称和可选参数。受保护路由的参数类型或身份因子
+  /// 不满足约束时会落入首页，避免命名路由或深链直接打开任务页面。
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final page = switch (settings.name) {
       /// 新首页。settings.name 为 null 时也回到新首页，提升容错性。
@@ -62,10 +68,21 @@ class AppRouter {
         ),
 
       /// 管理员身份校验页。
-      AppRoutes.adminVerification => const AdminVerificationPage(),
+      AppRoutes.adminVerification => AdminVerificationPage(
+        postVerificationRoute:
+            settings.arguments == AppRoutes.adminTerminalUpgrade
+            ? AppRoutes.adminTerminalUpgrade
+            : AppRoutes.adminConsole,
+      ),
 
       /// 管理员控制台页。
       AppRoutes.adminConsole => const AdminConsolePage(),
+
+      /// 管理员终端升级配置与执行页。
+      AppRoutes.adminTerminalUpgrade => const AdminTerminalUpgradePage(),
+
+      /// 管理员查看服务器与硬件通讯记录的页面。
+      AppRoutes.adminCommunicationLog => const AdminCommunicationLogPage(),
 
       /// 未匹配到的路由统一回到新首页，避免应用打开空白页。
       _ => const SmartCabinetHomePage(),

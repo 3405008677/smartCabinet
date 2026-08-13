@@ -5,10 +5,13 @@ import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 import 'package:smart_cabinet/src/app/routing/app_router.dart';
 import 'package:smart_cabinet/src/app/routing/app_routes.dart';
 import 'package:smart_cabinet/src/app/overlays/stream_failure_overlay.dart';
+import 'package:smart_cabinet/src/app/overlays/terminal_upgrade_offer_overlay.dart';
 import 'package:smart_cabinet/src/app/startup/startup_media.dart';
 import 'package:smart_cabinet/src/app/theme/app_theme.dart';
 
-/// 应用主导航器，用于展示全局弹窗。
+/// 应用主导航器。
+///
+/// 全局覆盖层通过该键取得当前 [Overlay]，因此无需依赖某个业务页面的上下文。
 final appNavigatorKey = GlobalKey<NavigatorState>();
 
 /// 应用的根组件。
@@ -18,7 +21,7 @@ final appNavigatorKey = GlobalKey<NavigatorState>();
 /// - 主题样式；
 /// - 初始页面；
 /// - 路由生成规则；
-/// - 中文和英文的本地化支持。
+/// - 简体中文、繁体中文、英语和日语本地化。
 class SmartCabinetApp extends StatelessWidget {
   /// 创建智能柜应用根组件。
   const SmartCabinetApp({super.key});
@@ -50,11 +53,14 @@ class SmartCabinetApp extends StatelessWidget {
             /// 根据路由名称创建对应页面。
             onGenerateRoute: AppRouter.onGenerateRoute,
 
-            /// 在首页初始化完成前显示启动媒体层，避免启动白屏。
+            /// 在全部路由内容外统一叠加启动媒体和推流异常提示，使提示不随页面切换丢失。
             builder: (context, child) {
               return StreamFailureOverlay(
                 navigatorKey: appNavigatorKey,
-                child: StartupMedia(child: child ?? const SizedBox.shrink()),
+                child: TerminalUpgradeOfferOverlay(
+                  navigatorKey: appNavigatorKey,
+                  child: StartupMedia(child: child ?? const SizedBox.shrink()),
+                ),
               );
             },
 

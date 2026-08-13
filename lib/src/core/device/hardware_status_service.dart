@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import 'package:smart_cabinet/src/core/logging/communication_log_store.dart';
+
 /// 终端硬件状态服务。
 class HardwareStatusService {
   /// 创建终端硬件状态服务。
@@ -10,9 +12,15 @@ class HardwareStatusService {
 
   /// 读取当前 WiFi、指纹和 NFC 真实硬件状态。
   Future<DeviceHardwareStatus> fetchHardwareStatus() async {
-    final rawStatus = await _channel.invokeMapMethod<String, Object?>(
-      'getHardwareStatus',
-    );
+    final rawStatus = await CommunicationLogStore.instance
+        .traceExchange<Map<String, Object?>?>(
+          targetType: CommunicationTargetType.hardware,
+          channel: _channel.name,
+          operation: 'getHardwareStatus',
+          requestBody: const <String, Object?>{},
+          action: () =>
+              _channel.invokeMapMethod<String, Object?>('getHardwareStatus'),
+        );
 
     return DeviceHardwareStatus.fromMap(rawStatus ?? const <String, Object?>{});
   }

@@ -1,0 +1,167 @@
+import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
+
+/// “关于设备”页面中来自 Android 原生层的字段名和状态值。
+const deviceInfoLocalizations = {
+  'deviceInfoUniqueId': {
+    AppLanguage.simplifiedChinese: '唯一设备ID',
+    AppLanguage.traditionalChinese: '唯一裝置 ID',
+    AppLanguage.english: 'Unique Device ID',
+    AppLanguage.japanese: '一意のデバイス ID',
+  },
+  'deviceInfoBoard': {
+    AppLanguage.simplifiedChinese: '主板',
+    AppLanguage.traditionalChinese: '主機板',
+    AppLanguage.english: 'Board',
+    AppLanguage.japanese: 'ボード',
+  },
+  'deviceInfoBootloader': {
+    AppLanguage.simplifiedChinese: '启动加载器',
+    AppLanguage.traditionalChinese: '開機載入程式',
+    AppLanguage.english: 'Bootloader',
+    AppLanguage.japanese: 'ブートローダー',
+  },
+  'deviceInfoBrand': {
+    AppLanguage.simplifiedChinese: '品牌',
+    AppLanguage.traditionalChinese: '品牌',
+    AppLanguage.english: 'Brand',
+    AppLanguage.japanese: 'ブランド',
+  },
+  'deviceInfoDevice': {
+    AppLanguage.simplifiedChinese: '设备',
+    AppLanguage.traditionalChinese: '裝置',
+    AppLanguage.english: 'Device',
+    AppLanguage.japanese: 'デバイス',
+  },
+  'deviceInfoDisplayBuild': {
+    AppLanguage.simplifiedChinese: '显示版本',
+    AppLanguage.traditionalChinese: '顯示版本',
+    AppLanguage.english: 'Build Display',
+    AppLanguage.japanese: 'ビルド表示',
+  },
+  'deviceInfoBuildFingerprint': {
+    AppLanguage.simplifiedChinese: '构建指纹',
+    AppLanguage.traditionalChinese: '建置指紋',
+    AppLanguage.english: 'Build Fingerprint',
+    AppLanguage.japanese: 'ビルドフィンガープリント',
+  },
+  'deviceInfoHardware': {
+    AppLanguage.simplifiedChinese: '硬件',
+    AppLanguage.traditionalChinese: '硬體',
+    AppLanguage.english: 'Hardware',
+    AppLanguage.japanese: 'ハードウェア',
+  },
+  'deviceInfoHost': {
+    AppLanguage.simplifiedChinese: '主机',
+    AppLanguage.traditionalChinese: '主機',
+    AppLanguage.english: 'Host',
+    AppLanguage.japanese: 'ホスト',
+  },
+  'deviceInfoBuildId': {
+    AppLanguage.simplifiedChinese: '构建 ID',
+    AppLanguage.traditionalChinese: '建置 ID',
+    AppLanguage.english: 'Build ID',
+    AppLanguage.japanese: 'ビルド ID',
+  },
+  'deviceInfoManufacturer': {
+    AppLanguage.simplifiedChinese: '厂商',
+    AppLanguage.traditionalChinese: '製造商',
+    AppLanguage.english: 'Manufacturer',
+    AppLanguage.japanese: '製造元',
+  },
+  'deviceInfoModel': {
+    AppLanguage.simplifiedChinese: '型号',
+    AppLanguage.traditionalChinese: '型號',
+    AppLanguage.english: 'Model',
+    AppLanguage.japanese: 'モデル',
+  },
+  'deviceInfoProduct': {
+    AppLanguage.simplifiedChinese: '产品',
+    AppLanguage.traditionalChinese: '產品',
+    AppLanguage.english: 'Product',
+    AppLanguage.japanese: '製品',
+  },
+  'deviceInfoTags': {
+    AppLanguage.simplifiedChinese: '标签',
+    AppLanguage.traditionalChinese: '標籤',
+    AppLanguage.english: 'Build Tags',
+    AppLanguage.japanese: 'ビルドタグ',
+  },
+  'deviceInfoBuildTime': {
+    AppLanguage.simplifiedChinese: '构建时间',
+    AppLanguage.traditionalChinese: '建置時間',
+    AppLanguage.english: 'Build Time',
+    AppLanguage.japanese: 'ビルド時刻',
+  },
+  'deviceInfoBuildType': {
+    AppLanguage.simplifiedChinese: '构建类型',
+    AppLanguage.traditionalChinese: '建置類型',
+    AppLanguage.english: 'Build Type',
+    AppLanguage.japanese: 'ビルドタイプ',
+  },
+  'deviceInfoUser': {
+    AppLanguage.simplifiedChinese: '用户',
+    AppLanguage.traditionalChinese: '使用者',
+    AppLanguage.english: 'Build User',
+    AppLanguage.japanese: 'ビルドユーザー',
+  },
+  'deviceInfoAndroidVersion': {
+    AppLanguage.simplifiedChinese: 'Android 版本',
+    AppLanguage.traditionalChinese: 'Android 版本',
+    AppLanguage.english: 'Android Version',
+    AppLanguage.japanese: 'Android バージョン',
+  },
+  'deviceInfoAndroidSdk': {
+    AppLanguage.simplifiedChinese: 'Android SDK',
+    AppLanguage.traditionalChinese: 'Android SDK',
+    AppLanguage.english: 'Android SDK',
+    AppLanguage.japanese: 'Android SDK',
+  },
+  'deviceInfoSecurityPatch': {
+    AppLanguage.simplifiedChinese: '安全补丁',
+    AppLanguage.traditionalChinese: '安全性修補程式',
+    AppLanguage.english: 'Security Patch',
+    AppLanguage.japanese: 'セキュリティパッチ',
+  },
+  'deviceInfoPlatform': {
+    AppLanguage.simplifiedChinese: '平台',
+    AppLanguage.traditionalChinese: '平台',
+    AppLanguage.english: 'Platform',
+    AppLanguage.japanese: 'プラットフォーム',
+  },
+  'deviceInfoStatus': {
+    AppLanguage.simplifiedChinese: '状态',
+    AppLanguage.traditionalChinese: '狀態',
+    AppLanguage.english: 'Status',
+    AppLanguage.japanese: '状態',
+  },
+  'deviceInfoUnknown': {
+    AppLanguage.simplifiedChinese: '未知',
+    AppLanguage.traditionalChinese: '未知',
+    AppLanguage.english: 'Unknown',
+    AppLanguage.japanese: '不明',
+  },
+  'deviceInfoUnsupported': {
+    AppLanguage.simplifiedChinese: '不支持',
+    AppLanguage.traditionalChinese: '不支援',
+    AppLanguage.english: 'Not Supported',
+    AppLanguage.japanese: '非対応',
+  },
+  'deviceInfoBrowserDebug': {
+    AppLanguage.simplifiedChinese: '浏览器调试环境',
+    AppLanguage.traditionalChinese: '瀏覽器偵錯環境',
+    AppLanguage.english: 'Browser Debug Environment',
+    AppLanguage.japanese: 'ブラウザデバッグ環境',
+  },
+  'deviceInfoUnavailable': {
+    AppLanguage.simplifiedChinese: '当前平台未返回设备信息',
+    AppLanguage.traditionalChinese: '目前平台未傳回裝置資訊',
+    AppLanguage.english: 'No device information was returned by this platform',
+    AppLanguage.japanese: 'このプラットフォームからデバイス情報が返されませんでした',
+  },
+  'deviceInfoCachePending': {
+    AppLanguage.simplifiedChinese: '设备信息尚未完成启动缓存',
+    AppLanguage.traditionalChinese: '裝置資訊尚未完成啟動快取',
+    AppLanguage.english: 'Device information has not finished loading',
+    AppLanguage.japanese: 'デバイス情報の読み込みがまだ完了していません',
+  },
+};

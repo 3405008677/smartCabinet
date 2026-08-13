@@ -22,13 +22,15 @@
 
 - 登录优先的新版智能柜首页。
 - 人脸登录与账号登录入口。
+- 普通操作员账号、人脸和指纹登录已统一接入 AFRR TCP A170/B170 报文协议。
 - 人脸、指纹、NFC 三项全部完成的身份验证。
-- 可通过 `AppConfig.current.isTestMode` 控制账号登录测试旁路；当前测试配置为 `true`，账号密码正确后直接进入任务中心，人脸登录仍执行三项认证。正式部署前必须改为 `false`。
+- 可通过 `AppConfig.current.isTestMode` 控制账号登录后的身份测试旁路；当前测试配置为 `true`，平台账号密码验证成功后直接进入任务中心，人脸登录仍执行三项认证。该开关不会绕过真实账号接口，正式部署前必须改为 `false`。
 - 本机身份资料同步、缺失资料录入和异常复核报备。
 - 按监管机构隔离的任务工作台。
 - 存证、取证、借证、还证和盘点五类任务的统一入口、类型区分与顺序步骤演示。
 - 应用进程内的全局单柜门互锁，以及演示数据中的监管机构专属箱格校验。
 - 管理员登录、身份校验与设备控制台。
+- ZRD STUM 终端升级监控、URL 升级包校验、管理员确认和 Android 安装状态追踪。
 - 四语言切换。
 - 共享人脸、指纹、NFC 认证组件。
 - 共享认证进度条和步骤卡片。
@@ -49,8 +51,8 @@
 - Android 前台服务、开机自启、默认 Launcher 和厂商系统白名单。
 - Device Owner、Device Admin Receiver 与 Lock Task 已有代码边界，但仍需设备配置和目标真机验收。
 - 文件持久化崩溃日志。
-- 远程心跳上报和远程运维平台。
-- OTA 升级和版本灰度。
+- 远程运行指标、异常上报和远程运维平台；AFRR APP 在线心跳已接入。
+- URL 升级链路的现场服务端联调、稳定 release 签名和目标设备安装验收，以及协议未定义的整包分发、结果上报、灰度与回滚闭环。
 
 ## 3. 技术栈
 
@@ -104,7 +106,96 @@ flutter run
 flutter build apk --debug
 ```
 
-### 4.4 常用验证命令
+### 4.4 自动递增版本并构建 Android release
+
+如果只需要生成可安装的本地测试 APK，不需要先冻结正式 `applicationId` 或配置生产证书：
+
+```powershell
+dart run tool/build_release.dart --local-build
+```
+
+该命令同样把 patch 与 `versionCode` 各增加 1，并把版本写回 `pubspec.yaml`；产物使用 debug 证书，仅可用于开发或现场测试，不能作为生产 OTA 包。Android 桌面显示名称由 `app_name` 资源决定，与只能使用 ASCII 域名格式的内部 `applicationId` 不是同一个概念。
+
+正式打包统一使用项目内发布工具：
+
+```powershell
+dart run tool/build_release.dart `
+  --dart-define=AFRR_HOST=10.0.0.1 `
+  --dart-define=AFRR_PORT=16666 `
+  --dart-define=AFRR_SHELF_CODE=123456789012345 `
+  --dart-define=DEVICE_IMEI=123456789012345 `
+  --dart-define=STUM_DP=10.0.0.1
+```
+
+工具会读取 `pubspec.yaml` 的 `version` 字段，并让补丁版本和 Android 构建号
+各增加 1，例如 `1.0.0+1 → 1.0.1+2 → 1.0.2+3`。只有 APK 构建成功、
+版本元数据正确且正式签名验证通过后，工具才会把新版本写回 `pubspec.yaml`。
+预检、构建或验真失败不会修改持久版本；失败候选不得上传、分发或创建 STUM
+offer。任何 APK 一旦离开本机或无法确认未分发，其版本即视为已消耗，修复时必须
+人工指定更高版本，不能盲目复用同一 `versionName/versionCode`。
+
+正式发布工具当前面向 Windows。生产 `--dart-define` 必须显式提供，除
+AFRR/STUM 身份外还包括当前 APK 构建批次日期
+`STUM_VERSION_DATE=yyyyMMdd`；脚本会校验并透传给 Flutter，避免静默使用
+源码中的现场样例默认值。
+本地锁只保护当前工作区；正式版本必须由唯一发布机串行生成，多台电脑或多个
+clone 并行发布需要先引入中央版本分配服务。
+
+`android/key.properties` 继续采用简单的 `key=value` 单行格式；相对
+`storeFile` 与 Gradle 一致，以 `android/app/` 为基准。路径或密码如需 Java
+Properties 转义、续行或 `:` 分隔，应先改为无转义的单行值，避免发布工具与
+Gradle 对同一配置产生不同解释。
+
+- `1.0.1` 会成为 Android `versionName`、升级页当前版本和全局右下角版本；
+  STUM `T03.VE` 按现场服务端约定包装为 `SL_V1.0.1_yyyyMMdd`。
+- `2` 会成为 Android `versionCode`。OTA 安装门禁要求它严格大于设备已安装
+  版本的 `versionCode`。
+- 现场 OTA 每次必须同时更新两部分；只提高 `versionCode` 会被 STUM 的同
+  `versionName` 判断挡住，只提高 `versionName` 而不提高 `versionCode` 会被
+  Android 防降级门禁拒绝。
+
+正式制品输出到 `build/releases/smart-cabinet-<versionName>+<versionCode>.apk`，
+并同时生成供制品核对的 `.sha256` 和供 STUM `S03.MD` 使用的 `.md5`
+摘要。`build/` 会被 `flutter clean` 删除，因此验收后必须把正式制品和两个摘要
+复制到受控发布库；本地目录不能作为唯一归档。可以先预览下一版，不启动 Flutter
+或修改文件：
+
+```powershell
+dart run tool/build_release.dart --dry-run
+```
+
+`--dry-run` 只计算下一版本，不执行包名、测试模式、生产参数或签名发布预检。
+
+切换 minor 或 major 版本时可显式给出目标版本；名称和构建号都必须严格高于
+当前版本：
+
+```powershell
+dart run tool/build_release.dart --version-name 1.1.0 --version-code 20 `
+  --dart-define=AFRR_HOST=10.0.0.1 `
+  --dart-define=AFRR_PORT=16666 `
+  --dart-define=AFRR_SHELF_CODE=123456789012345 `
+  --dart-define=DEVICE_IMEI=123456789012345 `
+  --dart-define=STUM_DP=10.0.0.1 `
+  --dart-define=STUM_VERSION_DATE=20260812
+```
+
+正式模式要求 `AppConfig.current.isTestMode == false`，并要求
+使用已经冻结的非示例 `applicationId`，且 `android/key.properties` 的稳定 release
+证书配置完整。除 Gradle 使用的四个签名字段外，`key.properties` 还必须提供
+冻结的 `applicationId` 与 `certificateSha256`；工具会将源码包名和 APK signer
+分别与这两个生产基线比对。当前缺少正式签名配置时，
+只允许显式执行以下未签名编译检查；它使用当前版本、不递增也不修改版本，
+产物不能用于生产 OTA：
+
+```powershell
+dart run tool/build_release.dart --allow-unsigned-compile-check
+```
+
+不要手改已忽略的 `android/local.properties`，也不要把直接执行
+`flutter build apk --release` 或 `gradlew assembleRelease` 当作自动发版入口。
+新 APK 还必须实际安装并重启应用，热重载不会改变 Android 包元数据。
+
+### 4.5 常用验证命令
 
 ```bash
 dart format path/to/changed_file.dart
@@ -118,7 +209,7 @@ flutter test --no-pub
 
 ### 5.1 首页与登录入口
 
-首页只展示柜体状态、统计摘要、静态背景区和登录入口，不直接发起具体业务任务。操作员必须先通过“人脸登录”或“账号登录”建立身份，再根据账号所属监管机构进入任务工作台。版本号连续点击仍可打开设置与管理员入口。
+首页只展示柜体状态、统计摘要、静态背景区和登录入口，不直接发起具体业务任务。操作员必须先通过“人脸登录”或“账号登录”建立身份，再根据账号所属监管机构进入任务工作台。全局右下角从 Android 已安装 APK 元数据读取真实 `versionName`，与升级页当前版本同源；版本号连续点击仍可打开设置与管理员入口。
 
 相关文件：
 
@@ -130,7 +221,15 @@ flutter test --no-pub
 
 “人脸登录”入口进入统一身份校验页，首个成功的人脸、指纹或 NFC 因子负责识别账号；也可以先用账号密码确认账号。账号密码本身不计入身份因子，普通任务要求同一账号完成人脸、指纹与 NFC 三项认证。
 
-测试阶段例外：`lib/src/core/config/app_config.dart` 中 `AppConfig.current.isTestMode` 为 `true` 时，账号密码登录成功会为本次测试会话建立三项认证旁路并直接进入任务中心。该开关不影响人脸登录，正式环境必须设为 `false`。
+账号、人脸和指纹登录均通过 AFRR TCP A170/B170 完整报文完成，不再使用 HTTP 登录接口。三种方式统一使用 `OperatorLoginRequest`：账号对应 `logway = 1`，人脸文件 ID 对应 `logway = 2`，指纹文件 ID 对应 `logway = 3`。账号密码去除首尾空白后转为 40 位大写 SHA-1；`OperatorProtocolLoginRequestDto` 按 2026-08-10 协议固定将请求包装为 `{ "func": "userLogin", "data": ... }`，只认 `rst=9` 成功，不再支持旧版 `cmd=login`。协议层再加入货架编码、16 位流水号、BCD 时间、`0xA0` JSON KLV、异或校验、`0x7F` 转义及头尾标记。客户端同时解析文档标准的“原流水号 + JSON”B170，以及现场 APP `logon` 返回的“原指令码 + 原流水号 + 结果码”精简 B170；`userLogin` 成功必须带人员资料 JSON。单次等待 5 秒，最多重发 2 次。
+
+应用启动后先在 AFRR 长连接发送 `func=logon`，成功后每 60 秒发送一次 `func=heartbeat`，并按原流水号等待 B170 `rst=9`。心跳超时同样最多重发 2 次；持续失败时废弃当前会话和 Socket，延时重连并保证新连接的首帧仍为 `logon`。心跳时间使用协议规定的 18 位本地时间。当前真实终端 A101/A102 接收链路尚未接入，所以心跳中的终端透传 `data` 明确发送 `null`，不使用空数组伪造终端在线；后续接入时只通过可替换的心跳载荷 Provider 提供去掉头尾各 2 字节的终端报文。
+
+运行前必须通过 `--dart-define=AFRR_HOST=... --dart-define=AFRR_PORT=... --dart-define=AFRR_SHELF_CODE=... --dart-define=DEVICE_IMEI=...` 显式配置主机、端口、15/16 位货架编码和 15 位主板 IMEI；协议文档没有给出服务器地址，因此缺少配置时登录会明确失败，不会误用原 HTTP 地址。当前链路只支持未加密标记 `0x00`；收到 `0x01` 会明确拒绝，待服务端提供 AES 密钥、IV 和协商规则后再接入。
+
+人脸和指纹登录会先从可替换的本机识别边界取得文件 ID，再发送 A170。当前本机人脸/指纹文件 ID 解析仍由模拟硬件数据源提供，正式设备需替换为真实模块。B170 返回的 `uid`、`uname`、`rname`、`uorg`、`faceId`、`fgerId` 和 `time` 会映射为账号与当前 AFRR 会话；协议没有定义 HTTP token。
+
+测试阶段例外：`lib/src/core/config/app_config.dart` 中 `AppConfig.current.isTestMode` 为 `true` 时，真实平台账号密码登录成功会为本次测试会话建立三项认证旁路并直接进入任务中心。该开关不跳过账号接口、不影响人脸登录，正式环境必须设为 `false`。
 
 管理员与普通操作员身份校验页共用同一套页面间距、标题、进度和三栏卡片尺寸。测试模式下，人脸卡片明确显示“模拟认证”，不启动摄像头、不提交或等待后端；正式模式仍保留真实摄像头与身份仓库校验路径。
 
@@ -139,7 +238,7 @@ flutter test --no-pub
 - 缺少人脸或指纹：只录入缺失项；单项失败留在录入页重试，全部录入成功后 3 秒自动或手动返回首页重新登录。
 - 本机资料异常：完成人脸、指纹与 NFC 三项复核；三项都已尝试后仍有异常时，先向平台报备，再重录异常的人脸或指纹资料。
 
-当前内存演示账号用于人工验收不同分支：
+以下内存账号仅供自动化测试和身份资料分支验证；正式运行的账号登录界面不会接受这些账号作为离线兜底：
 
 | 账号 | 密码 | 演示分支 |
 | --- | --- | --- |
@@ -236,13 +335,42 @@ RFID 读取、OCR 识别、平台分箱、真实开门和结果上报当前仍�
 
 ### 5.5 管理员入口
 
-管理员从设置弹窗进入账号登录，登录通过后继续完成人脸、指纹和 NFC 三项身份校验，再进入设备控制台。控制台包含相机能力、推流状态与自动检测等设备运维功能。
+管理员从设置弹窗进入账号登录，登录通过后继续完成人脸、指纹和 NFC 三项身份校验，再进入设备控制台。控制台包含相机能力、推流状态、自动检测、终端升级与通讯日志等设备运维功能。
 
 相关文件：
 
 - `lib/src/features/admin/presentation/widgets/admin_login_dialog.dart`
 - `lib/src/features/admin/presentation/pages/admin_verification_page.dart`
 - `lib/src/features/admin/presentation/pages/admin_console_page.dart`
+
+### 5.6 终端升级
+
+管理员控制台提供独立的“终端升级”页面。升级监控默认关闭，当前现场服务器预填为 `47.107.40.88:21251`，仍必须由管理员显式保存并启用；`ID` 由管理员填写设备号（非零开头的 11 位或 15 位数字）。`T01.IM` 固定读取 `AppConfig.current.afrrDeviceImei`，构建来源与 AFRR 共用 `--dart-define=DEVICE_IMEI=...`；生产配置要求 15 位数字，以确保升级请求能匹配后台按 IMEI 绑定的终端任务，不再维护第二份升级模块号环境配置。协议实体仍兼容现场曾验证过的 11 位格式，但生产 Provider 不使用第二份模块号。`T01.DP` 固定读取 `--dart-define=STUM_DP=...`，必须是一个或多个以英文逗号分隔的 IPv4 地址，当前默认现场值为 `47.107.40.88`；`T01.CD` 固定读取“关于设备”中的唯一设备 ID，即 Android `Settings.Secure.ANDROID_ID`。该 ID 是 Android 标识而非真实硬件芯片序列号，缺失或为占位值时会在建连前失败。管理员升级页面可完整只读展示 IM、DP、CD，但不能编辑或在 `AppLocalStore.upgrade` 中保存第二份值；旧 `moduleImei`、`dataProtocolIp` 和 `chipId` 会在读取时清理。`PT` 仍可按服务端约定填写。
+
+当前实现遵循 ZRD STUM 协议的 URL 控制链路：TCP 重连后先发送 `T01`，只有收到对应 `S00 01:OK` 才直接发送 `T03`，二者之间不发送 `T02`；`T03` 固定使用 `DT=1`，并按现场服务端约定把 Android 真实 `versionName` 与构建配置 `STUM_VERSION_DATE=yyyyMMdd` 编码为 `SL_V{versionName}_{date}`，例如 `SL_V1.0.2_20260812`。日期绑定 APK 构建批次，不能使用每次请求当天日期。服务端返回 `S03` 后，`VE=0` 只表示本次没有匹配到可下发升级包，不能据此断言客户端一定是最新版本；新版本只接受当前 T03 等待窗口内的 HTTP/HTTPS URL、匹配的 `PT` 和 32 位完整文件 MD5，并以复用服务端 `SN` 的 `T00` 回执。窗口关闭后只会对已经接收的同 `SN/VE/AD/MD/PT` 帧做幂等补发 `OK`，其它人工或迟到 `S03` 均回复 `NG1`，不得创建或替换升级任务。旧配置的迟到连接结果不会覆盖新连接，停止、重配或释放监控会使未提交下载及原生预提交操作失效。文档没有定义 `AD=2` 的分包帧、顺序、重传或完整性规则，因此终端会明确回复 `NG3AD`，不会自行扩展协议。
+
+发现升级后不会立即安装。后台启动或重连收到合法 `S03` 时，会在当前页面顶部显示不含 URL、MD5 或设备身份的“发现终端新版本”提示；点击处理仍需先通过管理员账号登录以及人脸、指纹、NFC 三项校验，通过后才直接进入终端升级页。通知本身不能触发下载或安装；停止、重配或安装终态使 offer 失效时会同步清除提示。管理员进入升级页后，仍需确认其看到的同一份 offer；所有柜门均已关闭时，终端才会原子取得应用进程内的升级维护租约，阻止新的开门请求，再流式下载 APK、限制最大 512 MB 并校验 MD5。停止、重配、页面释放或 Activity 销毁会用同一 operation ID 取消尚未跨过 `PackageInstaller.commit` 的原生操作；跨过不可逆提交点后维护租约保持到 Android 明确终态。应用首帧前无论监控开关都会恢复原生活动安装及其维护租约，避免进程重建期间短暂允许开门。Android 原生层再次校验服务端 `VE` 与 APK `versionName`（仅兼容单个大写数字前导 `V`、请求的 `SL_V{version}_{yyyyMMdd}` 及服务端响应的 `SL_APP_V{version}` 外壳）、包名、签名证书链和严格递增的 `versionCode`，再提交 `PackageInstaller`；结果回调还会核对任务、Session、系统包名和实际安装的精确版本。Device Owner 或满足系统无交互更新条件的设备可由系统直接处理，否则可能显示系统安装确认页；安装完成后 `MY_PACKAGE_REPLACED` Receiver 会尝试恢复柜机主界面。Kiosk/OEM 仍可能限制后台拉起，因此必须在目标机配合 Device Owner 或外部 watchdog 做自更新验收。安装状态独立持久化，但当前协议没有定义安装结果上报、灰度策略或回滚命令。
+
+当前仓库没有 `android/key.properties`，release 不会回退到 debug key，而会保持未签名，因此不能直接用于 OTA。生产部署必须配置稳定、备份且不入库的正式证书；已安装应用与升级 APK 必须保持 Android 认可的签名连续性。协议控制连接是普通 TCP，且为兼容现场协议仍允许 HTTP 下载；生产网络必须使用受控专网/VPN，升级地址应优先配置 HTTPS，不能把带令牌的 URL 暴露到不可信网络。
+
+相关文件：
+
+- `lib/src/features/terminal_upgrade/`
+- `lib/src/features/terminal_upgrade/data/datasources/method_channel_terminal_upgrade_device.dart`
+- `android/app/src/main/kotlin/com/example/smart_cabinet/upgrade/`
+
+### 5.7 通讯日志
+
+管理员控制台右侧功能列表提供独立的“通讯日志”页面。页面按时间倒序显示服务器、硬件或升级指令，以及上报/下发、消息体、请求时间和请求结果；点击消息体可查看该次通讯的完整诊断快照。这里的“上报”固定表示柜机软件发送，“下发”固定表示柜机软件接收。ZRD STUM 的 TCP 建连以及每一条 `T01`、`T03`、`T00` 上行帧和 `S00`、`S03` 下行帧统一归为“升级指令”；版本、SN、MD5 与脱敏后的协议属性可用于现场对账，ID、IM、DP、CD 和升级包 URL 路径仍不得进入日志。
+
+日志使用应用进程内 500 条有界队列，不写入业务数据库或错误日志文件。当前覆盖 AFRR、STUM、MQTT、升级包 HTTP、Kiosk/摄像头/升级 MethodChannel，以及 Android 原生 RTSP 控制握手、18080 HTTP 控制请求、错误日志 HTTP 上报和 PackageInstaller 异步回调。账号、口令摘要、令牌、终端标识、生物资料、人员资料、本地路径和 URL 认证/查询参数会在进入队列前脱敏；图片、APK 内容、SDP、VPS/SPS/PPS、RTP/H265 帧和其它二进制内容不会进入日志。RTSP 日志只观察控制请求与响应，不改变视频推流、帧发送、重连或背压逻辑。
+
+相关文件：
+
+- `lib/src/core/logging/communication_log_store.dart`
+- `lib/src/core/logging/native_communication_log_bridge.dart`
+- `lib/src/features/admin/presentation/pages/admin_communication_log_page.dart`
+- `android/app/src/main/kotlin/com/example/smart_cabinet/logging/`
 
 ## 6. 架构说明
 
@@ -282,7 +410,7 @@ lib/
 
 - `camera`：摄像头发现、预览与推流能力。
 - `config`：应用配置。
-- `device`：柜机平台抽象、MethodChannel 与应用级柜门互锁。
+- `device`：柜机平台抽象、Kiosk/升级 MethodChannel 与应用级柜门互锁。
 - `logging`、`monitoring`：日志、崩溃记录和运行健康监测。
 - `mqtt`：MQTT 连接、消息与设备命令。
 - `network`：网络客户端、结果抽象和模拟 API 数据。
@@ -290,7 +418,7 @@ lib/
 
 ### 6.3 features
 
-`features` 按业务模块聚合数据访问、业务模型和界面，当前包括 `home`、`identity_verification`、`task_center` 和 `admin`。
+`features` 按业务模块聚合数据访问、业务模型和界面，当前包括 `home`、`identity_verification`、`task_center`、`admin` 和 `terminal_upgrade`。
 
 标准数据流为：
 
@@ -420,7 +548,7 @@ lib/src/core/monitoring/runtime_health_monitor.dart
 
 `bootstrap()` 启动时会初始化健康监测。
 
-当前还没有做定时器自动采样和远程上报，后续可以在应用启动后增加定时心跳任务。
+当前健康监测尚未做定时内存采样和远程运行指标上报。AFRR APP 协议在线心跳已由独立的 60 秒定时任务完成，但它不等同于运行时健康样本或真实终端 A102 状态。
 
 ### 9.3 硬件异常恢复建议
 
@@ -455,7 +583,7 @@ lib/src/core/device/cabinet_door_guard.dart
 - Device Owner、Device Admin Receiver 与 Lock Task 的设备配置和真机验收。
 - 厂商 ROM 白名单。
 - 文件持久化崩溃日志。
-- 远程心跳和异常上报。
+- 远程运行指标和异常上报；AFRR APP 在线心跳已接入。
 - 硬件 Watchdog。
 - 断网事件队列和恢复补偿。
 - 柜门状态机持久化。
@@ -509,7 +637,7 @@ Page / Controller
 JSON -> DTO -> Domain Entity -> Page
 ```
 
-首页当前通过 `HomeRemoteDataSource` 和 `core/network/mock_api_data.dart` 模拟 HTTP；身份认证和任务中心分别使用 Feature 内的 `FakeOperatorIdentityDataSource` 与 `FakeTaskCenterDataSource`，直接返回 Domain Entity。接入真实接口时优先替换对应 DataSource，并由 Repository 保持页面所依赖的领域契约稳定。
+首页当前通过 `HomeRemoteDataSource` 和 `core/network/mock_api_data.dart` 模拟 HTTP；普通操作员账号、人脸和指纹登录已统一接入 AFRR TCP A170/B170，NFC、身份资料同步/录入和任务中心仍分别使用 Feature 内的 `FakeOperatorIdentityDataSource` 与 `FakeTaskCenterDataSource`。当前人脸、指纹文件 ID 解析仍是模拟硬件边界；页面不直接处理 JSON、帧校验或 Socket 生命周期。
 
 ## 12. 测试说明
 
@@ -528,11 +656,13 @@ test/
 
 - 首页渲染且仅显示登录入口。
 - 设置弹窗、管理员登录与多语言切换。
+- AFRR A170/B170 编解码、APP `logon` 与 60 秒 `heartbeat`、标准与精简 B170 回复、标准 `userLogin`、账号 SHA-1 摘要、人脸/指纹文件 ID JSON、半包/粘包、校验失败、响应映射、业务错误和缺少连接配置。
 - 账号识别、资料同步、异常复核和身份资料录入。
 - 人脸、指纹、NFC 共享认证组件。
 - 按机构加载任务、取件码校验与五类任务步骤。
 - 单柜门互锁、机构箱格隔离、开门倒计时展示和无任务安全退出。
 - 管理员设备检测、摄像头能力和推流恢复。
+- STUM 报文编解码、TCP 登录/检查时序、`AD=2` 拒绝和升级 MethodChannel 映射。
 - 本地存储、稳定性监测和硬件异常恢复建议。
 
 常用测试命令：
@@ -547,6 +677,8 @@ flutter test
 flutter test test/features/identity_verification/operator_identity_flow_test.dart
 flutter test test/features/task_center/task_center_repository_test.dart
 flutter test test/core/device/cabinet_door_guard_test.dart
+flutter test test/features/terminal_upgrade
+flutter test test/features/terminal_upgrade/data/datasources/method_channel_terminal_upgrade_device_test.dart
 ```
 
 运行指定测试用例：
@@ -661,29 +793,31 @@ flutter test --no-pub
 
 ## 16. 已知限制
 
-- 当前没有真实后端，首页使用模拟 API，身份认证和任务中心使用 Feature 内存 Fake DataSource。
+- 普通操作员账号、人脸和指纹登录及 APP 60 秒在线心跳已接入 AFRR TCP A170/B170；现场仍需提供 `AFRR_HOST`、`AFRR_PORT` 和 `AFRR_SHELF_CODE`。当前只支持未加密标记 `0x00`，AES `0x01` 尚未接入密钥和 IV 协商；真实终端 A101/A102 接收链路未接入前，心跳中的终端透传数据按协议发送 `null`。
 - 当前没有真实柜控板、门磁和平台租约；开门、关门确认与 30 秒报警仍是 UI/内存演示，`CabinetDoorGuard` 只能保证当前应用进程内互斥。
-- 当前指纹和 NFC 为点击模拟认证；人脸照片只模拟提交后端校验。
+- 当前人脸和指纹文件 ID 由模拟硬件解析器提供，NFC 仍为点击模拟认证；正式设备需接入真实生物识别模块。
 - 监管机构箱格隔离目前由内存绑定和 Repository 校验实现，仍需服务端持久化授权与并发控制。
 - 摄像头依赖运行设备权限和硬件环境，测试环境使用 fallback 路径。
 - Device Owner、Device Admin Receiver 和 Lock Task 已有代码边界，但仍需目标设备配置与真机验收。
 - 崩溃日志当前为内存存储，应用进程退出后不会保留。
 - 运行健康监测当前只提供记录和快照能力，尚未做定时采样和远程上传。
 - Android 前台服务、开机自启和默认 Launcher 尚未接入。
+- 升级服务器已预填 `47.107.40.88:21251`，但功能仍默认关闭；部署方仍需填写真实设备号，通过 15 位 `DEVICE_IMEI` 同时配置 AFRR 身份与 STUM 的 `T01.IM`，通过 `STUM_DP` 配置服务端登记的数据通讯地址，并保证“关于设备”能读取有效唯一设备 ID 作为 CD。启用前仍需用完整生产 `T01` 报文完成现场联调；`AD=2` 分包、升级结果上报、灰度与回滚没有协议定义，当前不支持。
+- Android release 当前缺少稳定正式证书，且不会回退到 debug key；未配置 `android/key.properties` 时产物未签名。在正式证书、Device Owner/系统确认路径和目标 RK3566 真机验收完成前，不能作为生产 OTA 发布链路。
 
 ## 17. 后续建议路线
 
 建议按以下顺序继续推进：
 
 1. 接入文件持久化日志，保证崩溃后重启仍能查看日志。
-2. 增加设备心跳上报接口，把运行状态同步到后台。
+2. 在现有 AFRR APP 在线心跳上补充真实终端 A102 透传和设备运行指标上报。
 3. 接入 Android 前台服务、开机自启和默认 Launcher，并完成 Device Owner / Lock Task 设备配置与验收。
 4. 接入真实柜控板，完成开门、门磁、异常码读取。
 5. 接入真实指纹、NFC、扫码器。
 6. 将操作员身份认证与任务执行进度升级为可持久化状态机。
 7. 增加断网事件队列和网络恢复补偿。
 8. 增加远程运维页面，查看日志、心跳、版本、设备状态。
-9. 增加 OTA 升级和版本回滚机制。
+9. 联调现有 URL OTA，补齐正式签名与真机验收；待服务端协议明确后再实现灰度、结果上报和回滚机制。
 
 ## 18. 相关文档
 

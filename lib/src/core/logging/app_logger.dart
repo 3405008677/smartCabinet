@@ -12,6 +12,7 @@ import 'package:smart_cabinet/src/core/logging/crash_log_store.dart';
 class AppLogger {
   const AppLogger._();
 
+  /// 原生错误日志通道；方法调用失败不得反向影响原始业务异常处理。
   static const MethodChannel _channel = MethodChannel('smart_cabinet/kiosk');
 
   /// 输出调试日志。
@@ -33,7 +34,8 @@ class AppLogger {
   /// 输出错误日志。
   ///
   /// [message] 是当前场景说明，[error] 是具体错误对象，
-  /// [stackTrace] 可以帮助定位错误发生的代码位置。
+  /// [stackTrace] 可以帮助定位错误发生的代码位置。调用会同步写入内存环形队列，
+  /// 原生持久化则异步执行，避免日志 I/O 延长当前失败路径。
   static void error(String message, Object error, StackTrace? stackTrace) {
     CrashLogStore.instance.record(
       message: message,
@@ -47,11 +49,13 @@ class AppLogger {
     }
   }
 
+  /// 尽力把错误写入 Android 原生日志，不等待结果也不向调用方抛出二次异常。
   static void _recordNativeErrorLog(
     String message,
     Object error,
     StackTrace? stackTrace,
   ) {
+    // 把平台 I/O 移出当前错误处理栈；内部捕获失败，避免“记录日志失败”递归触发日志。
     Future<void>(() async {
       try {
         await _channel.invokeMethod<void>('recordErrorLog', {

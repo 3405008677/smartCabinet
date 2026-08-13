@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">スマートキャビネット</string>
+    <string name="kiosk_device_admin_label">スマートキャビネット端末管理</string>
+    <string name="kiosk_device_admin_description">スマートキャビネット端末の画面を固定し、一般ユーザーがアプリを終了したりシステム画面を開いたりできないようにします。</string>
+</resources>

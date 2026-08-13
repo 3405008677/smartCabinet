@@ -13,6 +13,7 @@ import 'package:smart_cabinet/src/features/identity_verification/domain/entities
 import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_identity_navigation.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/entities/operator_identity_profile.dart';
 import 'package:smart_cabinet/src/features/identity_verification/domain/repositories/operator_identity_repository.dart';
+import 'package:smart_cabinet/src/features/identity_verification/presentation/identity_result_localizer.dart';
 import 'package:smart_cabinet/src/features/identity_verification/presentation/operator_login_coordinator.dart';
 import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/face_verification_card.dart';
 import 'package:smart_cabinet/src/features/identity_verification/presentation/widgets/sensor_verification_card.dart';
@@ -52,10 +53,18 @@ class _OperatorVerificationPageState extends State<OperatorVerificationPage> {
   late final OperatorIdentityRepository _repository;
   OperatorAccount? _account;
   late final Set<IdentityFactor> _verifiedFactors;
+
+  /// 正在请求仓库认证的因子集合，同时驱动忙碌态并阻止同一因子重复提交。
   final Set<IdentityFactor> _busyFactors = <IdentityFactor>{};
+
+  /// 异常恢复模式中已经复核失败的必选因子，用于判断是否完成一轮全量尝试。
   final Set<IdentityFactor> _failedRequiredFactors = <IdentityFactor>{};
   String? _statusMessage;
+
+  /// 页面级一次性导航闩锁，防止多个因子几乎同时完成时重复跳转。
   bool _hasNavigated = false;
+
+  /// 异常报备请求的防重入标记。
   bool _reportingAbnormal = false;
 
   @override
@@ -93,6 +102,9 @@ class _OperatorVerificationPageState extends State<OperatorVerificationPage> {
   }
 
   /// 使用一个身份因子识别账号并完成认证。
+  ///
+  /// 未带账号进入时先用首个因子识别账号，再复用同一次操作完成认证；每个因子由
+  /// [_busyFactors] 独立防重入，其他因子仍可按页面策略继续尝试。
   Future<void> _verifyFactor(IdentityFactor factor) async {
     if (_hasNavigated ||
         _busyFactors.contains(factor) ||
@@ -171,7 +183,11 @@ class _OperatorVerificationPageState extends State<OperatorVerificationPage> {
               _requiredFactors.contains(factor)) {
             _failedRequiredFactors.add(factor);
           }
-          _statusMessage = result.message;
+          _statusMessage = localizeIdentityVerificationResult(
+            context.l10n,
+            factor: factor,
+            result: result,
+          );
         });
         unawaited(_reportAbnormalAfterRequiredFactorsAttempted());
         return;
@@ -181,7 +197,11 @@ class _OperatorVerificationPageState extends State<OperatorVerificationPage> {
         _busyFactors.remove(factor);
         _failedRequiredFactors.remove(factor);
         _verifiedFactors.add(factor);
-        _statusMessage = result.message;
+        _statusMessage = localizeIdentityVerificationResult(
+          context.l10n,
+          factor: factor,
+          result: result,
+        );
       });
       unawaited(_reportAbnormalAfterRequiredFactorsAttempted());
       _goToTaskCenterIfReady();

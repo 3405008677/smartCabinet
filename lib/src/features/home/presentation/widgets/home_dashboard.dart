@@ -6,6 +6,7 @@ import 'package:smart_cabinet/src/app/localization/app_localizations.dart';
 
 import 'package:smart_cabinet/src/features/home/domain/entities/home.dart';
 import 'package:smart_cabinet/src/features/home/presentation/widgets/home_widgets.dart';
+import 'package:smart_cabinet/src/shared/widgets/smart_cabinet_brand_panel.dart';
 
 // 首页可见仪表盘区域。
 //
@@ -142,12 +143,12 @@ class _CabinetOverviewCard extends StatelessWidget {
                 const SizedBox(height: 5),
                 _InfoLine(
                   label: l10n.t('cabinetRegion', '区域'),
-                  value: homeData.region,
+                  value: _localizedHomeRegion(l10n, homeData.region),
                 ),
                 const SizedBox(height: 5),
                 _InfoLine(
                   label: l10n.t('cabinetStatus', '状态'),
-                  value: homeData.status,
+                  value: _localizedHomeStatus(l10n, homeData.status),
                 ),
               ],
             ),
@@ -260,7 +261,7 @@ class _FinishedBannerCard extends StatelessWidget {
             left: 30,
             top: 58,
             child: Text(
-              homeData.headline,
+              _localizedHomeHeadline(l10n, homeData.headline),
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 28,
@@ -432,7 +433,7 @@ class _StorageStatsCard extends StatelessWidget {
           _StatRow(
             icon: Icons.description_outlined,
             label: l10n.t('cabinetFiles', '柜内文件'),
-            value: stats.documentCount,
+            value: _localizedDocumentCount(l10n, stats.documentCount),
             color: AppTheme.primaryColor,
           ),
           const SizedBox(height: 7),
@@ -446,21 +447,21 @@ class _StorageStatsCard extends StatelessWidget {
           _StatRow(
             icon: Icons.mark_email_unread_outlined,
             label: l10n.t('pendingPickup', '待取件'),
-            value: stats.pendingPickup,
+            value: _localizedDocumentCount(l10n, stats.pendingPickup),
             color: const Color(0xFFE05252),
           ),
           const SizedBox(height: 7),
           _StatRow(
             icon: Icons.trending_up_rounded,
             label: l10n.t('todayStored', '今日存入'),
-            value: stats.todayStored,
+            value: _localizedDocumentCount(l10n, stats.todayStored),
             color: const Color(0xFF059669),
           ),
           const SizedBox(height: 7),
           _StatRow(
             icon: Icons.file_download_outlined,
             label: l10n.t('todayPickedUp', '今日取出'),
-            value: stats.todayPickedUp,
+            value: _localizedDocumentCount(l10n, stats.todayPickedUp),
             color: AppTheme.primaryColor,
           ),
           const Spacer(),
@@ -594,14 +595,9 @@ class _StatRow extends StatelessWidget {
   }
 }
 
-/// 首页中部的任务背景卡片。
-///
-/// 当前仅展示静态背景图，不提供任务摘要或任务直达入口。
+/// 首页中部的本地化品牌卡片。
 class _TaskBackgroundCard extends StatelessWidget {
   const _TaskBackgroundCard();
-
-  /// 首页任务区域暂用的背景图片资源。
-  static const String _backgroundAsset = 'assets/images/智能柜启动.png';
 
   @override
   Widget build(BuildContext context) {
@@ -609,13 +605,9 @@ class _TaskBackgroundCard extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.zero,
       child: SizedBox.expand(
-        child: Image.asset(
-          _backgroundAsset,
-          key: const ValueKey('home_task_background_image'),
-          fit: BoxFit.cover,
-          alignment: Alignment.center,
-          filterQuality: FilterQuality.medium,
-          excludeFromSemantics: true,
+        child: const SmartCabinetBrandPanel(
+          key: ValueKey('home_task_background_image'),
+          compact: true,
         ),
       ),
     );
@@ -809,4 +801,40 @@ class _LoginActionButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 将首页接口或首帧兜底中的区域标记转换为当前语言文案。
+String _localizedHomeRegion(AppLocalizations l10n, String value) {
+  return switch (value.trim()) {
+    'A · B 区' => l10n.t('homeDefaultRegion', 'A · B 区'),
+    _ => value,
+  };
+}
+
+/// 将首页接口返回的稳定状态值转换为当前语言文案。
+String _localizedHomeStatus(AppLocalizations l10n, String value) {
+  return switch (value.trim()) {
+    'online' || '在线运行' => l10n.t('homeStatusOnline', '在线运行'),
+    _ => value,
+  };
+}
+
+/// 将首页 banner 的稳定标题值转换为当前语言文案。
+String _localizedHomeHeadline(AppLocalizations l10n, String value) {
+  return switch (value.trim()) {
+    'cabinet_statistics' ||
+    '智能柜统计信息' => l10n.t('homeCabinetStatisticsHeadline', '智能柜统计信息'),
+    _ => value,
+  };
+}
+
+/// 为首页文件数量补充当前语言使用的量词。
+String _localizedDocumentCount(AppLocalizations l10n, String value) {
+  final match = RegExp(r'^(\d+)\s*(?:份)?$').firstMatch(value.trim());
+  if (match == null) {
+    return value;
+  }
+  return l10n
+      .t('homeDocumentCountValue', '{count} 份')
+      .replaceAll('{count}', match.group(1)!);
 }

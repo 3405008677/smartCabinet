@@ -13,16 +13,31 @@ import 'package:smart_cabinet/src/features/admin/data/repositories/admin_reposit
 // 登录成功后还会进入管理员三项身份校验页，不会直接打开控制台。
 
 /// 打开管理员登录弹窗。
-void showAdminLoginDialog(BuildContext context) {
+///
+/// [postVerificationRoute] 只允许指向管理员控制台或终端升级页；无论
+/// 传入哪个目标，都必须先通过账号登录和管理员三因子校验。
+void showAdminLoginDialog(
+  BuildContext context, {
+  String postVerificationRoute = AppRoutes.adminConsole,
+}) {
+  final safePostVerificationRoute =
+      postVerificationRoute == AppRoutes.adminTerminalUpgrade
+      ? AppRoutes.adminTerminalUpgrade
+      : AppRoutes.adminConsole;
   showDialog<void>(
     context: context,
-    builder: (context) => const _AdminLoginDialog(),
+    useRootNavigator: true,
+    builder: (context) =>
+        _AdminLoginDialog(postVerificationRoute: safePostVerificationRoute),
   );
 }
 
 /// 管理员登录弹窗。
 class _AdminLoginDialog extends StatefulWidget {
-  const _AdminLoginDialog();
+  const _AdminLoginDialog({required this.postVerificationRoute});
+
+  /// 三因子校验通过后的受限管理员目标页。
+  final String postVerificationRoute;
 
   @override
   State<_AdminLoginDialog> createState() => _AdminLoginDialogState();
@@ -119,7 +134,10 @@ class _AdminLoginDialogState extends State<_AdminLoginDialog> {
         return;
       }
       Navigator.of(context).pop();
-      Navigator.of(context).pushNamed(AppRoutes.adminVerification);
+      Navigator.of(context).pushNamed(
+        AppRoutes.adminVerification,
+        arguments: widget.postVerificationRoute,
+      );
     } catch (error) {
       if (!mounted) {
         return;

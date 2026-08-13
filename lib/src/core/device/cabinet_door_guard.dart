@@ -52,6 +52,22 @@ final class CabinetDoorOpenConflict extends CabinetDoorOpenResult {
   bool get granted => false;
 }
 
+/// 柜门开启请求因系统维护租约而被拒绝。
+final class CabinetDoorOpenMaintenanceConflict extends CabinetDoorOpenResult {
+  /// 创建维护占用冲突结果。
+  const CabinetDoorOpenMaintenanceConflict({
+    required super.requestedDoorNo,
+    required super.requestedOperationId,
+    required this.maintenanceOperationId,
+  });
+
+  /// 当前维护租约的操作 ID。
+  final String maintenanceOperationId;
+
+  @override
+  bool get granted => false;
+}
+
 /// 在应用进程内强制执行“任意时刻最多打开一个柜门”的互锁器。
 ///
 /// [requestOpen] 和 [markClosed] 都是同步操作，因此同一 Dart isolate 内不会在
@@ -63,6 +79,7 @@ final class CabinetDoorGuard {
 
   String? _activeDoorNo;
   String? _activeOperationId;
+  String? _maintenanceOperationId;
   int _nextOperationSequence = 0;
 
   /// 当前占用开门资格的柜门编号；全部关闭时为 null。
@@ -74,8 +91,15 @@ final class CabinetDoorGuard {
   /// 当前是否确认所有柜门均已关闭。
   bool get allDoorsClosed => _activeDoorNo == null;
 
-  /// 当前是否存在尚未完成关门确认的柜门操作。
-  bool get hasActiveOperation => _activeDoorNo != null;
+  /// 当前是否存在尚未完成的柜门操作或系统维护租约。
+  bool get hasActiveOperation =>
+      _activeDoorNo != null || _maintenanceOperationId != null;
+
+  /// 当前是否由升级等系统维护流程独占开门资格。
+  bool get maintenanceActive => _maintenanceOperationId != null;
+
+  /// 当前维护租约的操作 ID；无维护时为 null。
+  String? get maintenanceOperationId => _maintenanceOperationId;
 
   /// 为一次具体开门周期签发进程内唯一的操作 ID。
   ///
@@ -105,6 +129,15 @@ final class CabinetDoorGuard {
     }
     if (normalizedOperationId.isEmpty) {
       throw ArgumentError.value(operationId, 'operationId', '业务操作 ID 不能为空');
+    }
+
+    final maintenanceOperationId = _maintenanceOperationId;
+    if (maintenanceOperationId != null) {
+      return CabinetDoorOpenMaintenanceConflict(
+        requestedDoorNo: normalizedDoorNo,
+        requestedOperationId: normalizedOperationId,
+        maintenanceOperationId: maintenanceOperationId,
+      );
     }
 
     final activeDoorNo = _activeDoorNo;
@@ -155,6 +188,41 @@ final class CabinetDoorGuard {
   bool isOpen(String doorNo, {required String operationId}) {
     return _activeDoorNo == doorNo.trim() &&
         _activeOperationId == operationId.trim();
+  }
+
+  /// 在全部柜门关闭时原子取得系统维护租约。
+  ///
+  /// 同一操作 ID 的重复请求按幂等成功处理；已有柜门操作或其它维护租约时返回
+  /// false。租约存续期间所有新的 [requestOpen] 都会被拒绝。
+  bool tryAcquireMaintenance(String operationId) {
+    final normalizedOperationId = operationId.trim();
+    if (normalizedOperationId.isEmpty) {
+      throw ArgumentError.value(operationId, 'operationId', '维护操作 ID 不能为空');
+    }
+    if (_maintenanceOperationId == normalizedOperationId) {
+      return true;
+    }
+    if (_activeDoorNo != null || _maintenanceOperationId != null) {
+      return false;
+    }
+    _maintenanceOperationId = normalizedOperationId;
+    return true;
+  }
+
+  /// 仅允许租约持有者释放系统维护占用。
+  bool releaseMaintenance(String operationId) {
+    final normalizedOperationId = operationId.trim();
+    if (normalizedOperationId.isEmpty ||
+        normalizedOperationId != _maintenanceOperationId) {
+      return false;
+    }
+    _maintenanceOperationId = null;
+    return true;
+  }
+
+  /// 判断指定操作是否持有系统维护租约。
+  bool holdsMaintenance(String operationId) {
+    return _maintenanceOperationId == operationId.trim();
   }
 }
 

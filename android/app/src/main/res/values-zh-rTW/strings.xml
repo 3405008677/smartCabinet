@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">智慧櫃</string>
+    <string name="kiosk_device_admin_label">智慧櫃終端裝置管理</string>
+    <string name="kiosk_device_admin_description">用於鎖定智慧櫃終端畫面，限制一般使用者離開應用程式或開啟系統介面。</string>
+</resources>

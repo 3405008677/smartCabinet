@@ -119,6 +119,31 @@ const operatorWorkflowLocalizations = {
     AppLanguage.english: 'Confirm Verification',
     AppLanguage.japanese: '認証を確認',
   },
+  'operatorFactorFaceName': {
+    AppLanguage.simplifiedChinese: '人脸',
+    AppLanguage.traditionalChinese: '人臉',
+    AppLanguage.english: 'Face',
+    AppLanguage.japanese: '顔',
+  },
+  'operatorFactorFingerprintName': {
+    AppLanguage.simplifiedChinese: '指纹',
+    AppLanguage.traditionalChinese: '指紋',
+    AppLanguage.english: 'Fingerprint',
+    AppLanguage.japanese: '指紋',
+  },
+  'operatorFactorVerificationSucceeded': {
+    AppLanguage.simplifiedChinese: '{factor}识别通过',
+    AppLanguage.traditionalChinese: '{factor}識別通過',
+    AppLanguage.english: '{factor} verification passed',
+    AppLanguage.japanese: '{factor}認証に成功しました',
+  },
+  'operatorFactorProfileUnavailable': {
+    AppLanguage.simplifiedChinese: '当前身份资料不可用，请改用其他方式或重新录入',
+    AppLanguage.traditionalChinese: '目前身分資料無法使用，請改用其他方式或重新錄入',
+    AppLanguage.english:
+        'The current identity information is unavailable. Use another method or enroll it again',
+    AppLanguage.japanese: '現在の本人確認情報を利用できません。別の方法を使用するか、再登録してください',
+  },
   'operatorEnrollFaceTitle': {
     AppLanguage.simplifiedChinese: '录入人脸',
     AppLanguage.traditionalChinese: '錄入人臉',
@@ -160,6 +185,18 @@ const operatorWorkflowLocalizations = {
     AppLanguage.traditionalChinese: '身分資料錄入成功',
     AppLanguage.english: 'Identity information enrolled successfully',
     AppLanguage.japanese: '本人確認情報の登録が完了しました',
+  },
+  'operatorEnrollmentFactorResultSucceeded': {
+    AppLanguage.simplifiedChinese: '{factor}录入成功',
+    AppLanguage.traditionalChinese: '{factor}錄入成功',
+    AppLanguage.english: '{factor} enrolled successfully',
+    AppLanguage.japanese: '{factor}の登録が完了しました',
+  },
+  'operatorEnrollmentNfcUnsupported': {
+    AppLanguage.simplifiedChinese: 'NFC 凭证不在本次录入范围内',
+    AppLanguage.traditionalChinese: 'NFC 憑證不在本次錄入範圍內',
+    AppLanguage.english: 'NFC credentials are not included in this enrollment',
+    AppLanguage.japanese: 'NFC 認証情報は今回の登録対象ではありません',
   },
   'operatorEnrollmentFailed': {
     AppLanguage.simplifiedChinese: '身份资料录入失败，请检查设备后重试',
@@ -299,11 +336,12 @@ const operatorWorkflowLocalizations = {
     AppLanguage.english: 'Sign In',
     AppLanguage.japanese: 'ログイン',
   },
-  'operatorLoginDemoHint': {
-    AppLanguage.simplifiedChinese: '演示账号 666666 / 666666',
-    AppLanguage.traditionalChinese: '示範帳號 666666 / 666666',
-    AppLanguage.english: 'Demo account: 666666 / 666666',
-    AppLanguage.japanese: 'デモアカウント 666666 / 666666',
+  'operatorLoginServerHint': {
+    AppLanguage.simplifiedChinese: '请输入平台分配的账号与密码',
+    AppLanguage.traditionalChinese: '請輸入平台分配的帳號與密碼',
+    AppLanguage.english:
+        'Enter the account and password assigned by the platform',
+    AppLanguage.japanese: 'プラットフォームから割り当てられたアカウントとパスワードを入力してください',
   },
   'operatorLoginDenied': {
     AppLanguage.simplifiedChinese: '账号或密码错误，请重新输入',
@@ -316,6 +354,34 @@ const operatorWorkflowLocalizations = {
     AppLanguage.traditionalChinese: '帳號登入失敗，請稍後重試',
     AppLanguage.english: 'Account sign-in failed. Try again later',
     AppLanguage.japanese: 'アカウントログインに失敗しました。しばらくしてから再試行してください',
+  },
+  'operatorLoginInvalidResponse': {
+    AppLanguage.simplifiedChinese: 'AFRR 登录回复无效，请联系平台管理员',
+    AppLanguage.traditionalChinese: 'AFRR 登入回覆無效，請聯絡平台管理員',
+    AppLanguage.english:
+        'The sign-in service returned invalid data. Contact the platform administrator',
+    AppLanguage.japanese: 'ログインサービスから無効なデータが返されました。プラットフォーム管理者に連絡してください',
+  },
+  'operatorLoginInvalidServerConfig': {
+    AppLanguage.simplifiedChinese: 'AFRR 登录参数无效，请联系管理员检查终端配置',
+    AppLanguage.traditionalChinese: 'AFRR 登入參數無效，請聯絡管理員檢查終端設定',
+    AppLanguage.english:
+        'The server address is invalid. Ask an administrator to check the terminal configuration',
+    AppLanguage.japanese: 'サーバーアドレスが無効です。管理者に端末設定の確認を依頼してください',
+  },
+  'operatorLoginTimeout': {
+    AppLanguage.simplifiedChinese: '连接 AFRR 登录服务超时，请检查柜机网络后重试',
+    AppLanguage.traditionalChinese: '連線 AFRR 登入服務逾時，請檢查櫃機網路後重試',
+    AppLanguage.english:
+        'The server connection timed out. Check the cabinet network and try again',
+    AppLanguage.japanese: 'サーバー接続がタイムアウトしました。キャビネットのネットワークを確認して再試行してください',
+  },
+  'operatorLoginNetworkUnavailable': {
+    AppLanguage.simplifiedChinese: '无法连接 AFRR 登录服务，请检查柜机网络和服务状态',
+    AppLanguage.traditionalChinese: '無法連線 AFRR 登入服務，請檢查櫃機網路與服務狀態',
+    AppLanguage.english:
+        'Unable to connect to the server. Check the cabinet network and server status',
+    AppLanguage.japanese: 'サーバーに接続できません。キャビネットのネットワークとサーバーの状態を確認してください',
   },
   'operatorLoginRequired': {
     AppLanguage.simplifiedChinese: '请输入账号和密码',
@@ -531,6 +597,12 @@ const operatorWorkflowLocalizations = {
     AppLanguage.english: 'Identity verified · {count} factors',
     AppLanguage.japanese: '本人確認済み · {count} 要素',
   },
+  'taskCenterInactivityCountdown': {
+    AppLanguage.simplifiedChinese: '无操作自动退出倒计时',
+    AppLanguage.traditionalChinese: '無操作自動退出倒數',
+    AppLanguage.english: 'Automatic sign-out countdown',
+    AppLanguage.japanese: '自動ログアウトまでのカウントダウン',
+  },
   'taskCenterAvailableTasks': {
     AppLanguage.simplifiedChinese: '当前可执行任务',
     AppLanguage.traditionalChinese: '目前可執行任務',
@@ -673,6 +745,19 @@ const operatorWorkflowLocalizations = {
         'Door {activeDoorNo} is still open. Cannot open {requestedDoorNo}',
     AppLanguage.japanese:
         '扉 {activeDoorNo} がまだ閉じていないため、{requestedDoorNo} を開けません',
+  },
+  'taskExecutionUpgradeMaintenanceActive': {
+    AppLanguage.simplifiedChinese: '系统正在执行升级维护，暂不能打开柜门',
+    AppLanguage.traditionalChinese: '系統正在執行升級維護，暫時無法打開櫃門',
+    AppLanguage.english:
+        'A system upgrade is in progress. Cabinet doors cannot be opened',
+    AppLanguage.japanese: 'システム更新中のため、キャビネットの扉を開けません',
+  },
+  'taskExecutionDoorOpenBlocked': {
+    AppLanguage.simplifiedChinese: '当前不能打开柜门，请稍后重试',
+    AppLanguage.traditionalChinese: '目前無法打開櫃門，請稍後再試',
+    AppLanguage.english: 'The cabinet door cannot be opened. Try again later',
+    AppLanguage.japanese: '現在は扉を開けません。しばらくしてから再度お試しください',
   },
   'taskExecutionAssignedSlot': {
     AppLanguage.simplifiedChinese: '平台箱格：{doorNo}',

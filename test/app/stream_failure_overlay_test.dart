@@ -38,7 +38,8 @@ void main() {
 
     expect(find.textContaining('推流异常：柜外环境推流异常'), findsOneWidget);
     expect(find.textContaining('柜外环境推流异常'), findsOneWidget);
-    expect(find.textContaining('3 秒后重连第 1 次'), findsOneWidget);
+    expect(find.textContaining('当前不可用，请检查摄像头和网络'), findsOneWidget);
+    expect(find.textContaining('3 秒后重连第 1 次'), findsNothing);
   });
   testWidgets('polling exceptions never escape the widget zone', (
     tester,
@@ -98,13 +99,14 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 20));
-    expect(find.textContaining('dispose-test failure'), findsOneWidget);
+    expect(find.textContaining('连接失败，请检查摄像头和网络'), findsOneWidget);
+    expect(find.textContaining('dispose-test failure'), findsNothing);
 
     showOverlay.value = false;
     await tester.pump();
     await tester.pump();
 
-    expect(find.textContaining('dispose-test failure'), findsNothing);
+    expect(find.textContaining('连接失败，请检查摄像头和网络'), findsNothing);
     expect(tester.takeException(), isNull);
   });
   testWidgets('a timed-out native read does not start overlapping polls', (

@@ -7,4 +7,6 @@ abstract final class AppRoutes {
   static const String taskExecution = '/tasks/execution';
   static const String adminVerification = '/admin/verification';
   static const String adminConsole = '/admin/console';
+  static const String adminTerminalUpgrade = '/admin/terminal-upgrade';
+  static const String adminCommunicationLog = '/admin/communication-log';
 }
